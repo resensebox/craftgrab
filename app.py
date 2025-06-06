@@ -96,8 +96,6 @@ with col2:
     st.title("🧶 CraftGrab")
     st.subheader("Snag crafty deals. Track your stash. Save smart.")
 
-# st.write("Using service account:", GOOGLE_SHEETS_CREDENTIALS["client_email"]) # Removed for cleaner UI
-
 # --- Google Sheets Functions ---
 @st.cache_resource
 def get_google_sheet_client():
@@ -291,8 +289,6 @@ def display_deals_grid(results, filters):
             summary_info, raw_summary = summarize_item(item)
             if raw_summary != "Summary unavailable.":
                 summarized_items.append((summary_info, raw_summary, item))
-            # else:
-            #     st.caption(f"Skipping '{item.get('title', 'Unknown Item')}' due to summarization error.")
 
     if not summarized_items:
         st.info("No deals could be summarized. This might be due to AI API issues or content not being relevant.")
@@ -332,24 +328,17 @@ def display_deals_grid(results, filters):
             link = item.get('link', '#')
             image_url = item.get('pagemap', {}).get('cse_image', [{}])[0].get('src', '')
 
-            # Removed the explicit "Rank: X" box
             st.markdown(f"#### [{title}]({link})")
             if image_url and image_url.startswith("http"):
                 st.image(image_url, use_container_width=True)
             else:
                 st.markdown("*(No image available)*")
 
-            st.write(f"**Store:** {summary_info.get('Store')}")
-            st.write(f"**Price:** {summary_info.get('Price')}")
-            if summary_info.get('Sale Details') != 'N/A':
-                st.write(f"**Sale Details:** {summary_info.get('Sale Details')}")
-            if summary_info.get('Yarn Type/Material') != 'N/A':
-                st.write(f"**Yarn Type:** {summary_info.get('Yarn Type/Material')}")
-            if summary_info.get('Key Features/Notes') != 'N/A':
-                 st.write(f"**Notes:** {summary_info.get('Key Features/Notes')}")
-
-            # Optionally, you can add a subtle rank indicator if still desired, e.g., in a tooltip or very small text.
-            # st.markdown(f'<p style="font-size:0.7em; text-align:right; color:#888;">Rank: {rank_score}</p>', unsafe_allow_html=True)
+            st.write(f"**Store:** {summary_info.get('Store', 'N/A')}")
+            st.write(f"**Price:** {summary_info.get('Price', 'N/A')}")
+            st.write(f"**Sale Details:** {summary_info.get('Sale Details', 'N/A')}") # Always display
+            st.write(f"**Yarn Type:** {summary_info.get('Yarn Type/Material', 'N/A')}") # Always display
+            st.write(f"**Notes:** {summary_info.get('Key Features/Notes', 'N/A')}") # Always display
 
             if is_in_stash(title):
                 st.success("✅ You already have this in your stash!")
