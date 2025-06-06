@@ -241,12 +241,33 @@ def generate_ai_summary(product_data):
 
 def display_product_with_ai(product_data):
     """
-    Displays a single product's details along with its AI-generated summary.
+    Displays a single product's details along with its AI-generated summary and percentage off.
     """
     st.markdown(f"**Product Name:** {product_data.get('Product Name', 'N/A')}")
     st.markdown(f"**Website:** {product_data.get('Website', 'Unknown')}")
     st.markdown(f"**Original Price:** {product_data.get('Original Price', 'N/A')}")
     st.markdown(f"**Sale Price:** {product_data.get('Sale Price', 'N/A')}")
+    
+    # Calculate Percentage Off
+    original_price_str = product_data.get('Original Price', 'N/A')
+    sale_price_str = product_data.get('Sale Price', 'N/A')
+
+    percentage_off = "N/A"
+    try:
+        # Clean and convert price strings to floats
+        original_price = float(original_price_str.replace('$', '').replace(',', '').strip())
+        sale_price = float(sale_price_str.replace('$', '').replace(',', '').strip())
+
+        if original_price > 0 and sale_price < original_price:
+            percentage_off = f"{((original_price - sale_price) / original_price) * 100:.0f}%"
+        elif original_price == sale_price:
+            percentage_off = "0%" # No discount
+    except ValueError:
+        percentage_off = "N/A (Price format error)"
+    except ZeroDivisionError:
+        percentage_off = "N/A (Original price is zero)"
+
+    st.markdown(f"**Percent Off:** {percentage_off}")
     st.markdown(f"**Product URL:** [Link]({product_data.get('Product URL', '#')})")
 
     # Add a loading spinner specifically for AI summary generation
