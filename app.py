@@ -318,10 +318,11 @@ def display_deals_grid(results, filters):
     summarized_items = []
     with st.spinner("Analyzing deals with AI (first-time summaries will take longer)..."):
         for item in results:
-        title_snippet_combined = (item.get('title', '') + item.get('snippet', '')).lower()
+            title_snippet_combined = (item.get('title', '') + item.get('snippet', '')).lower()
             yarn_terms = ["yarn", "wool", "acrylic", "cotton", "fiber", "skein", "hank", "ball", "knit", "crochet"]
             if not any(term in title_snippet_combined for term in yarn_terms):
                 continue  # Skip summarizing if clearly not yarn-related
+            
             summary_info, raw_summary = summarize_item(item)
             if raw_summary != "Summary unavailable.":
                 summarized_items.append((summary_info, raw_summary, item))
