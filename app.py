@@ -80,6 +80,8 @@ with col2:
     st.title("🧶 CraftGrab")
     st.subheader("Snag crafty deals. Track your stash. Save smart.")
 
+st.write("Using service account:", GOOGLE_SHEETS_CREDENTIALS["client_email"])
+
 # --- Google Sheets Functions ---
 @st.cache_resource
 def get_google_sheet_client():
