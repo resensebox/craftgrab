@@ -35,7 +35,7 @@ def search_yarn_deals(query="yarn sale"):
 def summarize_deals(results):
     snippets = "\n".join([f"- {r['title']}: {r.get('snippet', '')}" for r in results])
     prompt = f"Summarize these search snippets into top 3 yarn deals with store, price, and short description:\n{snippets}"
-    response = openai.ChatCompletion.create(
+    response = openai.chat.completions.create(
         model="gpt-4",
         messages=[{"role": "user", "content": prompt}],
     )
