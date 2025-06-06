@@ -1,3 +1,6 @@
+import streamlit as st
+import pandas as pd
+
 
 st.set_page_config(page_title="CraftGrab Yarn Deals", layout="wide")
 
@@ -183,8 +186,6 @@ def scrape_all_us_stores(search_term=None):
     return all_results
 
 
-import streamlit as st
-import pandas as pd
 import requests
 import openai
 from datetime import datetime
