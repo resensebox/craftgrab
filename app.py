@@ -17,7 +17,7 @@ def search_yarn_deals(query):
         "key": API_KEY,
         "cx": CSE_ID,
         "q": query,
-        "num": 5
+        "num": 10
     }
     response = requests.get(url, params=params)
     if response.status_code == 200:
@@ -26,15 +26,30 @@ def search_yarn_deals(query):
         st.error(f"Search failed: {response.status_code} - {response.text}")
         return []
 
-# --- Summarize Deals with OpenAI ---
-def summarize_deals(results):
-    snippets = "\n".join([f"- {r['title']}: {r.get('snippet', '')}" for r in results])
-    prompt = f"Summarize these search snippets into top 3 yarn deals with store, price, and short description:\n{snippets}"
+# --- Summarize & Evaluate Deals ---
+def analyze_and_rank_deals(results):
+    deals_info = "\n".join([
+        f"Title: {r['title']}\nSnippet: {r.get('snippet', '')}\nLink: {r['link']}" for r in results
+    ])
+
+    prompt = f"""
+    You are a shopping assistant helping knitters find the best deals.
+    From the following yarn deal listings, select the top 3 deals with the best savings or unique offers.
+    Be sure to mention store name, pricing info if listed, and link. If price is not clear, infer from context.
+
+    Deals:
+    {deals_info}
+
+    Respond in a clean markdown format, like product listings.
+    """
+
     response = openai.chat.completions.create(
         model="gpt-4",
-        messages=[{"role": "user", "content": prompt}]
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.7,
+        max_tokens=500
     )
-    return response.choices[0].message.content
+    return response.choices[0].message.content.strip()
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="CraftGrab - Yarn Deals", layout="wide")
@@ -46,11 +61,14 @@ if st.button("Search Deals"):
     with st.spinner("Searching the internet for yarn deals..."):
         results = search_yarn_deals(query)
     if results:
-        st.markdown("### 🧵 Top Deals Summary")
-        st.markdown(summarize_deals(results))
+        st.markdown("### 🧵 Top AI-Picked Deals")
+        st.markdown(analyze_and_rank_deals(results))
+
         st.markdown("---")
+        st.markdown("### 🛍️ All Found Deals")
         for result in results:
-            st.markdown(f"### [{result['title']}]({result['link']})")
+            st.markdown(f"#### [{result['title']}]({result['link']})")
+            st.image(result.get('pagemap', {}).get('cse_image', [{}])[0].get('src', ''), width=300)
             st.write(result.get("snippet", ""))
             st.write("---")
     else:
