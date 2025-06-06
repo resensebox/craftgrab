@@ -44,10 +44,30 @@ def search_yarn_deals(query):
     response = requests.get(url, params=params)
     if response.status_code == 200:
         items = response.json().get("items", [])
-        return [item for item in items if "amazon" in item.get("link", "") or "joann" in item.get("link", "") or "michaels" in item.get("link", "") or "yarnspirations" in item.get("link", "") or "marymaxim" in item.get("link", "")]
+        return [item for item in items if any(x in item.get("link", "") for x in ["amazon", "joann", "michaels", "yarnspirations", "marymaxim"])]
     else:
         st.error(f"Search failed: {response.status_code} - {response.text}")
         return []
+
+# --- AI Summary for Each Result ---
+def summarize_item(item):
+    prompt = f"""
+    You are a helpful assistant. Summarize this product listing with key sale info (price if shown, store, type of yarn or product, and sale details). Be concise:
+
+    Title: {item.get('title')}
+    Snippet: {item.get('snippet')}
+    Link: {item.get('link')}
+    """
+    try:
+        response = openai.chat.completions.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.4,
+            max_tokens=100
+        )
+        return response.choices[0].message.content.strip()
+    except:
+        return "Summary unavailable."
 
 # --- Check if Item is in Stash ---
 def is_in_stash(title):
@@ -56,25 +76,29 @@ def is_in_stash(title):
             return True
     return False
 
-# --- Display Deals in Columns ---
+# --- Display Deals in Columns with Ranking ---
 def display_deals_grid(results):
-    cols = st.columns(3)
-    for idx, result in enumerate(results):
-        col = cols[idx % 3]
+    st.markdown("#### Top Ranked Deals")
+    summaries = []
+    for item in results:
+        summary = summarize_item(item)
+        summaries.append((summary, item))
+
+    for idx, (summary, item) in enumerate(summaries):
+        col = st.columns(3)[idx % 3]
         with col:
-            title = result.get('title', 'No Title')
-            link = result.get('link', '#')
-            snippet = result.get('snippet', '')
-            image_url = result.get('pagemap', {}).get('cse_image', [{}])[0].get('src', '')
-            col.markdown(f"#### [{title}]({link})")
+            title = item.get('title', 'No Title')
+            link = item.get('link', '#')
+            image_url = item.get('pagemap', {}).get('cse_image', [{}])[0].get('src', '')
+            st.markdown(f"#### [{title}]({link})")
             if image_url and image_url.startswith("http"):
-                col.image(image_url, use_column_width=True)
+                st.image(image_url, use_container_width=True)
             else:
-                col.markdown("*(No image available)*")
-            col.write(snippet)
+                st.markdown("*(No image available)*")
+            st.write(summary)
             if is_in_stash(title):
-                col.success("✅ You already have this in your stash!")
-            col.markdown("---")
+                st.success("✅ You already have this in your stash!")
+            st.markdown("---")
 
 # --- Search UI ---
 query = st.text_input("Search for a yarn deal:", "yarn sale site:joann.com")
@@ -82,7 +106,6 @@ if st.button("Search Deals"):
     with st.spinner("Searching the internet for yarn deals..."):
         results = search_yarn_deals(query)
     if results:
-        st.markdown("### 🧵 Yarn Deals You Can Buy")
         display_deals_grid(results)
     else:
         st.info("No results found.")
