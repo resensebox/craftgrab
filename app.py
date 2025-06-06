@@ -60,17 +60,7 @@ st.markdown("""
             border: 1px solid #ccc;
             padding: 10px;
         }
-        .deal-card {
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 15px;
-            box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            height: 100%; /* Ensure cards in a row have similar height */
-        }
+        /* The .deal-card styling has been removed here to take out the visual boxes */
         .deal-card h4 {
             margin-top: 0.5rem;
             margin-bottom: 0.5rem;
@@ -286,10 +276,9 @@ def display_deals_grid(results, filters):
         return
 
     summarized_items = []
-    # The spinner will now primarily show for the initial search and first-time AI summaries.
     with st.spinner("Analyzing deals with AI (first-time summaries will take longer)..."):
         for item in results:
-            summary_info, raw_summary = summarize_item(item) # This call is now cached
+            summary_info, raw_summary = summarize_item(item)
             if raw_summary != "Summary unavailable.":
                 summarized_items.append((summary_info, raw_summary, item))
 
@@ -326,6 +315,8 @@ def display_deals_grid(results, filters):
 
     for idx, (rank_score, summary_info, raw_summary, item) in enumerate(filtered_items):
         with cols[idx % num_cols]:
+            # The div with class "deal-card" is still used to maintain column layout,
+            # but its visual styling (border, shadow, etc.) has been removed from the CSS.
             st.markdown(f'<div class="deal-card">', unsafe_allow_html=True)
             title = item.get('title', 'No Title')
             link = item.get('link', '#')
