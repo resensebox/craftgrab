@@ -8,38 +8,24 @@ import gspread # For Google Sheets integration
 from oauth2client.service_account import ServiceAccountCredentials # For Google Sheets authentication
 
 # --- Configuration ---
-API_KEY = st.secrets["Google Search_API_KEY"] # Store in Streamlit secrets
-CSE_ID = st.secrets["GOOGLE_CSE_ID"] # Store in Streamlit secrets
-OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"] # Store in Streamlit secrets
+API_KEY = st.secrets["google_cse_api_key"]  # Custom Search API Key
+CSE_ID = st.secrets["google_cse_id"]        # Custom Search Engine ID
+OPENAI_API_KEY = st.secrets["openai_api_key"]
 openai.api_key = OPENAI_API_KEY
 
 # --- Google Sheets Configuration ---
-# You'll need to store your Google Service Account credentials as Streamlit secrets.
-# In your .streamlit/secrets.toml file, it would look something like this:
-# [google_sheets]
-# type = "service_account"
-# project_id = "your-project-id"
-# private_key_id = "your-private-key-id"
-# private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-# client_email = "your-service-account-email@your-project-id.iam.gserviceaccount.com"
-# client_id = "your-client-id"
-# auth_uri = "https://accounts.google.com/o/oauth2/auth"
-# token_uri = "https://oauth2.googleapis.com/token"
-# auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
-# client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/your-service-account-email.iam.gserviceaccount.com"
-
-# Wrap the credentials in a dictionary to pass to gspread
 GOOGLE_SHEETS_CREDENTIALS = {
-    "type": st.secrets["google_sheets"]["type"],
-    "project_id": st.secrets["google_sheets"]["project_id"],
-    "private_key_id": st.secrets["google_sheets"]["private_key_id"],
-    "private_key": st.secrets["google_sheets"]["private_key"],
-    "client_email": st.secrets["google_sheets"]["client_email"],
-    "client_id": st.secrets["google_sheets"]["client_id"],
-    "auth_uri": st.secrets["google_sheets"]["auth_uri"],
-    "token_uri": st.secrets["google_sheets"]["token_uri"],
-    "auth_provider_x509_cert_url": st.secrets["google_sheets"]["auth_provider_x509_cert_url"],
-    "client_x509_cert_url": st.secrets["google_sheets"]["client_x509_cert_url"]
+    "type": st.secrets["google_service_account"]["type"],
+    "project_id": st.secrets["google_service_account"]["project_id"],
+    "private_key_id": st.secrets["google_service_account"]["private_key_id"],
+    "private_key": st.secrets["google_service_account"]["private_key"],
+    "client_email": st.secrets["google_service_account"]["client_email"],
+    "client_id": st.secrets["google_service_account"]["client_id"],
+    "auth_uri": st.secrets["google_service_account"]["auth_uri"],
+    "token_uri": st.secrets["google_service_account"]["token_uri"],
+    "auth_provider_x509_cert_url": st.secrets["google_service_account"]["auth_provider_x509_cert_url"],
+    "client_x509_cert_url": st.secrets["google_service_account"]["client_x509_cert_url"],
+    "universe_domain": st.secrets["google_service_account"].get("universe_domain", "")
 }
 
 # Your actual Google Sheet ID
