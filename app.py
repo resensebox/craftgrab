@@ -9,7 +9,7 @@ from oauth2client.service_account import ServiceAccountCredentials # For Google 
 
 # --- Configuration ---
 API_KEY = st.secrets["google_cse_api_key"]  # Custom Search API Key
-CSE_ID = st.secrets["google_cse_api_key"]        # Custom Search Engine ID
+CSE_ID = st.secrets["google_cse_cx"]        # ✅ Correct Custom Search Engine ID
 OPENAI_API_KEY = st.secrets["openai_api_key"]
 openai.api_key = OPENAI_API_KEY
 
@@ -98,7 +98,7 @@ def log_search_to_sheets(query, results_count):
     client = get_google_sheet_client()
     if client:
         try:
-            sheet = client.open_by_id(GOOGLE_SHEET_ID).worksheet("SearchLogs") # Assuming a worksheet named "SearchLogs"
+            sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet("SearchLogs")  # ✅ fixed method name
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             sheet.append_row([timestamp, query, results_count])
         except gspread.exceptions.WorksheetNotFound:
