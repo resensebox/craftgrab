@@ -18,7 +18,7 @@ def scrape_yarn_com(search_term=None):
     Filters results by search_term if provided.
     """
     url = "https://www.yarn.com/categories/sirdar-yarn"
-    # Using a more robust User-Agent
+    # Using a more robust User-Agent to mimic a real browser
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"}
     
     try:
@@ -52,7 +52,7 @@ def scrape_joann(search_term=None):
     Filters results by search_term if provided.
     """
     url = "https://www.joann.com/yarn/sale/"
-    # Using a more robust User-Agent
+    # Using a more robust User-Agent to mimic a real browser
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"}
     
     try:
@@ -80,18 +80,16 @@ def scrape_joann(search_term=None):
         st.error(f"Error scraping Joann: {e}")
         return []
 
-# Removed scrape_michaels function due to persistent 404 errors and difficulty in finding a consistent sale/clearance page for automated scraping.
-# For Michaels, a headless browser solution (e.g., Selenium/Playwright) would likely be required.
+# The Michaels scraper has been removed due to persistent 404 errors and difficulty in finding
+# a consistent sale/clearance page that allows automated scraping with simple requests.
 
 def scrape_knitpicks(search_term=None):
     """
-    Scrapes yarn deals from knitpicks.com's yarn sale section.
-    Filters results by search_term if provided.
-    Note: This site actively blocks automated scraping.
+    Attempts to scrape yarn deals from knitpicks.com's clearance yarn section.
+    Note: This site is highly protected against automated scraping and may consistently return 403 Forbidden errors.
+    More advanced techniques (e.g., headless browsers) would be needed for reliable scraping.
     """
-    # Updated URL to a more reliable clearance page, but it might still block automated requests.
     url = "https://www.knitpicks.com/yarn/clearance-yarn/c/300136"
-    # Using a more robust User-Agent
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"}
     
     try:
@@ -116,19 +114,17 @@ def scrape_knitpicks(search_term=None):
                 products.append({"Product Name": name, "Original Price": original_price, "Sale Price": sale_price, "Product URL": product_url})
         return products
     except requests.exceptions.RequestException as e:
-        st.error(f"Error scraping KnitPicks: {e}. This site may be actively blocking automated requests. More advanced scraping techniques might be needed.")
+        # Inform the user that scraping KnitPicks failed
+        st.info("Note: Scraping from KnitPicks.com is currently blocked due to anti-bot measures. No deals from this site will be displayed.")
         return []
 
 def scrape_wecrochet(search_term=None):
     """
-    Scrapes yarn deals from wecrochet.com's yarn sale section.
-    Filters results by search_term if provided.
-    Note: This site actively blocks automated scraping.
+    Attempts to scrape yarn deals from crochet.com's sale yarn section (associated with WeCrochet).
+    Note: This site is highly protected against automated scraping and may consistently return 403 Forbidden errors.
+    More advanced techniques (e.g., headless browsers) would be needed for reliable scraping.
     """
-    # Updated URL to a more reliable sale page on crochet.com (associated with WeCrochet),
-    # but it might still block automated requests.
     url = "https://www.crochet.com/yarn/sale-yarn/c/500109"
-    # Using a more robust User-Agent
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"}
     
     try:
@@ -153,7 +149,8 @@ def scrape_wecrochet(search_term=None):
                 products.append({"Product Name": name, "Original Price": original_price, "Sale Price": sale_price, "Product URL": product_url})
         return products
     except requests.exceptions.RequestException as e:
-        st.error(f"Error scraping WeCrochet: {e}. This site may be actively blocking automated requests. More advanced scraping techniques might be needed.")
+        # Inform the user that scraping WeCrochet failed
+        st.info("Note: Scraping from WeCrochet.com (via Crochet.com) is currently blocked due to anti-bot measures. No deals from this site will be displayed.")
         return []
 
 @st.cache_data(ttl=3600) # Cache data for 1 hour to prevent excessive scraping
@@ -162,8 +159,8 @@ def scrape_all_us_stores(search_term=None):
     Aggregates yarn deal results from all supported U.S. retailers.
     """
     all_results = []
-    # Using a list of functions and iterating to make it more scalable and readable
-    # Michaels scraper removed due to persistent 404/difficulty in finding a reliable sale page.
+    # Only including scrapers that are currently working reliably with direct requests.
+    # KnitPicks and WeCrochet scrapers are called, but they are expected to fail and inform the user.
     scrapers = [scrape_yarn_com, scrape_joann, scrape_knitpicks, scrape_wecrochet]
     
     for scraper_func in scrapers:
@@ -233,10 +230,11 @@ def generate_ai_summary(product_data):
         else:
             return "AI summary not available."
     except requests.exceptions.RequestException as e:
-        st.error(f"Error generating AI summary: {e}. Please check your network or API key configuration.")
+        # In a real app, you might log this error rather than showing to end user constantly
+        # st.error(f"Error generating AI summary: {e}. Please check your network or API key configuration.")
         return "AI summary generation failed."
     except json.JSONDecodeError:
-        st.error("Error decoding AI response from LLM.")
+        # st.error("Error decoding AI response from LLM.")
         return "AI summary generation failed."
 
 def display_product_with_ai(product_data):
