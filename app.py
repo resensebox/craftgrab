@@ -1,5 +1,18 @@
 import streamlit as st
 import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+import requests
+import openai
+from datetime import datetime
+import re
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from difflib import SequenceMatcher
+        import re
+
+st.set_page_config(page_title="CraftGrab - Yarn Deals", layout="wide", initial_sidebar_state="expanded")
+
 
 
 st.set_page_config(page_title="CraftGrab Yarn Deals", layout="wide")
@@ -13,8 +26,6 @@ page = st.sidebar.radio("Go to", ["Home", "Browse All Yarn Deals"])
 # Yarn Scrapers (US Stores)
 # =====================
 
-import requests
-from bs4 import BeautifulSoup
 
 def scrape_yarn_com(search_term=None):
     url = "https://www.yarn.com/categories/sirdar-yarn"
@@ -186,12 +197,6 @@ def scrape_all_us_stores(search_term=None):
     return all_results
 
 
-import requests
-import openai
-from datetime import datetime
-import re
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 
 # --- Configuration ---
 API_KEY = st.secrets["google_cse_api_key"]
@@ -424,7 +429,6 @@ def is_in_stash(title):
 
 # --- Deal Ranking Logic ---
 
-from difflib import SequenceMatcher
 def fuzzy_match(a, b):
     return SequenceMatcher(None, a, b).ratio() > 0.75
 
@@ -540,7 +544,6 @@ def display_deals_grid(results, filters):
     if sort_option == "Lowest Price":
         filtered_items.sort(key=lambda x: extract_price_value(x[1].get("Price", "")) or float('inf'))
     elif sort_option == "Highest Discount":
-        import re
         filtered_items.sort(key=lambda x: -1 if "%" not in x[1].get("Sale Details", "") else -int(re.findall(r'\\d+', x[1]["Sale Details"])[0]))
 
 
