@@ -18,7 +18,8 @@ def scrape_yarn_com(search_term=None):
     Filters results by search_term if provided.
     """
     url = "https://www.yarn.com/categories/sirdar-yarn"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    # Using a more robust User-Agent
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"}
     
     try:
         response = requests.get(url, headers=headers, timeout=10) # Added timeout for robustness
@@ -51,7 +52,8 @@ def scrape_joann(search_term=None):
     Filters results by search_term if provided.
     """
     url = "https://www.joann.com/yarn/sale/"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    # Using a more robust User-Agent
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"}
     
     try:
         response = requests.get(url, headers=headers, timeout=10)
@@ -79,47 +81,18 @@ def scrape_joann(search_term=None):
         return []
 
 # Removed scrape_michaels function due to persistent 404 errors and difficulty in finding a consistent sale/clearance page for automated scraping.
-# def scrape_michaels(search_term=None):
-#     """
-#     Scrapes yarn deals from michaels.com's yarn clearance section.
-#     Filters results by search_term if provided.
-#     """
-#     url = "https://www.michaels.com/yarn-clearance" # This URL consistently returns 404
-#     headers = {"User-Agent": "Mozilla/5.0"}
-    
-#     try:
-#         response = requests.get(url, headers=headers, timeout=10)
-#         response.raise_for_status()
-#         soup = BeautifulSoup(response.text, 'html.parser')
-
-#         products = []
-#         for item in soup.select(".product"):
-#             name_tag = item.select_one(".product-name")
-#             price_tag = item.select_one(".regular-price")
-#             sale_tag = item.select_one(".sale-price")
-#             link_tag = item.find("a", href=True)
-
-#             if name_tag and sale_tag and price_tag:
-#                 name = name_tag.text.strip()
-#                 if search_term and search_term.lower() not in name.lower():
-#                     continue
-#                 original_price = price_tag.text.strip()
-#                 sale_price = sale_tag.text.strip()
-#                 product_url = "https://www.michaels.com" + link_tag['href'] if link_tag else "N/A"
-#                 products.append({"Product Name": name, "Original Price": original_price, "Sale Price": sale_price, "Product URL": product_url})
-#         return products
-#     except requests.exceptions.RequestException as e:
-#         st.error(f"Error scraping Michaels: {e}")
-#         return []
+# For Michaels, a headless browser solution (e.g., Selenium/Playwright) would likely be required.
 
 def scrape_knitpicks(search_term=None):
     """
     Scrapes yarn deals from knitpicks.com's yarn sale section.
     Filters results by search_term if provided.
+    Note: This site actively blocks automated scraping.
     """
-    # Updated URL to a more reliable clearance page
-    url = "https://www.knitpicks.com/clearance/clearance-yarn/c/301002"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    # Updated URL to a more reliable clearance page, but it might still block automated requests.
+    url = "https://www.knitpicks.com/yarn/clearance-yarn/c/300136"
+    # Using a more robust User-Agent
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"}
     
     try:
         response = requests.get(url, headers=headers, timeout=10)
@@ -143,17 +116,20 @@ def scrape_knitpicks(search_term=None):
                 products.append({"Product Name": name, "Original Price": original_price, "Sale Price": sale_price, "Product URL": product_url})
         return products
     except requests.exceptions.RequestException as e:
-        st.error(f"Error scraping KnitPicks: {e}")
+        st.error(f"Error scraping KnitPicks: {e}. This site may be actively blocking automated requests. More advanced scraping techniques might be needed.")
         return []
 
 def scrape_wecrochet(search_term=None):
     """
     Scrapes yarn deals from wecrochet.com's yarn sale section.
     Filters results by search_term if provided.
+    Note: This site actively blocks automated scraping.
     """
-    # Updated URL to a more reliable sale page on crochet.com (associated with WeCrochet)
-    url = "https://www.crochet.com/sale/yarn/c/50110701"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    # Updated URL to a more reliable sale page on crochet.com (associated with WeCrochet),
+    # but it might still block automated requests.
+    url = "https://www.crochet.com/yarn/sale-yarn/c/500109"
+    # Using a more robust User-Agent
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"}
     
     try:
         response = requests.get(url, headers=headers, timeout=10)
@@ -177,7 +153,7 @@ def scrape_wecrochet(search_term=None):
                 products.append({"Product Name": name, "Original Price": original_price, "Sale Price": sale_price, "Product URL": product_url})
         return products
     except requests.exceptions.RequestException as e:
-        st.error(f"Error scraping WeCrochet: {e}")
+        st.error(f"Error scraping WeCrochet: {e}. This site may be actively blocking automated requests. More advanced scraping techniques might be needed.")
         return []
 
 @st.cache_data(ttl=3600) # Cache data for 1 hour to prevent excessive scraping
