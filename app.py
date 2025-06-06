@@ -1,3 +1,181 @@
+
+# =====================
+# Yarn Scrapers (US Stores)
+# =====================
+
+import requests
+from bs4 import BeautifulSoup
+
+def scrape_yarn_com(search_term=None):
+    url = "https://www.yarn.com/categories/sirdar-yarn"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    products = []
+    for item in soup.select(".productgrid--item"):
+        name_tag = item.select_one(".productitem--title")
+        price_tag = item.select_one(".price--compare")
+        sale_tag = item.select_one(".price--highlight")
+        link_tag = item.find("a", href=True)
+
+        if name_tag and sale_tag and price_tag:
+            name = name_tag.text.strip()
+            if search_term and search_term.lower() not in name.lower():
+                continue
+
+            original_price = price_tag.text.strip()
+            sale_price = sale_tag.text.strip()
+            product_url = "https://www.yarn.com" + link_tag['href'] if link_tag else "N/A"
+
+            products.append({
+                "Product Name": name,
+                "Original Price": original_price,
+                "Sale Price": sale_price,
+                "Product URL": product_url
+            })
+
+    return products
+
+
+def scrape_joann(search_term=None):
+    url = "https://www.joann.com/yarn/sale/"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    products = []
+    for item in soup.select(".product-tile"):
+        name_tag = item.select_one(".product-name")
+        price_tag = item.select_one(".sr-only.regular-price")
+        sale_tag = item.select_one(".sr-only.sales-price")
+        link_tag = item.find("a", href=True)
+
+        if name_tag and sale_tag and price_tag:
+            name = name_tag.text.strip()
+            if search_term and search_term.lower() not in name.lower():
+                continue
+
+            original_price = price_tag.text.strip()
+            sale_price = sale_tag.text.strip()
+            product_url = "https://www.joann.com" + link_tag['href'] if link_tag else "N/A"
+
+            products.append({
+                "Product Name": name,
+                "Original Price": original_price,
+                "Sale Price": sale_price,
+                "Product URL": product_url
+            })
+
+    return products
+
+
+def scrape_michaels(search_term=None):
+    url = "https://www.michaels.com/yarn-clearance"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    products = []
+    for item in soup.select(".product"):
+        name_tag = item.select_one(".product-name")
+        price_tag = item.select_one(".regular-price")
+        sale_tag = item.select_one(".sale-price")
+        link_tag = item.find("a", href=True)
+
+        if name_tag and sale_tag and price_tag:
+            name = name_tag.text.strip()
+            if search_term and search_term.lower() not in name.lower():
+                continue
+
+            original_price = price_tag.text.strip()
+            sale_price = sale_tag.text.strip()
+            product_url = "https://www.michaels.com" + link_tag['href'] if link_tag else "N/A"
+
+            products.append({
+                "Product Name": name,
+                "Original Price": original_price,
+                "Sale Price": sale_price,
+                "Product URL": product_url
+            })
+
+    return products
+
+
+def scrape_knitpicks(search_term=None):
+    url = "https://www.knitpicks.com/sale/yarn/c/301027"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    products = []
+    for item in soup.select(".product-tile"):
+        name_tag = item.select_one(".product-tile__title")
+        price_tag = item.select_one(".price--compare")
+        sale_tag = item.select_one(".price--highlight")
+        link_tag = item.find("a", href=True)
+
+        if name_tag and sale_tag and price_tag:
+            name = name_tag.text.strip()
+            if search_term and search_term.lower() not in name.lower():
+                continue
+
+            original_price = price_tag.text.strip()
+            sale_price = sale_tag.text.strip()
+            product_url = "https://www.knitpicks.com" + link_tag['href'] if link_tag else "N/A"
+
+            products.append({
+                "Product Name": name,
+                "Original Price": original_price,
+                "Sale Price": sale_price,
+                "Product URL": product_url
+            })
+
+    return products
+
+
+def scrape_wecrochet(search_term=None):
+    url = "https://www.wecrochet.com/sale/yarn/c/301027"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    products = []
+    for item in soup.select(".product-tile"):
+        name_tag = item.select_one(".product-tile__title")
+        price_tag = item.select_one(".price--compare")
+        sale_tag = item.select_one(".price--highlight")
+        link_tag = item.find("a", href=True)
+
+        if name_tag and sale_tag and price_tag:
+            name = name_tag.text.strip()
+            if search_term and search_term.lower() not in name.lower():
+                continue
+
+            original_price = price_tag.text.strip()
+            sale_price = sale_tag.text.strip()
+            product_url = "https://www.wecrochet.com" + link_tag['href'] if link_tag else "N/A"
+
+            products.append({
+                "Product Name": name,
+                "Original Price": original_price,
+                "Sale Price": sale_price,
+                "Product URL": product_url
+            })
+
+    return products
+
+
+def scrape_all_us_stores(search_term=None):
+    all_results = []
+    all_results.extend(scrape_yarn_com(search_term))
+    all_results.extend(scrape_joann(search_term))
+    all_results.extend(scrape_michaels(search_term))
+    all_results.extend(scrape_knitpicks(search_term))
+    all_results.extend(scrape_wecrochet(search_term))
+    return all_results
+
+
 import streamlit as st
 import pandas as pd
 import requests
