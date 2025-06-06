@@ -44,7 +44,7 @@ def search_yarn_deals(query):
     response = requests.get(url, params=params)
     if response.status_code == 200:
         items = response.json().get("items", [])
-        return [item for item in items if any(x in item.get("link", "") for x in ["amazon", "joann", "michaels", "yarnspirations", "marymaxim"])]
+        return items
     else:
         st.error(f"Search failed: {response.status_code} - {response.text}")
         return []
@@ -56,6 +56,7 @@ def summarize_item(item):
 
     Title: {item.get('title')}
     Snippet: {item.get('snippet')}
+    HTML Body (if available): {item.get('htmlSnippet', '')}
     Link: {item.get('link')}
     """
     try:
@@ -84,8 +85,9 @@ def display_deals_grid(results):
         summary = summarize_item(item)
         summaries.append((summary, item))
 
+    cols = st.columns(3)
     for idx, (summary, item) in enumerate(summaries):
-        col = st.columns(3)[idx % 3]
+        col = cols[idx % 3]
         with col:
             title = item.get('title', 'No Title')
             link = item.get('link', '#')
