@@ -150,7 +150,8 @@ def search_yarn_deals(query):
         return []
 
 
-# --- AI Summary for Each Result (Enhanced) ---
+# --- AI Summary for Each Result (Enhanced with Caching) ---
+@st.cache_data(show_spinner=False) # Cache the output of this function
 def summarize_item(item):
     title = item.get('title', 'No Title')
     snippet = item.get('snippet', '')
@@ -178,10 +179,11 @@ def summarize_item(item):
     """
     try:
         response = openai.chat.completions.create(
-            model="gpt-4",
+            # Using gpt-3.5-turbo for faster summarization. Change to "gpt-4" for potentially higher quality but slower results.
+            model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
-            max_tokens=250 # Slightly increased max_tokens for more detailed summary
+            max_tokens=250
         )
         summary_text = response.choices[0].message.content.strip()
 
@@ -284,9 +286,10 @@ def display_deals_grid(results, filters):
         return
 
     summarized_items = []
-    with st.spinner("Analyzing deals with AI..."):
+    # The spinner will now primarily show for the initial search and first-time AI summaries.
+    with st.spinner("Analyzing deals with AI (first-time summaries will take longer)..."):
         for item in results:
-            summary_info, raw_summary = summarize_item(item)
+            summary_info, raw_summary = summarize_item(item) # This call is now cached
             if raw_summary != "Summary unavailable.":
                 summarized_items.append((summary_info, raw_summary, item))
 
@@ -336,9 +339,9 @@ def display_deals_grid(results, filters):
 
             st.write(f"**Store:** {summary_info.get('Store', 'N/A')}")
             st.write(f"**Price:** {summary_info.get('Price', 'N/A')}")
-            st.write(f"**Sale Details:** {summary_info.get('Sale Details', 'N/A')}") # Always display
-            st.write(f"**Yarn Type:** {summary_info.get('Yarn Type/Material', 'N/A')}") # Always display
-            st.write(f"**Notes:** {summary_info.get('Key Features/Notes', 'N/A')}") # Always display
+            st.write(f"**Sale Details:** {summary_info.get('Sale Details', 'N/A')}")
+            st.write(f"**Yarn Type:** {summary_info.get('Yarn Type/Material', 'N/A')}")
+            st.write(f"**Notes:** {summary_info.get('Key Features/Notes', 'N/A')}")
 
             if is_in_stash(title):
                 st.success("✅ You already have this in your stash!")
