@@ -1,4 +1,11 @@
 
+st.set_page_config(page_title="CraftGrab Yarn Deals", layout="wide")
+
+st.sidebar.title("CraftGrab Navigation")
+page = st.sidebar.radio("Go to", ["Home", "Browse All Yarn Deals"])
+
+
+
 # =====================
 # Yarn Scrapers (US Stores)
 # =====================
@@ -723,3 +730,76 @@ st.markdown("### 🧶 Coming Soon")
 st.markdown("- Project Organizer (link stash to patterns)")
 st.markdown("- Local store deals map")
 st.caption("CraftGrab MVP v1.1 - Enhanced Deal Finding and Stash Management")
+
+
+
+# =====================
+# 🧾 Website-Specific Yarn Sales
+# =====================
+st.header("🧾 Website-Specific Yarn Sales")
+
+try:
+    search_term_input = st.text_input("Search for a specific yarn or term (optional):", value="")
+    if st.button("Search Sales Across Stores"):
+        sales_data = scrape_all_us_stores(search_term_input if search_term_input else None)
+        if sales_data:
+            # Add website/source column
+            for row in sales_data:
+                if "yarn.com" in row["Product URL"]:
+                    row["Website"] = "Yarn.com"
+                elif "joann.com" in row["Product URL"]:
+                    row["Website"] = "Joann"
+                elif "michaels.com" in row["Product URL"]:
+                    row["Website"] = "Michaels"
+                elif "knitpicks.com" in row["Product URL"]:
+                    row["Website"] = "KnitPicks"
+                elif "wecrochet.com" in row["Product URL"]:
+                    row["Website"] = "WeCrochet"
+                else:
+                    row["Website"] = "Unknown"
+
+            df = pd.DataFrame(sales_data)
+            df = df[["Product Name", "Original Price", "Sale Price", "Website", "Product URL"]]
+            st.dataframe(df)
+        else:
+            st.write("No sale products found matching that term.")
+except Exception as e:
+    st.error(f"Error fetching sale data: {e}")
+
+
+
+if page == "Browse All Yarn Deals":
+    st.title("🧵 All Yarn Deals by Website")
+
+    all_sales = scrape_all_us_stores()
+
+    if all_sales:
+        site_groups = {
+            "Yarn.com": [],
+            "Joann": [],
+            "Michaels": [],
+            "KnitPicks": [],
+            "WeCrochet": []
+        }
+
+        for row in all_sales:
+            if "yarn.com" in row["Product URL"]:
+                site_groups["Yarn.com"].append(row)
+            elif "joann.com" in row["Product URL"]:
+                site_groups["Joann"].append(row)
+            elif "michaels.com" in row["Product URL"]:
+                site_groups["Michaels"].append(row)
+            elif "knitpicks.com" in row["Product URL"]:
+                site_groups["KnitPicks"].append(row)
+            elif "wecrochet.com" in row["Product URL"]:
+                site_groups["WeCrochet"].append(row)
+
+        for site, products in site_groups.items():
+            if products:
+                st.subheader(f"{site} - {len(products)} Deals Found")
+                df_site = pd.DataFrame(products)[["Product Name", "Original Price", "Sale Price", "Product URL"]]
+                st.dataframe(df_site)
+            else:
+                st.subheader(f"{site} - No deals found.")
+    else:
+        st.write("No sales found right now.")
