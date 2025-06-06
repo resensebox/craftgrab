@@ -261,6 +261,28 @@ def rank_deals(summarized_deals, search_query):
         if is_in_stash(title):
             rank_score -= 10 # Stronger penalty
 
+        # --- Yarn Relevance Check (New) ---
+        yarn_type = summary_info.get("Yarn Type/Material", "").lower()
+        product_name_summary = summary_info.get("Product Name", "").lower() # Product name from AI summary
+
+        is_definitely_yarn = False
+        yarn_keywords = ["yarn", "wool", "acrylic", "cotton", "merino", "alpaca", "silk", "blend", "fiber", "skein", "hank", "ball", "crochet", "knit"]
+
+        # Check in AI-summarized yarn type/material, product name, and original title/snippet
+        if any(keyword in yarn_type for keyword in yarn_keywords):
+            is_definitely_yarn = True
+        elif any(keyword in product_name_summary for keyword in yarn_keywords):
+            is_definitely_yarn = True
+        elif any(keyword in title for keyword in yarn_keywords):
+            is_definitely_yarn = True
+        elif any(keyword in snippet for keyword in yarn_keywords):
+            is_definitely_yarn = True
+        
+        # Add a significant penalty if the item does not appear to be yarn
+        # This will push non-yarn items to the very bottom of the results.
+        if not is_definitely_yarn:
+            rank_score -= 100 # A large penalty to effectively filter out non-yarn items
+
         # Add original item and its score
         ranked_deals.append((rank_score, summary_info, raw_summary, item))
 
@@ -315,8 +337,6 @@ def display_deals_grid(results, filters):
 
     for idx, (rank_score, summary_info, raw_summary, item) in enumerate(filtered_items):
         with cols[idx % num_cols]:
-            # The div with class "deal-card" is still used to maintain column layout,
-            # but its visual styling (border, shadow, etc.) has been removed from the CSS.
             st.markdown(f'<div class="deal-card">', unsafe_allow_html=True)
             title = item.get('title', 'No Title')
             link = item.get('link', '#')
