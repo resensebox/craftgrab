@@ -1,429 +1,339 @@
 import streamlit as st
-import pandas as pd
-import requests
-import openai
-from datetime import datetime
-import re # For regular expressions
-import gspread # For Google Sheets integration
-from oauth2client.service_account import ServiceAccountCredentials # For Google Sheets authentication
+import json
+from fpdf import FPDF
+from datetime import datetime, date
+import base64 # Import base64 for PDF download
+from openai import OpenAI
+from collections import Counter # Needed for Counter in load_pairs in original, but not strictly here. Kept for minimal dependencies.
 
-# --- Configuration ---
-API_KEY = st.secrets["google_cse_api_key"]  # Custom Search API Key
-CSE_ID = st.secrets["google_cse_cx"]        # ✅ Correct Custom Search Engine ID
-OPENAI_API_KEY = st.secrets["openai_api_key"]
-openai.api_key = OPENAI_API_KEY
+st.set_option('client.showErrorDetails', True)
 
-# --- Google Sheets Configuration ---
-GOOGLE_SHEETS_CREDENTIALS = {
-    "type": st.secrets["google_service_account"]["type"],
-    "project_id": st.secrets["google_service_account"]["project_id"],
-    "private_key_id": st.secrets["google_service_account"]["private_key_id"],
-    "private_key": st.secrets["google_service_account"]["private_key"],
-    "client_email": st.secrets["google_service_account"]["client_email"],
-    "client_id": st.secrets["google_service_account"]["client_id"],
-    "auth_uri": st.secrets["google_service_account"]["auth_uri"],
-    "token_uri": st.secrets["google_service_account"]["token_uri"],
-    "auth_provider_x509_cert_url": st.secrets["google_service_account"]["auth_provider_x509_cert_url"],
-    "client_x509_cert_url": st.secrets["google_service_account"]["client_x509_cert_url"],
-    "universe_domain": st.secrets["google_service_account"].get("universe_domain", "")
-}
+st.set_page_config(page_title="This Day in History", layout="centered")
 
-# Your actual Google Sheet ID
-GOOGLE_SHEET_ID = "1L1fFRV8nlq4gwUk20CDYSizgO0ycY5EvGNQPyJKHreo"
-
-# --- Streamlit UI Config ---
-st.set_page_config(page_title="CraftGrab - Yarn Deals", layout="wide", initial_sidebar_state="expanded")
+# --- Custom CSS for enhanced UI (simplified for standalone app) ---
 st.markdown("""
     <style>
-        body {
-            background-color: white;
-            font-family: 'Helvetica Neue', sans-serif;
-        }
-        .main h1, .main h2, .main h3, .main h4 {
-            color: #8F5FE8;
-        }
-        .block-container {
-            padding-top: 1rem;
-        }
-        .stButton>button {
-            background-color: #8F5FE8;
-            color: white;
-            border-radius: 5px;
-            border: none;
-            padding: 10px 20px;
-            cursor: pointer;
-        }
-        .stButton>button:hover {
-            background-color: #7A4CD1;
-        }
-        .stTextInput>div>div>input {
-            border-radius: 5px;
-            border: 1px solid #ccc;
-            padding: 10px;
-        }
-        .deal-card {
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 15px;
-            box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
-        }
+    body {
+        background-color: #e8f0fe; /* Light blue background */
+        font-family: 'Inter', sans-serif;
+    }
+    h1 {
+        text-align: center;
+        color: #333333;
+        margin-top: 2rem;
+        margin-bottom: 1.5rem;
+        font-size: 2.5em;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+    }
+    .stButton>button {
+        background-color: #4CAF50; /* Green button */
+        color: white;
+        padding: 0.8em 2em;
+        border: none;
+        border-radius: 8px;
+        font-weight: bold;
+        transition: background-color 0.3s ease, transform 0.2s ease;
+        box-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+    }
+    .stButton>button:hover {
+        background-color: #45a049;
+        transform: translateY(-2px);
+    }
+    .stTextInput>div>div>input {
+        border-radius: 8px;
+        padding: 10px;
+        border: 1px solid #ccc;
+        box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
+        transition: border-color 0.2s ease;
+    }
+    .stTextInput>div>div>input:focus {
+        border-color: #4CAF50;
+        outline: none;
+    }
+    .stSpinner>div>div>span {
+        color: #4CAF50 !important;
+    }
+    .stAlert {
+        border-radius: 8px;
+        background-color: #e6f7ff;
+        border-color: #91d5ff;
+        color: #004085;
+    }
     </style>
 """, unsafe_allow_html=True)
 
 
-# --- Header with Logo ---
-col1, col2 = st.columns([1, 4])
-with col1:
-    st.image("https://i.postimg.cc/kXNf3Hpw/Gemini-Generated-Image-wyx05ewyx05ewyx0.png", width=150)
-with col2:
-    st.title("🧶 CraftGrab")
-    st.subheader("Snag crafty deals. Track your stash. Save smart.")
+# --- OpenAI Initialization ---
+try:
+    if "OPENAI_API_KEY" not in st.secrets:
+        st.error("❌ OPENAI_API_KEY is missing from secrets. Please add it to your Streamlit secrets.")
+        st.stop()
+    client_ai = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+except Exception as e:
+    st.error(f"Failed to initialize OpenAI client. Please check your `st.secrets` configuration. Error: {e}")
+    st.stop()
 
-st.write("Using service account:", GOOGLE_SHEETS_CREDENTIALS["client_email"])
-
-# --- Google Sheets Functions ---
-@st.cache_resource
-def get_google_sheet_client():
-    """Authenticates and returns a gspread client."""
-    try:
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_SHEETS_CREDENTIALS, scope)
-        client = gspread.authorize(creds)
-        return client
-    except Exception as e:
-        st.error(f"Error authenticating with Google Sheets: {e}")
-        return None
-
-def log_search_to_sheets(query, results_count):
-    """Logs search queries and results to Google Sheets."""
-    client = get_google_sheet_client()
-    if client:
-        try:
-            sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet("SearchLogs")
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            sheet.append_row([timestamp, query, results_count])
-        except gspread.exceptions.WorksheetNotFound:
-            st.error("❌ Worksheet 'SearchLogs' not found. Please create it in your Google Sheet.")
-        except gspread.exceptions.APIError as api_error:
-            st.error(f"❌ API Error when accessing the sheet: {api_error}")
-        except Exception as e:
-            st.error(f"❌ Unexpected error logging to Google Sheets: {repr(e)}")
-
-
-# --- Search Deals Function ---
-def search_yarn_deals(query):
-    url = "https://www.googleapis.com/customsearch/v1"
-    params = {
-        "key": API_KEY,
-        "cx": CSE_ID,
-        "q": query,
-        "num": 10
+# --- Session State Variables (minimal for this app) ---
+if 'this_day_history_data' not in st.session_state:
+    st.session_state['this_day_history_data'] = {
+        'event_title': "",
+        'event_article': "",
+        'born_section': "",
+        'fun_fact_section': "",
+        'trivia_section': []
     }
-    response = requests.get(url, params=params)
-    if response.status_code == 200:
-        items = response.json().get("items", [])
-        return items
-    else:
-        st.error(f"Search failed: {response.status_code} - {response.text}")
-        return []
+if 'last_history_date' not in st.session_state:
+    st.session_state['last_history_date'] = None
+if 'current_user_name' not in st.session_state: # To personalize PDF output
+    st.session_state['current_user_name'] = ""
 
-# --- AI Summary for Each Result (Enhanced) ---
-def summarize_item(item):
-    title = item.get('title', 'No Title')
-    snippet = item.get('snippet', '')
-    html_snippet = item.get('htmlSnippet', '')
-    link = item.get('link', '#')
+# --- Helper Functions ---
+
+@st.cache_data(ttl=86400) # Cache for 24 hours (entire day)
+def get_this_day_in_history_facts(current_day, current_month, user_info_for_ai, _ai_client):
+    """Generates famous event, person born, fun fact, and trivia for the current day."""
+    current_date_str = f"{current_month:02d}-{current_day:02d}"
+
+    # Prepare user info for personalization
+    user_profile_summary = ""
+    if user_info_for_ai.get('name'): user_profile_summary += f"Pair's Name: {user_info_for_ai['name']}. "
+    if user_info_for_ai.get('jobs'): user_profile_summary += f"Past Jobs: {user_info_for_ai['jobs']}. "
+    if user_info_for_ai.get('hobbies'): user_profile_summary += f"Hobbies: {user_info_for_ai['hobbies']}. "
+    if user_info_for_ai.get('decade'): user_profile_summary += f"Favorite Decade: {user_info_for_ai['decade']}. "
+    if user_info_for_ai.get('life_experiences'): user_profile_summary += f"Life Experiences: {user_info_for_ai['life_experiences']}. "
+    if user_info_for_ai.get('college_chapter'): user_profile_summary += f"College Chapter: {user_info_for_ai['college_chapter']}. "
 
     prompt = f"""
-    You are a helpful assistant specialized in e-commerce product summarization.
-    Summarize this product listing with key sale information.
-    Extract the following details as accurately as possible:
-    1. **Product Name:** (e.g., "Lion Brand Wool-Ease Thick & Quick")
-    2. **Store:** (e.g., "Joann Fabrics", "LoveCrafts")
-    3. **Price:** (e.g., "$5.99", "Reg. $10, Now $7.50") - Prioritize sale price.
-    4. **Sale Details:** (e.g., "50% off", "Buy One Get One Free", "Clearance")
-    5. **Yarn Type/Material:** (e.g., "Acrylic worsted yarn", "Merino wool blend")
-    6. **Key Features/Notes:** (Any other important details like weight, brand, color availability).
+    You are an expert historical archivist and a compassionate assistant for student volunteers working with individuals living with dementia.
+    For today's date, {current_date_str}, provide the following information:
 
-    If a piece of information is not present, state "N/A".
-    Be concise but ensure all requested information is extracted if available.
+    1.  **A famous event** that happened on this day in the past (between 1900 and 1965). Write a 200-word article about it. Ensure the event is broadly positive or culturally significant, suitable for sparking pleasant memories.
+    2.  **A famous person born on this day** (between 1850 and 1960). Try to pick someone that the user's pair (a person living with dementia) might be interested in, based on their profile. Include a brief description of who they are/what they are famous for.
+        User's Pair Profile: {user_profile_summary if user_profile_summary else 'No specific profile details provided. Try to pick a broadly recognizable figure.'}
+    3.  **A fun fact** related to this day in history.
+    4.  **Three easy trivia questions** about general knowledge or common historical facts that would be simple for individuals with dementia. For each question, provide a clear, simple answer. These questions should not require direct memory recall of specific dates or complex details, but rather general recognition or common sense.
 
-    Title: {title}
-    Snippet: {snippet}
-    HTML Body (if available): {html_snippet}
-    Link: {link}
+    Format your response strictly as follows:
+    Event: [Event Title] - [Year]
+    [200-word article content]
+
+    Born on this Day: [Person's Name]
+    [Person's Description]
+
+    Fun Fact: [Your fun fact]
+
+    Trivia Questions:
+    1. [Question 1]? (Answer: [Answer 1])
+    2. [Question 2]? (Answer: [Answer 2])
+    3. [Question 3]? (Answer: [Answer 3])
     """
     try:
-        response = openai.chat.completions.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3, # Slightly lower temperature for more factual extraction
-            max_tokens=200 # Increased max_tokens for more detailed summary
+        response = _ai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}]
         )
-        summary_text = response.choices[0].message.content.strip()
-
-        # Attempt to parse structured info from the summary for better filtering
-        parsed_info = {
-            "Product Name": "N/A", "Store": "N/A", "Price": "N/A",
-            "Sale Details": "N/A", "Yarn Type/Material": "N/A", "Key Features/Notes": "N/A"
-        }
-        for line in summary_text.split('\n'):
-            if ":" in line:
-                key, value = line.split(':', 1)
-                key = key.strip().replace('**', '') # Clean up markdown
-                value = value.strip()
-                if key in parsed_info:
-                    parsed_info[key] = value
-        return parsed_info, summary_text # Return both structured and raw summary
+        return response.choices[0].message.content.strip()
     except Exception as e:
-        st.warning(f"AI summary failed for item '{title}': {e}")
-        return {k: "Summary unavailable." for k in ["Product Name", "Store", "Price", "Sale Details", "Yarn Type/Material", "Key Features/Notes"]}, "Summary unavailable."
+        return f"Could not retrieve 'This Day in History' facts. Error: {e}"
 
-def extract_price_value(price_string):
-    """Extracts a numerical price from a price string."""
-    if isinstance(price_string, str):
-        # Regex to find common price formats, e.g., $X.XX, X.XX, $X
-        match = re.search(r'\$?(\d+\.?\d*)', price_string)
-        if match:
-            try:
-                return float(match.group(1))
-            except ValueError:
-                pass
-    return None
+def generate_article_pdf(title, content):
+    """Generates a PDF of a single article title and content."""
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    pdf.multi_cell(0, 10, title, align='C')
+    pdf.ln(10)
+    pdf.set_font("Arial", "", 12)
+    # Ensure content is encoded properly for FPDF
+    pdf.multi_cell(0, 8, content.encode('latin-1', 'replace').decode('latin-1'))
+    
+    return pdf.output(dest='S').encode('latin-1')
 
-# --- Check if Item is in Stash ---
-def is_in_stash(title):
-    for item in st.session_state.get("stash", []):
-        if item["Name"].lower() in title.lower():
-            return True
-    return False
+def generate_full_history_pdf(event_title, event_article, born_section, fun_fact_section, trivia_section, today_date_str, user_name_for_pdf):
+    """Generates a PDF of the entire 'This Day in History' page content."""
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 20)
+    pdf.multi_cell(0, 10, f"This Day in History: {today_date_str}", align='C')
+    pdf.ln(10)
 
-# --- Deal Ranking Logic ---
-def rank_deals(summarized_deals, search_query):
-    ranked_deals = []
-    for summary_info, raw_summary, item in summarized_deals:
-        rank_score = 0
-        title = item.get('title', '').lower()
-        snippet = item.get('snippet', '').lower()
+    pdf.set_font("Arial", "B", 14)
+    pdf.multi_cell(0, 10, "Significant Event:")
+    pdf.set_font("Arial", "", 12)
+    pdf.multi_cell(0, 8, f"**{event_title}**\n{event_article}".encode('latin-1', 'replace').decode('latin-1'))
+    pdf.ln(5)
 
-        # Keyword matching (simple)
-        for keyword in search_query.lower().split():
-            if keyword in title or keyword in snippet:
-                rank_score += 2
+    pdf.set_font("Arial", "B", 14)
+    pdf.multi_cell(0, 10, "Famous Person Born Today:")
+    pdf.set_font("Arial", "", 12)
+    pdf.multi_cell(0, 8, born_section.encode('latin-1', 'replace').decode('latin-1'))
+    pdf.ln(5)
 
-        # Price availability
-        if summary_info.get("Price") != "N/A":
-            rank_score += 3
-            # Further boost for specific sale details (e.g., "off", "clearance")
-            if "off" in summary_info.get("Sale Details", "").lower() or \
-               "clearance" in summary_info.get("Sale Details", "").lower():
-                rank_score += 2
+    pdf.set_font("Arial", "B", 14)
+    pdf.multi_cell(0, 10, "Fun Fact:")
+    pdf.set_font("Arial", "", 12)
+    pdf.multi_cell(0, 8, fun_fact_section.encode('latin-1', 'replace').decode('latin-1'))
+    pdf.ln(5)
 
-        # Store preference (can be added as user input)
-        # if "joann" in summary_info.get("Store", "").lower():
-        #     rank_score += 1
+    pdf.set_font("Arial", "B", 14)
+    pdf.multi_cell(0, 10, "Trivia Time! (with answers for the volunteer):")
+    pdf.set_font("Arial", "", 12)
+    for trivia_item in trivia_section:
+        pdf.multi_cell(0, 8, trivia_item.encode('latin-1', 'replace').decode('latin-1'))
+    pdf.ln(5)
 
-        # Check if already in stash (lower rank for items already owned)
-        if is_in_stash(title):
-            rank_score -= 5 # Penalize if already in stash
+    pdf.set_font("Arial", "I", 10)
+    # Use user_name_for_pdf here
+    pdf.multi_cell(0, 5, f"Generated for {user_name_for_pdf} by Mindful Libraries on {today_date_str}".encode('latin-1', 'replace').decode('latin-1'), align='C')
 
-        # Add original item and its score
-        ranked_deals.append((rank_score, summary_info, raw_summary, item))
+    return pdf.output(dest='S').encode('latin-1')
 
-    # Sort in descending order of rank_score
-    ranked_deals.sort(key=lambda x: x[0], reverse=True)
-    return ranked_deals
 
-# --- Display Deals in Columns with Ranking ---
-def display_deals_grid(results, filters):
-    st.markdown("### ✨ Top Ranked Deals")
-    if not results:
-        st.info("No deals found for your search query.")
-        return
+# --- Main App Logic ---
+st.header("🗓️ This Day in History!")
 
-    summarized_items = []
-    for item in results:
-        summary_info, raw_summary = summarize_item(item)
-        if raw_summary != "Summary unavailable.":
-            summarized_items.append((summary_info, raw_summary, item))
+# Simplified Pair Name input for this standalone app
+st.session_state['current_user_name'] = st.text_input(
+    "Enter the Pair's Name (for PDF personalization):",
+    value=st.session_state['current_user_name'],
+    key="standalone_pair_name_input"
+)
 
-    ranked_items = rank_deals(summarized_items, st.session_state.current_search_query)
+# Dummy user_info for AI personalization, as full profile is not present here
+user_info_for_ai = {
+    'name': st.session_state['current_user_name'],
+    'jobs': '', # Not available in standalone
+    'life_experiences': '', # Not available in standalone
+    'hobbies': '', # Not available in standalone
+    'decade': '', # Not available in standalone
+    'college_chapter': '' # Not available in standalone
+}
 
-    filtered_items = []
-    for rank_score, summary_info, raw_summary, item in ranked_items:
-        # Apply price filter
-        if filters["min_price"] is not None or filters["max_price"] is not None:
-            price_value = extract_price_value(summary_info.get("Price"))
-            if price_value is not None:
-                if filters["min_price"] is not None and price_value < filters["min_price"]:
-                    continue
-                if filters["max_price"] is not None and price_value > filters["max_price"]:
-                    continue
-            elif filters["min_price"] is not None or filters["max_price"] is not None:
-                # If price is N/A and filter is active, skip
-                continue
 
-        # Apply keyword filter to summary
-        if filters["keyword"]:
-            if filters["keyword"].lower() not in raw_summary.lower() and \
-               filters["keyword"].lower() not in item.get('title', '').lower():
-                continue
+today = date.today()
+current_day = today.day
+current_month = today.month
+today_date_str = today.strftime('%B %d, %Y')
 
-        filtered_items.append((rank_score, summary_info, raw_summary, item))
+st.markdown(f"### Today is: {today_date_str}")
 
-    if not filtered_items:
-        st.info("No deals match your current filters.")
-        return
+if st.session_state['current_user_name']:
+    # Check if history data is already loaded and from today
+    if st.session_state['last_history_date'] != today:
+        with st.spinner("Fetching historical insights for today..."):
+            history_facts_raw = get_this_day_in_history_facts(current_day, current_month, user_info_for_ai, client_ai)
 
-    cols = st.columns(3)
-    for idx, (rank_score, summary_info, raw_summary, item) in enumerate(filtered_items):
-        col = cols[idx % 3]
-        with col:
-            st.markdown(f'<div class="deal-card">', unsafe_allow_html=True)
-            title = item.get('title', 'No Title')
-            link = item.get('link', '#')
-            image_url = item.get('pagemap', {}).get('cse_image', [{}])[0].get('src', '')
+            # Parse the raw text response from the AI
+            event_title = ""
+            event_article = ""
+            born_section = ""
+            fun_fact_section = ""
+            trivia_section = []
 
-            st.markdown(f"**Rank: {rank_score}**")
-            st.markdown(f"#### [{title}]({link})")
-            if image_url and image_url.startswith("http"):
-                st.image(image_url, use_container_width=True)
-            else:
-                st.markdown("*(No image available)*")
+            sections = history_facts_raw.split('\n\n') # Split by double newline for sections
 
-            st.write(f"**Store:** {summary_info.get('Store')}")
-            st.write(f"**Price:** {summary_info.get('Price')}")
-            st.write(f"**Sale Details:** {summary_info.get('Sale Details')}")
-            st.write(f"**Yarn Type:** {summary_info.get('Yarn Type/Material')}")
-            st.caption(f"_{raw_summary}_") # Original AI summary for context
-
-            if is_in_stash(title):
-                st.success("✅ You already have this in your stash!")
-
-            st.markdown("</div>", unsafe_allow_html=True)
-
-# --- Initialize Session State for Stash and Wishlist ---
-if "stash" not in st.session_state:
-    st.session_state.stash = []
-if "wishlist" not in st.session_state:
-    st.session_state.wishlist = []
-if "search_history" not in st.session_state:
-    st.session_state.search_history = []
-if "current_search_query" not in st.session_state:
-    st.session_state.current_search_query = ""
-if "last_search_results" not in st.session_state:
-    st.session_state.last_search_results = [] # Initialize to an empty list
-
-# --- Search UI ---
-st.sidebar.header("🔍 Find Deals")
-query = st.sidebar.text_input("Search for a yarn deal:", value=st.session_state.current_search_query or "yarn sale site:joann.com")
-
-# Price Filter
-min_price = st.sidebar.number_input("Minimum Price", min_value=0.0, format="%.2f", value=None)
-max_price = st.sidebar.number_input("Maximum Price", min_value=0.0, format="%.2f", value=None)
-filter_keyword = st.sidebar.text_input("Filter by Keyword in Summary (e.g., 'merino', 'clearance')")
-
-search_button = st.sidebar.button("Search Deals")
-
-if search_button:
-    if query:
-        st.session_state.current_search_query = query
-        st.session_state.search_history.append({"query": query, "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
-        with st.spinner(f"Searching the internet for '{query}' deals..."):
-            results = search_yarn_deals(query)
-            log_search_to_sheets(query, len(results)) # Log the search
-            st.session_state.last_search_results = results # Store results to re-filter
-        if not results:
-            st.info("No results found for your search.")
+            for i, section in enumerate(sections):
+                if section.startswith("Event:"):
+                    first_line = section.split('\n')[0].replace("Event:", "").strip()
+                    if ' - ' in first_line:
+                        event_title = first_line.split(' - ', 1)[0].strip()
+                    else:
+                        event_title = first_line.strip()
+                    event_article = '\n'.join(section.split('\n')[1:]).strip()
+                elif section.startswith("Born on this Day:"):
+                    born_section = section.replace("Born on this Day:", "").strip()
+                elif section.startswith("Fun Fact:"):
+                    fun_fact_section = section.replace("Fun Fact:", "").strip()
+                elif section.startswith("Trivia Questions:"):
+                    trivia_lines = section.replace("Trivia Questions:", "").strip().split('\n')
+                    trivia_section = [line.strip() for line in trivia_lines if line.strip()]
+            
+            # Store parsed data in session state
+            st.session_state['this_day_history_data'] = {
+                'event_title': event_title,
+                'event_article': event_article,
+                'born_section': born_section,
+                'fun_fact_section': fun_fact_section,
+                'trivia_section': trivia_section
+            }
+            st.session_state['last_history_date'] = today # Mark when this data was fetched/stored
     else:
-        st.warning("Please enter a search query.")
+        st.info("Showing cached insights for today.")
+            
+    # Retrieve from session state for display and PDF generation
+    event_title = st.session_state['this_day_history_data']['event_title']
+    event_article = st.session_state['this_day_history_data']['event_article']
+    born_section = st.session_state['this_day_history_data']['born_section']
+    fun_fact_section = st.session_state['this_day_history_data']['fun_fact_section']
+    trivia_section = st.session_state['this_day_history_data']['trivia_section']
 
-# Display results if a search has been performed or if filters are changed
-if st.session_state.last_search_results:
-    filters = {
-        "min_price": min_price,
-        "max_price": max_price,
-        "keyword": filter_keyword
-    }
-    display_deals_grid(st.session_state.last_search_results, filters)
+    st.markdown("---")
+    st.subheader("Significant Event:")
+    if event_title and event_article:
+        st.markdown(f"**{event_title}**")
+        st.info(event_article)
+        
+        pdf_bytes_article = generate_article_pdf(event_title, event_article)
+        st.download_button(
+            label="Download Article as PDF",
+            data=pdf_bytes_article,
+            file_name=f"{event_title.replace(' ', '_')}_Article.pdf",
+            mime="application/pdf",
+            key="download_event_article_pdf"
+        )
 
-
-# --- Sidebar Navigation ---
-st.sidebar.markdown("---")
-st.sidebar.header("Your Crafting Hub")
-page = st.sidebar.radio("Go to", ["Find Deals", "Your Yarn Stash", "Your Wishlist", "Search History"])
-
-if page == "Your Yarn Stash":
-    st.markdown("### 🧺 Your Yarn Stash")
-    with st.form("stash_form"):
-        yarn_name = st.text_input("Yarn Name", key="stash_yarn_name")
-        quantity = st.number_input("Skeins", 1, 100, 1, key="stash_quantity")
-        fiber_type = st.text_input("Fiber Type", key="stash_fiber_type")
-        weight_type = st.selectbox("Yarn Weight", ["Lace", "Fingering", "Sport", "DK", "Worsted", "Bulky", "Super Bulky"], key="stash_weight_type")
-        yardage = st.number_input("Total Yardage", 0, 10000, 0, key="stash_yardage")
-        submit = st.form_submit_button("Add to Stash")
-
-        if submit and yarn_name:
-            st.session_state.stash.append({
-                "Name": yarn_name,
-                "Skeins": quantity,
-                "Fiber": fiber_type,
-                "Weight": weight_type,
-                "Yardage": yardage
-            })
-            st.success(f"'{yarn_name}' added to your stash!")
-
-    if st.session_state.stash:
-        df_stash = pd.DataFrame(st.session_state.stash)
-        st.dataframe(df_stash)
-        st.markdown("#### Filter Stash")
-        selected_weight = st.selectbox("Filter by Weight", ["All"] + df_stash["Weight"].unique().tolist(), key="filter_stash_weight")
-        if selected_weight != "All":
-            st.dataframe(df_stash[df_stash["Weight"] == selected_weight])
-        if st.button("Clear Stash"):
-            st.session_state.stash = []
-            st.rerun()
     else:
-        st.info("No yarn in stash yet. Add some above!")
+        st.info("No famous event found for this day in the specified era.")
 
-elif page == "Your Wishlist":
-    st.markdown("### 🧾 Wishlist")
-    with st.form("wishlist_form"):
-        wish_name = st.text_input("Wishlist Item Name", key="wish_name")
-        wish_price = st.text_input("Target Price (e.g., $10, $5.99)", key="wish_price")
-        wish_store = st.text_input("Preferred Store", key="wish_store")
-        wish_submit = st.form_submit_button("Add to Wishlist")
-        if wish_submit and wish_name:
-            st.session_state.wishlist.append({
-                "Item": wish_name,
-                "Target Price": wish_price,
-                "Store": wish_store
-            })
-            st.success(f"'{wish_name}' added to your wishlist!")
-
-    if st.session_state.wishlist:
-        st.dataframe(pd.DataFrame(st.session_state.wishlist))
-        if st.button("Clear Wishlist"):
-            st.session_state.wishlist = []
-            st.rerun()
+    st.markdown("---")
+    st.subheader("Famous Person Born Today:")
+    if born_section:
+        person_name_match = born_section.split('\n')[0] if '\n' in born_section else born_section
+        st.markdown(f"**{person_name_match}**")
+        person_name_for_url = person_name_match.split('-')[0].strip().replace(' ', '+')
+        img_url_placeholder = f"https://placehold.co/150x150/8d8d8d/ffffff?text={person_name_for_url}"
+        st.image(img_url_placeholder, width=150, caption=person_name_match)
+        st.markdown(born_section)
     else:
-        st.info("No items in wishlist yet.")
+        st.info("No famous person found for this day in the specified era.")
 
-elif page == "Search History":
-    st.markdown("### 🕰️ Search History")
-    if st.session_state.search_history:
-        df_history = pd.DataFrame(st.session_state.search_history)
-        st.dataframe(df_history)
-        if st.button("Clear Search History"):
-            st.session_state.search_history = []
-            st.rerun()
+    st.markdown("---")
+    st.subheader("Fun Fact:")
+    if fun_fact_section:
+        st.info(fun_fact_section)
     else:
-        st.info("No search history yet.")
+        st.info("No fun fact available for this day.")
 
-# --- Coming Soon ---
-st.markdown("---")
-st.markdown("### 🧶 Coming Soon")
-st.markdown("- Project Organizer (link stash to patterns)")
-st.markdown("- Local store deals map")
-st.caption("CraftGrab MVP v1.0")
+    st.markdown("---")
+    st.subheader("Trivia Time! (with answers for the volunteer):")
+    if trivia_section:
+        for i, trivia_item in enumerate(trivia_section):
+            st.markdown(f"{trivia_item}")
+    else:
+        st.info("No trivia questions generated for this day.")
+
+    st.markdown("---")
+    st.subheader("Full Page Summary:")
+    if st.session_state['this_day_history_data']['event_title']: # Only show if content has been generated
+        full_page_pdf_bytes = generate_full_history_pdf(
+            st.session_state['this_day_history_data']['event_title'],
+            st.session_state['this_day_history_data']['event_article'],
+            st.session_state['this_day_history_data']['born_section'],
+            st.session_state['this_day_history_data']['fun_fact_section'],
+            st.session_state['this_day_history_data']['trivia_section'],
+            today_date_str,
+            st.session_state['current_user_name'] # Pass the current user name for PDF
+        )
+        st.download_button(
+            label="Download This Day in History Page as PDF",
+            data=full_page_pdf_bytes,
+            file_name=f"This_Day_in_History_{today.strftime('%Y_%m_%d')}.pdf",
+            mime="application/pdf",
+            key="download_full_history_page_pdf"
+        )
+    else:
+        st.info("Generate the daily history content first to download the full page PDF.")
+else:
+    st.info("Please enter a Pair's Name to get today's historical insights.")
+
