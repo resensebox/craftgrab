@@ -1,328 +1,429 @@
 import streamlit as st
 import pandas as pd
 import requests
-import json # Import json for json.dumps
-from bs4 import BeautifulSoup
+import openai
+from datetime import datetime
+import re # For regular expressions
+import gspread # For Google Sheets integration
+from oauth2client.service_account import ServiceAccountCredentials # For Google Sheets authentication
 
-# Set Streamlit page config FIRST
-st.set_page_config(page_title="CraftGrab Yarn Deals", layout="wide", initial_sidebar_state="expanded")
+# --- Configuration ---
+API_KEY = st.secrets["google_cse_api_key"]  # Custom Search API Key
+CSE_ID = st.secrets["google_cse_cx"]        # ✅ Correct Custom Search Engine ID
+OPENAI_API_KEY = st.secrets["openai_api_key"]
+openai.api_key = OPENAI_API_KEY
 
-# Navigation
-st.sidebar.title("CraftGrab Navigation")
-page = st.sidebar.radio("Go to", ["Home", "Browse All Yarn Deals"])
+# --- Google Sheets Configuration ---
+GOOGLE_SHEETS_CREDENTIALS = {
+    "type": st.secrets["google_service_account"]["type"],
+    "project_id": st.secrets["google_service_account"]["project_id"],
+    "private_key_id": st.secrets["google_service_account"]["private_key_id"],
+    "private_key": st.secrets["google_service_account"]["private_key"],
+    "client_email": st.secrets["google_service_account"]["client_email"],
+    "client_id": st.secrets["google_service_account"]["client_id"],
+    "auth_uri": st.secrets["google_service_account"]["auth_uri"],
+    "token_uri": st.secrets["google_service_account"]["token_uri"],
+    "auth_provider_x509_cert_url": st.secrets["google_service_account"]["auth_provider_x509_cert_url"],
+    "client_x509_cert_url": st.secrets["google_service_account"]["client_x509_cert_url"],
+    "universe_domain": st.secrets["google_service_account"].get("universe_domain", "")
+}
 
-# Define scraper functions
-def scrape_yarn_com(search_term=None):
-    """
-    Scrapes yarn deals from yarn.com for Sirdar yarn category.
-    Filters results by search_term if provided.
-    """
-    url = "https://www.yarn.com/categories/sirdar-yarn"
-    # Using a more robust User-Agent to mimic a real browser
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"}
-    
+# Your actual Google Sheet ID
+GOOGLE_SHEET_ID = "1L1fFRV8nlq4gwUk20CDYSizgO0ycY5EvGNQPyJKHreo"
+
+# --- Streamlit UI Config ---
+st.set_page_config(page_title="CraftGrab - Yarn Deals", layout="wide", initial_sidebar_state="expanded")
+st.markdown("""
+    <style>
+        body {
+            background-color: white;
+            font-family: 'Helvetica Neue', sans-serif;
+        }
+        .main h1, .main h2, .main h3, .main h4 {
+            color: #8F5FE8;
+        }
+        .block-container {
+            padding-top: 1rem;
+        }
+        .stButton>button {
+            background-color: #8F5FE8;
+            color: white;
+            border-radius: 5px;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+        }
+        .stButton>button:hover {
+            background-color: #7A4CD1;
+        }
+        .stTextInput>div>div>input {
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+        .deal-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+
+# --- Header with Logo ---
+col1, col2 = st.columns([1, 4])
+with col1:
+    st.image("https://i.postimg.cc/kXNf3Hpw/Gemini-Generated-Image-wyx05ewyx05ewyx0.png", width=150)
+with col2:
+    st.title("🧶 CraftGrab")
+    st.subheader("Snag crafty deals. Track your stash. Save smart.")
+
+st.write("Using service account:", GOOGLE_SHEETS_CREDENTIALS["client_email"])
+
+# --- Google Sheets Functions ---
+@st.cache_resource
+def get_google_sheet_client():
+    """Authenticates and returns a gspread client."""
     try:
-        response = requests.get(url, headers=headers, timeout=10) # Added timeout for robustness
-        response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
-        soup = BeautifulSoup(response.text, 'html.parser')
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_SHEETS_CREDENTIALS, scope)
+        client = gspread.authorize(creds)
+        return client
+    except Exception as e:
+        st.error(f"Error authenticating with Google Sheets: {e}")
+        return None
 
-        products = []
-        for item in soup.select(".productgrid--item"):
-            name_tag = item.select_one(".productitem--title")
-            price_tag = item.select_one(".price--compare")
-            sale_tag = item.select_one(".price--highlight")
-            link_tag = item.find("a", href=True)
+def log_search_to_sheets(query, results_count):
+    """Logs search queries and results to Google Sheets."""
+    client = get_google_sheet_client()
+    if client:
+        try:
+            sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet("SearchLogs")
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            sheet.append_row([timestamp, query, results_count])
+        except gspread.exceptions.WorksheetNotFound:
+            st.error("❌ Worksheet 'SearchLogs' not found. Please create it in your Google Sheet.")
+        except gspread.exceptions.APIError as api_error:
+            st.error(f"❌ API Error when accessing the sheet: {api_error}")
+        except Exception as e:
+            st.error(f"❌ Unexpected error logging to Google Sheets: {repr(e)}")
 
-            if name_tag and sale_tag and price_tag:
-                name = name_tag.text.strip()
-                if search_term and search_term.lower() not in name.lower():
-                    continue
-                original_price = price_tag.text.strip()
-                sale_price = sale_tag.text.strip()
-                product_url = "https://www.yarn.com" + link_tag['href'] if link_tag else "N/A"
-                products.append({"Product Name": name, "Original Price": original_price, "Sale Price": sale_price, "Product URL": product_url})
-        return products
-    except requests.exceptions.RequestException as e:
-        st.error(f"Error scraping Yarn.com: {e}")
+
+# --- Search Deals Function ---
+def search_yarn_deals(query):
+    url = "https://www.googleapis.com/customsearch/v1"
+    params = {
+        "key": API_KEY,
+        "cx": CSE_ID,
+        "q": query,
+        "num": 10
+    }
+    response = requests.get(url, params=params)
+    if response.status_code == 200:
+        items = response.json().get("items", [])
+        return items
+    else:
+        st.error(f"Search failed: {response.status_code} - {response.text}")
         return []
 
-def scrape_joann(search_term=None):
-    """
-    Scrapes yarn deals from joann.com's yarn sale section.
-    Filters results by search_term if provided.
-    """
-    url = "https://www.joann.com/yarn/sale/"
-    # Using a more robust User-Agent to mimic a real browser
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"}
-    
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-
-        products = []
-        for item in soup.select(".product-tile"):
-            name_tag = item.select_one(".product-name")
-            price_tag = item.select_one(".sr-only.regular-price")
-            sale_tag = item.select_one(".sr-only.sales-price")
-            link_tag = item.find("a", href=True)
-
-            if name_tag and sale_tag and price_tag:
-                name = name_tag.text.strip()
-                if search_term and search_term.lower() not in name.lower():
-                    continue
-                original_price = price_tag.text.strip()
-                sale_price = sale_tag.text.strip()
-                product_url = "https://www.joann.com" + link_tag['href'] if link_tag else "N/A"
-                products.append({"Product Name": name, "Original Price": original_price, "Sale Price": sale_price, "Product URL": product_url})
-        return products
-    except requests.exceptions.RequestException as e:
-        st.error(f"Error scraping Joann: {e}")
-        return []
-
-# The Michaels scraper has been removed due to persistent 404 errors and difficulty in finding
-# a consistent sale/clearance page that allows automated scraping with simple requests.
-
-def scrape_knitpicks(search_term=None):
-    """
-    Attempts to scrape yarn deals from knitpicks.com's clearance yarn section.
-    Note: This site is highly protected against automated scraping and may consistently return 403 Forbidden errors.
-    More advanced techniques (e.g., headless browsers) would be needed for reliable scraping.
-    """
-    url = "https://www.knitpicks.com/yarn/clearance-yarn/c/300136"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"}
-    
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-
-        products = []
-        for item in soup.select(".product-tile"):
-            name_tag = item.select_one(".product-tile__title")
-            price_tag = item.select_one(".price--compare")
-            sale_tag = item.select_one(".price--highlight")
-            link_tag = item.find("a", href=True)
-
-            if name_tag and sale_tag and price_tag:
-                name = name_tag.text.strip()
-                if search_term and search_term.lower() not in name.lower():
-                    continue
-                original_price = price_tag.text.strip()
-                sale_price = sale_tag.text.strip()
-                product_url = "https://www.knitpicks.com" + link_tag['href'] if link_tag else "N/A"
-                products.append({"Product Name": name, "Original Price": original_price, "Sale Price": sale_price, "Product URL": product_url})
-        return products
-    except requests.exceptions.RequestException as e:
-        # Inform the user that scraping KnitPicks failed
-        st.info("Note: Scraping from KnitPicks.com is currently blocked due to anti-bot measures. No deals from this site will be displayed.")
-        return []
-
-def scrape_wecrochet(search_term=None):
-    """
-    Attempts to scrape yarn deals from crochet.com's sale yarn section (associated with WeCrochet).
-    Note: This site is highly protected against automated scraping and may consistently return 403 Forbidden errors.
-    More advanced techniques (e.g., headless browsers) would be needed for reliable scraping.
-    """
-    url = "https://www.crochet.com/yarn/sale-yarn/c/500109"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"}
-    
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-
-        products = []
-        for item in soup.select(".product-tile"):
-            name_tag = item.select_one(".product-tile__title")
-            price_tag = item.select_one(".price--compare")
-            sale_tag = item.select_one(".price--highlight")
-            link_tag = item.find("a", href=True)
-
-            if name_tag and sale_tag and price_tag:
-                name = name_tag.text.strip()
-                if search_term and search_term.lower() not in name.lower():
-                    continue
-                original_price = price_tag.text.strip()
-                sale_price = sale_tag.text.strip()
-                product_url = "https://www.wecrochet.com" + link_tag['href'] if link_tag else "N/A" # Still use wecrochet.com as base for URL
-                products.append({"Product Name": name, "Original Price": original_price, "Sale Price": sale_price, "Product URL": product_url})
-        return products
-    except requests.exceptions.RequestException as e:
-        # Inform the user that scraping WeCrochet failed
-        st.info("Note: Scraping from WeCrochet.com (via Crochet.com) is currently blocked due to anti-bot measures. No deals from this site will be displayed.")
-        return []
-
-@st.cache_data(ttl=3600) # Cache data for 1 hour to prevent excessive scraping
-def scrape_all_us_stores(search_term=None):
-    """
-    Aggregates yarn deal results from all supported U.S. retailers.
-    """
-    all_results = []
-    # Only including scrapers that are currently working reliably with direct requests.
-    # KnitPicks and WeCrochet scrapers are called, but they are expected to fail and inform the user.
-    scrapers = [scrape_yarn_com, scrape_joann, scrape_knitpicks, scrape_wecrochet]
-    
-    for scraper_func in scrapers:
-        all_results.extend(scraper_func(search_term))
-    return all_results
-
-# Define the LLM API call function for Python environment
-def generate_ai_summary(product_data):
-    """
-    Generates an AI-powered summary for a given product using the Gemini API.
-    This function simulates the API call from a Python backend.
-    """
-    product_name = product_data.get("Product Name", "N/A")
-    original_price = product_data.get("Original Price", "N/A")
-    sale_price = product_data.get("Sale Price", "N/A")
-    product_url = product_data.get("Product URL", "N/A")
-    website = product_data.get("Website", "Unknown")
+# --- AI Summary for Each Result (Enhanced) ---
+def summarize_item(item):
+    title = item.get('title', 'No Title')
+    snippet = item.get('snippet', '')
+    html_snippet = item.get('htmlSnippet', '')
+    link = item.get('link', '#')
 
     prompt = f"""
-    Generate a brief, engaging product description (around 2-3 sentences) for a yarn deal.
-    Highlight the sale aspect and potential uses.
-    Product Details:
-    - Name: {product_name}
-    - Original Price: {original_price}
-    - Sale Price: {sale_price}
-    - Website: {website}
-    - URL: {product_url}
+    You are a helpful assistant specialized in e-commerce product summarization.
+    Summarize this product listing with key sale information.
+    Extract the following details as accurately as possible:
+    1. **Product Name:** (e.g., "Lion Brand Wool-Ease Thick & Quick")
+    2. **Store:** (e.g., "Joann Fabrics", "LoveCrafts")
+    3. **Price:** (e.g., "$5.99", "Reg. $10, Now $7.50") - Prioritize sale price.
+    4. **Sale Details:** (e.g., "50% off", "Buy One Get One Free", "Clearance")
+    5. **Yarn Type/Material:** (e.g., "Acrylic worsted yarn", "Merino wool blend")
+    6. **Key Features/Notes:** (Any other important details like weight, brand, color availability).
+
+    If a piece of information is not present, state "N/A".
+    Be concise but ensure all requested information is extracted if available.
+
+    Title: {title}
+    Snippet: {snippet}
+    HTML Body (if available): {html_snippet}
+    Link: {link}
     """
-
-    # Mimicking the structure for a Python requests call to a Gemini API endpoint
-    # In a real deployed scenario, `__gemini_api_key__` would be provided by the environment
-    # For local testing, you might need to replace `""` with your actual API key
-    # or handle it via environment variables.
-    apiKey = "" 
-    apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-
-    headers = {
-        'Content-Type': 'application/json'
-    }
-    # Payload structured as per Gemini API requirements
-    payload = {
-        "contents": [
-            {
-                "role": "user",
-                "parts": [
-                    {"text": prompt}
-                ]
-            }
-        ]
-    }
-
     try:
-        # Append API key to URL if available
-        if apiKey:
-            request_url = f"{apiUrl}?key={apiKey}"
-        else: # For environments where API key is automatically handled, e.g., Canvas runtime
-            request_url = apiUrl # The Canvas runtime will inject the key
+        response = openai.chat.completions.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3, # Slightly lower temperature for more factual extraction
+            max_tokens=200 # Increased max_tokens for more detailed summary
+        )
+        summary_text = response.choices[0].message.content.strip()
 
-        response = requests.post(request_url, headers=headers, data=json.dumps(payload), timeout=20)
-        response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
-        result = response.json()
-        
-        if result.get("candidates") and len(result["candidates"]) > 0 and \
-           result["candidates"][0].get("content") and result["candidates"][0]["content"].get("parts") and \
-           len(result["candidates"][0]["content"]["parts"]) > 0:
-            return result["candidates"][0]["content"]["parts"][0]["text"]
-        else:
-            return "AI summary not available."
-    except requests.exceptions.RequestException as e:
-        # In a real app, you might log this error rather than showing to end user constantly
-        # st.error(f"Error generating AI summary: {e}. Please check your network or API key configuration.")
-        return "AI summary generation failed."
-    except json.JSONDecodeError:
-        # st.error("Error decoding AI response from LLM.")
-        return "AI summary generation failed."
+        # Attempt to parse structured info from the summary for better filtering
+        parsed_info = {
+            "Product Name": "N/A", "Store": "N/A", "Price": "N/A",
+            "Sale Details": "N/A", "Yarn Type/Material": "N/A", "Key Features/Notes": "N/A"
+        }
+        for line in summary_text.split('\n'):
+            if ":" in line:
+                key, value = line.split(':', 1)
+                key = key.strip().replace('**', '') # Clean up markdown
+                value = value.strip()
+                if key in parsed_info:
+                    parsed_info[key] = value
+        return parsed_info, summary_text # Return both structured and raw summary
+    except Exception as e:
+        st.warning(f"AI summary failed for item '{title}': {e}")
+        return {k: "Summary unavailable." for k in ["Product Name", "Store", "Price", "Sale Details", "Yarn Type/Material", "Key Features/Notes"]}, "Summary unavailable."
 
-def display_product_with_ai(product_data):
-    """
-    Displays a single product's details along with its AI-generated summary and percentage off.
-    """
-    st.markdown(f"**Product Name:** {product_data.get('Product Name', 'N/A')}")
-    st.markdown(f"**Website:** {product_data.get('Website', 'Unknown')}")
-    st.markdown(f"**Original Price:** {product_data.get('Original Price', 'N/A')}")
-    st.markdown(f"**Sale Price:** {product_data.get('Sale Price', 'N/A')}")
-    
-    # Calculate Percentage Off
-    original_price_str = product_data.get('Original Price', 'N/A')
-    sale_price_str = product_data.get('Sale Price', 'N/A')
+def extract_price_value(price_string):
+    """Extracts a numerical price from a price string."""
+    if isinstance(price_string, str):
+        # Regex to find common price formats, e.g., $X.XX, X.XX, $X
+        match = re.search(r'\$?(\d+\.?\d*)', price_string)
+        if match:
+            try:
+                return float(match.group(1))
+            except ValueError:
+                pass
+    return None
 
-    percentage_off = "N/A"
-    try:
-        # Clean and convert price strings to floats
-        original_price = float(original_price_str.replace('$', '').replace(',', '').strip())
-        sale_price = float(sale_price_str.replace('$', '').replace(',', '').strip())
+# --- Check if Item is in Stash ---
+def is_in_stash(title):
+    for item in st.session_state.get("stash", []):
+        if item["Name"].lower() in title.lower():
+            return True
+    return False
 
-        if original_price > 0 and sale_price < original_price:
-            percentage_off = f"{((original_price - sale_price) / original_price) * 100:.0f}%"
-        elif original_price == sale_price:
-            percentage_off = "0%" # No discount
-    except ValueError:
-        percentage_off = "N/A (Price format error)"
-    except ZeroDivisionError:
-        percentage_off = "N/A (Original price is zero)"
+# --- Deal Ranking Logic ---
+def rank_deals(summarized_deals, search_query):
+    ranked_deals = []
+    for summary_info, raw_summary, item in summarized_deals:
+        rank_score = 0
+        title = item.get('title', '').lower()
+        snippet = item.get('snippet', '').lower()
 
-    st.markdown(f"**Percent Off:** {percentage_off}")
-    st.markdown(f"**Product URL:** [Link]({product_data.get('Product URL', '#')})")
+        # Keyword matching (simple)
+        for keyword in search_query.lower().split():
+            if keyword in title or keyword in snippet:
+                rank_score += 2
 
-    # Add a loading spinner specifically for AI summary generation
-    with st.spinner("Generating AI summary..."):
-        ai_summary = generate_ai_summary(product_data)
-    st.write(ai_summary)
-    st.markdown("---") # Separator for products
+        # Price availability
+        if summary_info.get("Price") != "N/A":
+            rank_score += 3
+            # Further boost for specific sale details (e.g., "off", "clearance")
+            if "off" in summary_info.get("Sale Details", "").lower() or \
+               "clearance" in summary_info.get("Sale Details", "").lower():
+                rank_score += 2
 
+        # Store preference (can be added as user input)
+        # if "joann" in summary_info.get("Store", "").lower():
+        #     rank_score += 1
 
-# Pages
-if page == "Home":
-    st.title("Welcome to CraftGrab!")
-    st.write("Search for yarn sales across major U.S. retailers.")
+        # Check if already in stash (lower rank for items already owned)
+        if is_in_stash(title):
+            rank_score -= 5 # Penalize if already in stash
 
-    search_term_input = st.text_input("Search for a specific yarn or brand (optional):", "")
-    
-    if st.button("Search"):
-        with st.spinner("Searching for deals... This might take a moment."):
-            results = scrape_all_us_stores(search_term_input if search_term_input else None)
-        
-        if results:
-            df = pd.DataFrame(results)
-            df["Website"] = df["Product URL"].apply(lambda url: next((site for site in ["Yarn.com", "Joann", "KnitPicks", "WeCrochet"] if site.lower() in url.lower() or (site.lower() == "wecrochet" and "crochet.com" in url.lower())), "Unknown"))
-            
-            st.subheader("Found Deals with AI Summaries:")
-            if len(df) > 10: # Warn if too many AI calls might be made
-                st.warning(f"Found {len(df)} deals. Generating AI summaries for all might take some time.")
-            
-            # Display products with AI summaries
-            for index, row in df.iterrows():
-                display_product_with_ai(row.to_dict())
-        else:
-            st.write("No matching deals found. Try a different search term or browse all deals.")
+        # Add original item and its score
+        ranked_deals.append((rank_score, summary_info, raw_summary, item))
 
-elif page == "Browse All Yarn Deals":
-    st.title("🧵 All Yarn Deals by Website")
-    
-    with st.spinner("Loading all yarn deals... This might take a moment, especially for many results."):
-        results = scrape_all_us_stores()
-    
-    if results:
-        df = pd.DataFrame(results)
-        df["Website"] = df["Product URL"].apply(lambda url: next((site for site in ["Yarn.com", "Joann", "KnitPicks", "WeCrochet"] if site.lower() in url.lower() or (site.lower() == "wecrochet" and "crochet.com" in url.lower())), "Unknown"))
-        
-        ordered_sites = ["Yarn.com", "Joann", "KnitPicks", "WeCrochet"]
-        
-        st.subheader("All Deals with AI Summaries:")
-        if len(df) > 20: # Warn if too many AI calls might be made for browse all
-            st.warning(f"Found {len(df)} deals across all sites. Generating AI summaries for all might take significant time.")
+    # Sort in descending order of rank_score
+    ranked_deals.sort(key=lambda x: x[0], reverse=True)
+    return ranked_deals
 
-        for site in ordered_sites:
-            site_df = df[df["Website"] == site]
-            if not site_df.empty:
-                st.subheader(f"{site} - {len(site_df)} Products")
-                for index, row in site_df.iterrows():
-                    display_product_with_ai(row.to_dict())
+# --- Display Deals in Columns with Ranking ---
+def display_deals_grid(results, filters):
+    st.markdown("### ✨ Top Ranked Deals")
+    if not results:
+        st.info("No deals found for your search query.")
+        return
+
+    summarized_items = []
+    for item in results:
+        summary_info, raw_summary = summarize_item(item)
+        if raw_summary != "Summary unavailable.":
+            summarized_items.append((summary_info, raw_summary, item))
+
+    ranked_items = rank_deals(summarized_items, st.session_state.current_search_query)
+
+    filtered_items = []
+    for rank_score, summary_info, raw_summary, item in ranked_items:
+        # Apply price filter
+        if filters["min_price"] is not None or filters["max_price"] is not None:
+            price_value = extract_price_value(summary_info.get("Price"))
+            if price_value is not None:
+                if filters["min_price"] is not None and price_value < filters["min_price"]:
+                    continue
+                if filters["max_price"] is not None and price_value > filters["max_price"]:
+                    continue
+            elif filters["min_price"] is not None or filters["max_price"] is not None:
+                # If price is N/A and filter is active, skip
+                continue
+
+        # Apply keyword filter to summary
+        if filters["keyword"]:
+            if filters["keyword"].lower() not in raw_summary.lower() and \
+               filters["keyword"].lower() not in item.get('title', '').lower():
+                continue
+
+        filtered_items.append((rank_score, summary_info, raw_summary, item))
+
+    if not filtered_items:
+        st.info("No deals match your current filters.")
+        return
+
+    cols = st.columns(3)
+    for idx, (rank_score, summary_info, raw_summary, item) in enumerate(filtered_items):
+        col = cols[idx % 3]
+        with col:
+            st.markdown(f'<div class="deal-card">', unsafe_allow_html=True)
+            title = item.get('title', 'No Title')
+            link = item.get('link', '#')
+            image_url = item.get('pagemap', {}).get('cse_image', [{}])[0].get('src', '')
+
+            st.markdown(f"**Rank: {rank_score}**")
+            st.markdown(f"#### [{title}]({link})")
+            if image_url and image_url.startswith("http"):
+                st.image(image_url, use_container_width=True)
             else:
-                st.info(f"No deals found for {site}.") # Inform user if a site has no deals
+                st.markdown("*(No image available)*")
+
+            st.write(f"**Store:** {summary_info.get('Store')}")
+            st.write(f"**Price:** {summary_info.get('Price')}")
+            st.write(f"**Sale Details:** {summary_info.get('Sale Details')}")
+            st.write(f"**Yarn Type:** {summary_info.get('Yarn Type/Material')}")
+            st.caption(f"_{raw_summary}_") # Original AI summary for context
+
+            if is_in_stash(title):
+                st.success("✅ You already have this in your stash!")
+
+            st.markdown("</div>", unsafe_allow_html=True)
+
+# --- Initialize Session State for Stash and Wishlist ---
+if "stash" not in st.session_state:
+    st.session_state.stash = []
+if "wishlist" not in st.session_state:
+    st.session_state.wishlist = []
+if "search_history" not in st.session_state:
+    st.session_state.search_history = []
+if "current_search_query" not in st.session_state:
+    st.session_state.current_search_query = ""
+if "last_search_results" not in st.session_state:
+    st.session_state.last_search_results = [] # Initialize to an empty list
+
+# --- Search UI ---
+st.sidebar.header("🔍 Find Deals")
+query = st.sidebar.text_input("Search for a yarn deal:", value=st.session_state.current_search_query or "yarn sale site:joann.com")
+
+# Price Filter
+min_price = st.sidebar.number_input("Minimum Price", min_value=0.0, format="%.2f", value=None)
+max_price = st.sidebar.number_input("Maximum Price", min_value=0.0, format="%.2f", value=None)
+filter_keyword = st.sidebar.text_input("Filter by Keyword in Summary (e.g., 'merino', 'clearance')")
+
+search_button = st.sidebar.button("Search Deals")
+
+if search_button:
+    if query:
+        st.session_state.current_search_query = query
+        st.session_state.search_history.append({"query": query, "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+        with st.spinner(f"Searching the internet for '{query}' deals..."):
+            results = search_yarn_deals(query)
+            log_search_to_sheets(query, len(results)) # Log the search
+            st.session_state.last_search_results = results # Store results to re-filter
+        if not results:
+            st.info("No results found for your search.")
     else:
-        st.write("No deals found. Please check your internet connection or try again later.")
+        st.warning("Please enter a search query.")
+
+# Display results if a search has been performed or if filters are changed
+if st.session_state.last_search_results:
+    filters = {
+        "min_price": min_price,
+        "max_price": max_price,
+        "keyword": filter_keyword
+    }
+    display_deals_grid(st.session_state.last_search_results, filters)
+
+
+# --- Sidebar Navigation ---
+st.sidebar.markdown("---")
+st.sidebar.header("Your Crafting Hub")
+page = st.sidebar.radio("Go to", ["Find Deals", "Your Yarn Stash", "Your Wishlist", "Search History"])
+
+if page == "Your Yarn Stash":
+    st.markdown("### 🧺 Your Yarn Stash")
+    with st.form("stash_form"):
+        yarn_name = st.text_input("Yarn Name", key="stash_yarn_name")
+        quantity = st.number_input("Skeins", 1, 100, 1, key="stash_quantity")
+        fiber_type = st.text_input("Fiber Type", key="stash_fiber_type")
+        weight_type = st.selectbox("Yarn Weight", ["Lace", "Fingering", "Sport", "DK", "Worsted", "Bulky", "Super Bulky"], key="stash_weight_type")
+        yardage = st.number_input("Total Yardage", 0, 10000, 0, key="stash_yardage")
+        submit = st.form_submit_button("Add to Stash")
+
+        if submit and yarn_name:
+            st.session_state.stash.append({
+                "Name": yarn_name,
+                "Skeins": quantity,
+                "Fiber": fiber_type,
+                "Weight": weight_type,
+                "Yardage": yardage
+            })
+            st.success(f"'{yarn_name}' added to your stash!")
+
+    if st.session_state.stash:
+        df_stash = pd.DataFrame(st.session_state.stash)
+        st.dataframe(df_stash)
+        st.markdown("#### Filter Stash")
+        selected_weight = st.selectbox("Filter by Weight", ["All"] + df_stash["Weight"].unique().tolist(), key="filter_stash_weight")
+        if selected_weight != "All":
+            st.dataframe(df_stash[df_stash["Weight"] == selected_weight])
+        if st.button("Clear Stash"):
+            st.session_state.stash = []
+            st.rerun()
+    else:
+        st.info("No yarn in stash yet. Add some above!")
+
+elif page == "Your Wishlist":
+    st.markdown("### 🧾 Wishlist")
+    with st.form("wishlist_form"):
+        wish_name = st.text_input("Wishlist Item Name", key="wish_name")
+        wish_price = st.text_input("Target Price (e.g., $10, $5.99)", key="wish_price")
+        wish_store = st.text_input("Preferred Store", key="wish_store")
+        wish_submit = st.form_submit_button("Add to Wishlist")
+        if wish_submit and wish_name:
+            st.session_state.wishlist.append({
+                "Item": wish_name,
+                "Target Price": wish_price,
+                "Store": wish_store
+            })
+            st.success(f"'{wish_name}' added to your wishlist!")
+
+    if st.session_state.wishlist:
+        st.dataframe(pd.DataFrame(st.session_state.wishlist))
+        if st.button("Clear Wishlist"):
+            st.session_state.wishlist = []
+            st.rerun()
+    else:
+        st.info("No items in wishlist yet.")
+
+elif page == "Search History":
+    st.markdown("### 🕰️ Search History")
+    if st.session_state.search_history:
+        df_history = pd.DataFrame(st.session_state.search_history)
+        st.dataframe(df_history)
+        if st.button("Clear Search History"):
+            st.session_state.search_history = []
+            st.rerun()
+    else:
+        st.info("No search history yet.")
+
+# --- Coming Soon ---
+st.markdown("---")
+st.markdown("### 🧶 Coming Soon")
+st.markdown("- Project Organizer (link stash to patterns)")
+st.markdown("- Local store deals map")
+st.caption("CraftGrab MVP v1.0")
