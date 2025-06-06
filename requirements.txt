@@ -4,3 +4,4 @@ oauth2client
 pandas
 openai
 python-dotenv
+beautifulsoup4
