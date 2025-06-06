@@ -3,13 +3,13 @@ import pandas as pd
 import requests
 import openai
 from datetime import datetime
-import re # For regular expressions
-import gspread # For Google Sheets integration
-from oauth2client.service_account import ServiceAccountCredentials # For Google Sheets authentication
+import re
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
 # --- Configuration ---
-API_KEY = st.secrets["google_cse_api_key"]  # Custom Search API Key
-CSE_ID = st.secrets["google_cse_cx"]        # ✅ Correct Custom Search Engine ID
+API_KEY = st.secrets["google_cse_api_key"]
+CSE_ID = st.secrets["google_cse_cx"]
 OPENAI_API_KEY = st.secrets["openai_api_key"]
 openai.api_key = OPENAI_API_KEY
 
@@ -28,7 +28,6 @@ GOOGLE_SHEETS_CREDENTIALS = {
     "universe_domain": st.secrets["google_service_account"].get("universe_domain", "")
 }
 
-# Your actual Google Sheet ID
 GOOGLE_SHEET_ID = "1L1fFRV8nlq4gwUk20CDYSizgO0ycY5EvGNQPyJKHreo"
 
 # --- Streamlit UI Config ---
@@ -67,6 +66,23 @@ st.markdown("""
             padding: 15px;
             margin-bottom: 15px;
             box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 100%; /* Ensure cards in a row have similar height */
+        }
+        .deal-card h4 {
+            margin-top: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .deal-card img {
+            max-height: 200px; /* Limit image height */
+            object-fit: contain; /* Ensure image fits without cropping */
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        .stMultiSelect, .stSelectbox {
+            margin-bottom: 10px;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -80,7 +96,7 @@ with col2:
     st.title("🧶 CraftGrab")
     st.subheader("Snag crafty deals. Track your stash. Save smart.")
 
-st.write("Using service account:", GOOGLE_SHEETS_CREDENTIALS["client_email"])
+# st.write("Using service account:", GOOGLE_SHEETS_CREDENTIALS["client_email"]) # Removed for cleaner UI
 
 # --- Google Sheets Functions ---
 @st.cache_resource
@@ -104,11 +120,11 @@ def log_search_to_sheets(query, results_count):
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             sheet.append_row([timestamp, query, results_count])
         except gspread.exceptions.WorksheetNotFound:
-            st.error("❌ Worksheet 'SearchLogs' not found. Please create it in your Google Sheet.")
+            st.error("❌ Worksheet 'SearchLogs' not found. Please create it in your Google Sheet with the specified ID and name 'SearchLogs'.")
         except gspread.exceptions.APIError as api_error:
-            st.error(f"❌ API Error when accessing the sheet: {api_error}")
+            st.error(f"❌ API Error when accessing the sheet. Please check permissions and sheet ID: {api_error}")
         except Exception as e:
-            st.error(f"❌ Unexpected error logging to Google Sheets: {repr(e)}")
+            st.error(f"❌ Unexpected error logging to Google Sheets: {repr(e)}. Ensure your service account has edit access to the Google Sheet.")
 
 
 # --- Search Deals Function ---
@@ -120,13 +136,21 @@ def search_yarn_deals(query):
         "q": query,
         "num": 10
     }
-    response = requests.get(url, params=params)
-    if response.status_code == 200:
+    try:
+        response = requests.get(url, params=params, timeout=5) # Added timeout
+        response.raise_for_status() # Raise an exception for HTTP errors
         items = response.json().get("items", [])
         return items
-    else:
-        st.error(f"Search failed: {response.status_code} - {response.text}")
+    except requests.exceptions.Timeout:
+        st.error("Search request timed out. Please try again.")
         return []
+    except requests.exceptions.RequestException as e:
+        st.error(f"Search failed due to a network error: {e}")
+        return []
+    except Exception as e:
+        st.error(f"An unexpected error occurred during search: {e}")
+        return []
+
 
 # --- AI Summary for Each Result (Enhanced) ---
 def summarize_item(item):
@@ -141,10 +165,10 @@ def summarize_item(item):
     Extract the following details as accurately as possible:
     1. **Product Name:** (e.g., "Lion Brand Wool-Ease Thick & Quick")
     2. **Store:** (e.g., "Joann Fabrics", "LoveCrafts")
-    3. **Price:** (e.g., "$5.99", "Reg. $10, Now $7.50") - Prioritize sale price.
+    3. **Price:** (e.g., "$5.99", "Reg. $10, Now $7.50") - Prioritize sale price, if original and sale price are both mentioned, extract both.
     4. **Sale Details:** (e.g., "50% off", "Buy One Get One Free", "Clearance")
     5. **Yarn Type/Material:** (e.g., "Acrylic worsted yarn", "Merino wool blend")
-    6. **Key Features/Notes:** (Any other important details like weight, brand, color availability).
+    6. **Key Features/Notes:** (Any other important details like weight, brand, color availability, specific deal terms).
 
     If a piece of information is not present, state "N/A".
     Be concise but ensure all requested information is extracted if available.
@@ -158,12 +182,11 @@ def summarize_item(item):
         response = openai.chat.completions.create(
             model="gpt-4",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.3, # Slightly lower temperature for more factual extraction
-            max_tokens=200 # Increased max_tokens for more detailed summary
+            temperature=0.3,
+            max_tokens=250 # Slightly increased max_tokens for more detailed summary
         )
         summary_text = response.choices[0].message.content.strip()
 
-        # Attempt to parse structured info from the summary for better filtering
         parsed_info = {
             "Product Name": "N/A", "Store": "N/A", "Price": "N/A",
             "Sale Details": "N/A", "Yarn Type/Material": "N/A", "Key Features/Notes": "N/A"
@@ -171,25 +194,36 @@ def summarize_item(item):
         for line in summary_text.split('\n'):
             if ":" in line:
                 key, value = line.split(':', 1)
-                key = key.strip().replace('**', '') # Clean up markdown
+                key = key.strip().replace('**', '')
                 value = value.strip()
                 if key in parsed_info:
                     parsed_info[key] = value
-        return parsed_info, summary_text # Return both structured and raw summary
+        return parsed_info, summary_text
+    except openai.APIError as e:
+        st.warning(f"OpenAI API error for item '{title}': {e}. This might be due to rate limits or invalid requests.")
+        return {k: "Summary unavailable." for k in parsed_info.keys()}, "Summary unavailable due to API error."
     except Exception as e:
         st.warning(f"AI summary failed for item '{title}': {e}")
-        return {k: "Summary unavailable." for k in ["Product Name", "Store", "Price", "Sale Details", "Yarn Type/Material", "Key Features/Notes"]}, "Summary unavailable."
+        return {k: "Summary unavailable." for k in parsed_info.keys()}, "Summary unavailable."
 
 def extract_price_value(price_string):
     """Extracts a numerical price from a price string."""
     if isinstance(price_string, str):
-        # Regex to find common price formats, e.g., $X.XX, X.XX, $X
-        match = re.search(r'\$?(\d+\.?\d*)', price_string)
+        # Improved regex to handle various price formats including ranges and "Reg. $X"
+        # It tries to find the first numerical price that looks like a direct price.
+        match = re.search(r'(?:\$?(\d[\d,]*\.?\d{0,2})(?:\s*-\s*\$?\d[\d,]*\.?\d{0,2})?|\bReg\.\s*\$?(\d[\d,]*\.?\d{0,2}))', price_string, re.IGNORECASE)
         if match:
-            try:
-                return float(match.group(1))
-            except ValueError:
-                pass
+            # Prioritize the direct price capture group, then the "Reg." price capture group
+            if match.group(1):
+                try:
+                    return float(match.group(1).replace(',', ''))
+                except ValueError:
+                    pass
+            elif match.group(2):
+                try:
+                    return float(match.group(2).replace(',', ''))
+                except ValueError:
+                    pass
     return None
 
 # --- Check if Item is in Stash ---
@@ -207,26 +241,35 @@ def rank_deals(summarized_deals, search_query):
         title = item.get('title', '').lower()
         snippet = item.get('snippet', '').lower()
 
-        # Keyword matching (simple)
-        for keyword in search_query.lower().split():
+        # Keyword matching
+        query_keywords = set(search_query.lower().split())
+        for keyword in query_keywords:
             if keyword in title or keyword in snippet:
                 rank_score += 2
+            if keyword in raw_summary.lower():
+                rank_score += 1 # Boost for keywords in AI summary
 
-        # Price availability
-        if summary_info.get("Price") != "N/A":
+        # Price availability and deal significance
+        price = summary_info.get("Price", "N/A")
+        sale_details = summary_info.get("Sale Details", "").lower()
+
+        if price != "N/A":
             rank_score += 3
-            # Further boost for specific sale details (e.g., "off", "clearance")
-            if "off" in summary_info.get("Sale Details", "").lower() or \
-               "clearance" in summary_info.get("Sale Details", "").lower():
+            if "off" in sale_details or "discount" in sale_details or "clearance" in sale_details:
+                rank_score += 4 # Higher boost for clear sale indicators
+            elif "buy one get one" in sale_details or "bogo" in sale_details:
+                rank_score += 3
+            elif "sale" in sale_details:
                 rank_score += 2
 
-        # Store preference (can be added as user input)
-        # if "joann" in summary_info.get("Store", "").lower():
+        # Store preference (could be user-configurable)
+        # Example: prioritize specific stores
+        # if "joann" in summary_info.get("Store", "").lower() or "hobby lobby" in summary_info.get("Store", "").lower():
         #     rank_score += 1
 
         # Check if already in stash (lower rank for items already owned)
         if is_in_stash(title):
-            rank_score -= 5 # Penalize if already in stash
+            rank_score -= 10 # Stronger penalty
 
         # Add original item and its score
         ranked_deals.append((rank_score, summary_info, raw_summary, item))
@@ -243,31 +286,33 @@ def display_deals_grid(results, filters):
         return
 
     summarized_items = []
-    for item in results:
-        summary_info, raw_summary = summarize_item(item)
-        if raw_summary != "Summary unavailable.":
-            summarized_items.append((summary_info, raw_summary, item))
+    with st.spinner("Analyzing deals with AI..."):
+        for item in results:
+            summary_info, raw_summary = summarize_item(item)
+            if raw_summary != "Summary unavailable.":
+                summarized_items.append((summary_info, raw_summary, item))
+            # else:
+            #     st.caption(f"Skipping '{item.get('title', 'Unknown Item')}' due to summarization error.")
+
+    if not summarized_items:
+        st.info("No deals could be summarized. This might be due to AI API issues or content not being relevant.")
+        return
 
     ranked_items = rank_deals(summarized_items, st.session_state.current_search_query)
 
     filtered_items = []
     for rank_score, summary_info, raw_summary, item in ranked_items:
         # Apply price filter
-        if filters["min_price"] is not None or filters["max_price"] is not None:
-            price_value = extract_price_value(summary_info.get("Price"))
-            if price_value is not None:
-                if filters["min_price"] is not None and price_value < filters["min_price"]:
-                    continue
-                if filters["max_price"] is not None and price_value > filters["max_price"]:
-                    continue
-            elif filters["min_price"] is not None or filters["max_price"] is not None:
-                # If price is N/A and filter is active, skip
-                continue
+        price_value = extract_price_value(summary_info.get("Price"))
+        if (filters["min_price"] is not None and (price_value is None or price_value < filters["min_price"])):
+            continue
+        if (filters["max_price"] is not None and (price_value is None or price_value > filters["max_price"])):
+            continue
 
-        # Apply keyword filter to summary
+        # Apply keyword filter to summary and title
         if filters["keyword"]:
-            if filters["keyword"].lower() not in raw_summary.lower() and \
-               filters["keyword"].lower() not in item.get('title', '').lower():
+            filter_lower = filters["keyword"].lower()
+            if not (filter_lower in raw_summary.lower() or filter_lower in item.get('title', '').lower()):
                 continue
 
         filtered_items.append((rank_score, summary_info, raw_summary, item))
@@ -276,16 +321,18 @@ def display_deals_grid(results, filters):
         st.info("No deals match your current filters.")
         return
 
-    cols = st.columns(3)
+    # Use columns to display cards
+    num_cols = 3
+    cols = st.columns(num_cols)
+
     for idx, (rank_score, summary_info, raw_summary, item) in enumerate(filtered_items):
-        col = cols[idx % 3]
-        with col:
+        with cols[idx % num_cols]:
             st.markdown(f'<div class="deal-card">', unsafe_allow_html=True)
             title = item.get('title', 'No Title')
             link = item.get('link', '#')
             image_url = item.get('pagemap', {}).get('cse_image', [{}])[0].get('src', '')
 
-            st.markdown(f"**Rank: {rank_score}**")
+            # Removed the explicit "Rank: X" box
             st.markdown(f"#### [{title}]({link})")
             if image_url and image_url.startswith("http"):
                 st.image(image_url, use_container_width=True)
@@ -294,9 +341,15 @@ def display_deals_grid(results, filters):
 
             st.write(f"**Store:** {summary_info.get('Store')}")
             st.write(f"**Price:** {summary_info.get('Price')}")
-            st.write(f"**Sale Details:** {summary_info.get('Sale Details')}")
-            st.write(f"**Yarn Type:** {summary_info.get('Yarn Type/Material')}")
-            st.caption(f"_{raw_summary}_") # Original AI summary for context
+            if summary_info.get('Sale Details') != 'N/A':
+                st.write(f"**Sale Details:** {summary_info.get('Sale Details')}")
+            if summary_info.get('Yarn Type/Material') != 'N/A':
+                st.write(f"**Yarn Type:** {summary_info.get('Yarn Type/Material')}")
+            if summary_info.get('Key Features/Notes') != 'N/A':
+                 st.write(f"**Notes:** {summary_info.get('Key Features/Notes')}")
+
+            # Optionally, you can add a subtle rank indicator if still desired, e.g., in a tooltip or very small text.
+            # st.markdown(f'<p style="font-size:0.7em; text-align:right; color:#888;">Rank: {rank_score}</p>', unsafe_allow_html=True)
 
             if is_in_stash(title):
                 st.success("✅ You already have this in your stash!")
@@ -313,16 +366,16 @@ if "search_history" not in st.session_state:
 if "current_search_query" not in st.session_state:
     st.session_state.current_search_query = ""
 if "last_search_results" not in st.session_state:
-    st.session_state.last_search_results = [] # Initialize to an empty list
+    st.session_state.last_search_results = []
 
 # --- Search UI ---
 st.sidebar.header("🔍 Find Deals")
-query = st.sidebar.text_input("Search for a yarn deal:", value=st.session_state.current_search_query or "yarn sale site:joann.com")
+query = st.sidebar.text_input("Search for a yarn deal:", value=st.session_state.current_search_query or "yarn sale site:joann.com OR site:lovecrafts.com OR site:knitpicks.com OR site:wecrochet.com")
 
 # Price Filter
-min_price = st.sidebar.number_input("Minimum Price", min_value=0.0, format="%.2f", value=None)
-max_price = st.sidebar.number_input("Maximum Price", min_value=0.0, format="%.2f", value=None)
-filter_keyword = st.sidebar.text_input("Filter by Keyword in Summary (e.g., 'merino', 'clearance')")
+min_price = st.sidebar.number_input("Minimum Price", min_value=0.0, format="%.2f", value=None, key="min_price_filter")
+max_price = st.sidebar.number_input("Maximum Price", min_value=0.0, format="%.2f", value=None, key="max_price_filter")
+filter_keyword = st.sidebar.text_input("Filter by Keyword in Summary (e.g., 'merino', 'clearance')", key="keyword_filter")
 
 search_button = st.sidebar.button("Search Deals")
 
@@ -332,8 +385,8 @@ if search_button:
         st.session_state.search_history.append({"query": query, "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
         with st.spinner(f"Searching the internet for '{query}' deals..."):
             results = search_yarn_deals(query)
-            log_search_to_sheets(query, len(results)) # Log the search
-            st.session_state.last_search_results = results # Store results to re-filter
+            log_search_to_sheets(query, len(results))
+            st.session_state.last_search_results = results
         if not results:
             st.info("No results found for your search.")
     else:
@@ -359,9 +412,12 @@ if page == "Your Yarn Stash":
     with st.form("stash_form"):
         yarn_name = st.text_input("Yarn Name", key="stash_yarn_name")
         quantity = st.number_input("Skeins", 1, 100, 1, key="stash_quantity")
-        fiber_type = st.text_input("Fiber Type", key="stash_fiber_type")
-        weight_type = st.selectbox("Yarn Weight", ["Lace", "Fingering", "Sport", "DK", "Worsted", "Bulky", "Super Bulky"], key="stash_weight_type")
-        yardage = st.number_input("Total Yardage", 0, 10000, 0, key="stash_yardage")
+        fiber_type = st.text_input("Fiber Type (e.g., Wool, Acrylic, Cotton)", key="stash_fiber_type")
+        weight_type = st.selectbox("Yarn Weight", ["Lace", "Fingering", "Sport", "DK", "Worsted", "Aran", "Bulky", "Super Bulky", "Jumbo"], key="stash_weight_type")
+        color = st.text_input("Color", key="stash_color")
+        dye_lot = st.text_input("Dye Lot (optional)", key="stash_dye_lot")
+        purchase_date = st.date_input("Purchase Date (optional)", value=None, key="stash_purchase_date")
+        notes = st.text_area("Notes (e.g., project ideas, special features)", key="stash_notes")
         submit = st.form_submit_button("Add to Stash")
 
         if submit and yarn_name:
@@ -370,19 +426,35 @@ if page == "Your Yarn Stash":
                 "Skeins": quantity,
                 "Fiber": fiber_type,
                 "Weight": weight_type,
-                "Yardage": yardage
+                "Color": color,
+                "Dye Lot": dye_lot if dye_lot else "N/A",
+                "Purchase Date": purchase_date.strftime("%Y-%m-%d") if purchase_date else "N/A",
+                "Notes": notes if notes else "N/A"
             })
             st.success(f"'{yarn_name}' added to your stash!")
+            st.rerun() # Rerun to clear the form fields
 
     if st.session_state.stash:
         df_stash = pd.DataFrame(st.session_state.stash)
-        st.dataframe(df_stash)
-        st.markdown("#### Filter Stash")
-        selected_weight = st.selectbox("Filter by Weight", ["All"] + df_stash["Weight"].unique().tolist(), key="filter_stash_weight")
+
+        st.markdown("#### Filter Your Stash")
+        col_filter1, col_filter2 = st.columns(2)
+        with col_filter1:
+            selected_weight = st.selectbox("Filter by Weight", ["All"] + df_stash["Weight"].unique().tolist(), key="filter_stash_weight")
+        with col_filter2:
+            selected_fiber = st.selectbox("Filter by Fiber Type", ["All"] + df_stash["Fiber"].unique().tolist(), key="filter_stash_fiber")
+
+        filtered_df_stash = df_stash.copy()
         if selected_weight != "All":
-            st.dataframe(df_stash[df_stash["Weight"] == selected_weight])
-        if st.button("Clear Stash"):
+            filtered_df_stash = filtered_df_stash[filtered_df_stash["Weight"] == selected_weight]
+        if selected_fiber != "All":
+            filtered_df_stash = filtered_df_stash[filtered_df_stash["Fiber"] == selected_fiber]
+
+        st.dataframe(filtered_df_stash, use_container_width=True)
+
+        if st.button("Clear Stash", key="clear_stash_button"):
             st.session_state.stash = []
+            st.success("Your stash has been cleared!")
             st.rerun()
     else:
         st.info("No yarn in stash yet. Add some above!")
@@ -391,21 +463,25 @@ elif page == "Your Wishlist":
     st.markdown("### 🧾 Wishlist")
     with st.form("wishlist_form"):
         wish_name = st.text_input("Wishlist Item Name", key="wish_name")
-        wish_price = st.text_input("Target Price (e.g., $10, $5.99)", key="wish_price")
-        wish_store = st.text_input("Preferred Store", key="wish_store")
+        wish_price = st.text_input("Target Price (e.g., $10, $5.99)", key="wish_price_input")
+        wish_store = st.text_input("Preferred Store", key="wish_store_input")
+        wish_notes = st.text_area("Notes (e.g., specific color, reason)", key="wish_notes")
         wish_submit = st.form_submit_button("Add to Wishlist")
         if wish_submit and wish_name:
             st.session_state.wishlist.append({
                 "Item": wish_name,
-                "Target Price": wish_price,
-                "Store": wish_store
+                "Target Price": wish_price if wish_price else "N/A",
+                "Store": wish_store if wish_store else "N/A",
+                "Notes": wish_notes if wish_notes else "N/A"
             })
             st.success(f"'{wish_name}' added to your wishlist!")
+            st.rerun() # Rerun to clear form
 
     if st.session_state.wishlist:
-        st.dataframe(pd.DataFrame(st.session_state.wishlist))
-        if st.button("Clear Wishlist"):
+        st.dataframe(pd.DataFrame(st.session_state.wishlist), use_container_width=True)
+        if st.button("Clear Wishlist", key="clear_wishlist_button"):
             st.session_state.wishlist = []
+            st.success("Your wishlist has been cleared!")
             st.rerun()
     else:
         st.info("No items in wishlist yet.")
@@ -414,9 +490,10 @@ elif page == "Search History":
     st.markdown("### 🕰️ Search History")
     if st.session_state.search_history:
         df_history = pd.DataFrame(st.session_state.search_history)
-        st.dataframe(df_history)
-        if st.button("Clear Search History"):
+        st.dataframe(df_history, use_container_width=True)
+        if st.button("Clear Search History", key="clear_history_button"):
             st.session_state.search_history = []
+            st.success("Your search history has been cleared!")
             st.rerun()
     else:
         st.info("No search history yet.")
@@ -426,4 +503,4 @@ st.markdown("---")
 st.markdown("### 🧶 Coming Soon")
 st.markdown("- Project Organizer (link stash to patterns)")
 st.markdown("- Local store deals map")
-st.caption("CraftGrab MVP v1.0")
+st.caption("CraftGrab MVP v1.1 - Enhanced Deal Finding and Stash Management")
