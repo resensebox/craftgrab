@@ -77,45 +77,47 @@ def scrape_joann(search_term=None):
         st.error(f"Error scraping Joann: {e}")
         return []
 
-def scrape_michaels(search_term=None):
-    """
-    Scrapes yarn deals from michaels.com's yarn clearance section.
-    Filters results by search_term if provided.
-    """
-    url = "https://www.michaels.com/yarn-clearance"
-    headers = {"User-Agent": "Mozilla/5.0"}
+# Removed scrape_michaels function due to persistent 404 errors and difficulty in finding a consistent sale/clearance page for automated scraping.
+# def scrape_michaels(search_term=None):
+#     """
+#     Scrapes yarn deals from michaels.com's yarn clearance section.
+#     Filters results by search_term if provided.
+#     """
+#     url = "https://www.michaels.com/yarn-clearance" # This URL consistently returns 404
+#     headers = {"User-Agent": "Mozilla/5.0"}
     
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
+#     try:
+#         response = requests.get(url, headers=headers, timeout=10)
+#         response.raise_for_status()
+#         soup = BeautifulSoup(response.text, 'html.parser')
 
-        products = []
-        for item in soup.select(".product"):
-            name_tag = item.select_one(".product-name")
-            price_tag = item.select_one(".regular-price")
-            sale_tag = item.select_one(".sale-price")
-            link_tag = item.find("a", href=True)
+#         products = []
+#         for item in soup.select(".product"):
+#             name_tag = item.select_one(".product-name")
+#             price_tag = item.select_one(".regular-price")
+#             sale_tag = item.select_one(".sale-price")
+#             link_tag = item.find("a", href=True)
 
-            if name_tag and sale_tag and price_tag:
-                name = name_tag.text.strip()
-                if search_term and search_term.lower() not in name.lower():
-                    continue
-                original_price = price_tag.text.strip()
-                sale_price = sale_tag.text.strip()
-                product_url = "https://www.michaels.com" + link_tag['href'] if link_tag else "N/A"
-                products.append({"Product Name": name, "Original Price": original_price, "Sale Price": sale_price, "Product URL": product_url})
-        return products
-    except requests.exceptions.RequestException as e:
-        st.error(f"Error scraping Michaels: {e}")
-        return []
+#             if name_tag and sale_tag and price_tag:
+#                 name = name_tag.text.strip()
+#                 if search_term and search_term.lower() not in name.lower():
+#                     continue
+#                 original_price = price_tag.text.strip()
+#                 sale_price = sale_tag.text.strip()
+#                 product_url = "https://www.michaels.com" + link_tag['href'] if link_tag else "N/A"
+#                 products.append({"Product Name": name, "Original Price": original_price, "Sale Price": sale_price, "Product URL": product_url})
+#         return products
+#     except requests.exceptions.RequestException as e:
+#         st.error(f"Error scraping Michaels: {e}")
+#         return []
 
 def scrape_knitpicks(search_term=None):
     """
     Scrapes yarn deals from knitpicks.com's yarn sale section.
     Filters results by search_term if provided.
     """
-    url = "https://www.knitpicks.com/sale/yarn/c/301027"
+    # Updated URL to a more reliable clearance page
+    url = "https://www.knitpicks.com/clearance/clearance-yarn/c/301002"
     headers = {"User-Agent": "Mozilla/5.0"}
     
     try:
@@ -148,7 +150,8 @@ def scrape_wecrochet(search_term=None):
     Scrapes yarn deals from wecrochet.com's yarn sale section.
     Filters results by search_term if provided.
     """
-    url = "https://www.wecrochet.com/sale/yarn/c/301027"
+    # Updated URL to a more reliable sale page on crochet.com (associated with WeCrochet)
+    url = "https://www.crochet.com/sale/yarn/c/50110701"
     headers = {"User-Agent": "Mozilla/5.0"}
     
     try:
@@ -169,7 +172,7 @@ def scrape_wecrochet(search_term=None):
                     continue
                 original_price = price_tag.text.strip()
                 sale_price = sale_tag.text.strip()
-                product_url = "https://www.wecrochet.com" + link_tag['href'] if link_tag else "N/A"
+                product_url = "https://www.wecrochet.com" + link_tag['href'] if link_tag else "N/A" # Still use wecrochet.com as base for URL
                 products.append({"Product Name": name, "Original Price": original_price, "Sale Price": sale_price, "Product URL": product_url})
         return products
     except requests.exceptions.RequestException as e:
@@ -183,7 +186,8 @@ def scrape_all_us_stores(search_term=None):
     """
     all_results = []
     # Using a list of functions and iterating to make it more scalable and readable
-    scrapers = [scrape_yarn_com, scrape_joann, scrape_michaels, scrape_knitpicks, scrape_wecrochet]
+    # Michaels scraper removed due to persistent 404/difficulty in finding a reliable sale page.
+    scrapers = [scrape_yarn_com, scrape_joann, scrape_knitpicks, scrape_wecrochet]
     
     for scraper_func in scrapers:
         all_results.extend(scraper_func(search_term))
@@ -204,7 +208,8 @@ if page == "Home":
         if results:
             df = pd.DataFrame(results)
             # Assign 'Website' based on URL, ensuring consistency and handling unknown cases
-            df["Website"] = df["Product URL"].apply(lambda url: next((site for site in ["Yarn.com", "Joann", "Michaels", "KnitPicks", "WeCrochet"] if site.lower() in url.lower()), "Unknown"))
+            # Michaels removed from this list
+            df["Website"] = df["Product URL"].apply(lambda url: next((site for site in ["Yarn.com", "Joann", "KnitPicks", "WeCrochet"] if site.lower() in url.lower() or (site.lower() == "wecrochet" and "crochet.com" in url.lower())), "Unknown"))
             st.dataframe(df, use_container_width=True) # Use full container width for better display
         else:
             st.write("No matching deals found. Try a different search term or browse all deals.")
@@ -218,10 +223,13 @@ elif page == "Browse All Yarn Deals":
     
     if results:
         df = pd.DataFrame(results)
-        df["Website"] = df["Product URL"].apply(lambda url: next((site for site in ["Yarn.com", "Joann", "Michaels", "KnitPicks", "WeCrochet"] if site.lower() in url.lower()), "Unknown"))
+        # Assign 'Website' based on URL, ensuring consistency and handling unknown cases
+        # Michaels removed from this list
+        df["Website"] = df["Product URL"].apply(lambda url: next((site for site in ["Yarn.com", "Joann", "KnitPicks", "WeCrochet"] if site.lower() in url.lower() or (site.lower() == "wecrochet" and "crochet.com" in url.lower())), "Unknown"))
         
         # Define a consistent order for displaying websites
-        ordered_sites = ["Yarn.com", "Joann", "Michaels", "KnitPicks", "WeCrochet"]
+        # Michaels removed from this list
+        ordered_sites = ["Yarn.com", "Joann", "KnitPicks", "WeCrochet"]
         
         for site in ordered_sites:
             site_df = df[df["Website"] == site]
@@ -230,4 +238,3 @@ elif page == "Browse All Yarn Deals":
                 st.dataframe(site_df, use_container_width=True) # Use full container width
     else:
         st.write("No deals found. Please check your internet connection or try again later.")
-
