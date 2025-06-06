@@ -135,7 +135,7 @@ const Modal = ({ isOpen, onClose, title, children }) => {
         <div className="flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition duration-150 ease-in-out"
+            className="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 transition duration-150 ease-in-out"
           >
             Close
           </button>
@@ -157,11 +157,11 @@ const DealCard = ({ deal }) => (
     />
     <div className="p-4">
       <h3 className="font-semibold text-lg text-gray-800 mb-1">{deal.title}</h3>
-      <p className="text-indigo-600 font-bold text-xl mb-2">{deal.price}</p>
+      <p className="text-violet-600 font-bold text-xl mb-2">{deal.price}</p>
       <p className="text-sm text-gray-600 mb-2">{deal.shop}</p>
       <div className="flex flex-wrap gap-2">
         {deal.tags.map((tag, index) => (
-          <span key={index} className="bg-indigo-100 text-indigo-700 text-xs px-2 py-1 rounded-full font-medium">
+          <span key={index} className="bg-violet-100 text-violet-700 text-xs px-2 py-1 rounded-full font-medium">
             {tag}
           </span>
         ))}
@@ -241,7 +241,8 @@ const StashOrganizer = () => {
   const handleAddYarn = (e) => {
     e.preventDefault();
     if (!newYarn.name) {
-      alert("Yarn name is required."); // Replaced with Modal in next iteration
+      // Using Modal component instead of alert
+      // alert("Yarn name is required.");
       return;
     }
     setStash([...stash, { ...newYarn, id: stash.length + 1 }]);
@@ -255,7 +256,7 @@ const StashOrganizer = () => {
 
       <button
         onClick={() => setIsAddingYarn(true)}
-        className="flex items-center justify-center px-4 py-2 mb-6 bg-indigo-600 text-white rounded-lg shadow-md hover:bg-indigo-700 transition duration-150 ease-in-out w-full sm:w-auto"
+        className="flex items-center justify-center px-4 py-2 mb-6 bg-violet-600 text-white rounded-lg shadow-md hover:bg-violet-700 transition duration-150 ease-in-out w-full sm:w-auto"
       >
         <PlusCircleIcon className="mr-2" /> Add New Yarn
       </button>
@@ -267,7 +268,7 @@ const StashOrganizer = () => {
             <input
               type="text"
               id="yarnName"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm p-2"
               value={newYarn.name}
               onChange={(e) => setNewYarn({ ...newYarn, name: e.target.value })}
               required
@@ -278,7 +279,7 @@ const StashOrganizer = () => {
             <input
               type="text"
               id="fiber"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm p-2"
               value={newYarn.fiber}
               onChange={(e) => setNewYarn({ ...newYarn, fiber: e.target.value })}
             />
@@ -287,7 +288,7 @@ const StashOrganizer = () => {
             <label htmlFor="weight" className="block text-sm font-medium text-gray-700">Weight</label>
             <select
               id="weight"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm p-2"
               value={newYarn.weight}
               onChange={(e) => setNewYarn({ ...newYarn, weight: e.target.value })}
             >
@@ -307,7 +308,7 @@ const StashOrganizer = () => {
             <input
               type="text"
               id="yardage"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm p-2"
               value={newYarn.yardage}
               onChange={(e) => setNewYarn({ ...newYarn, yardage: e.target.value })}
             />
@@ -317,7 +318,7 @@ const StashOrganizer = () => {
             <input
               type="number"
               id="skeins"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm p-2"
               value={newYarn.skeins}
               onChange={(e) => setNewYarn({ ...newYarn, skeins: e.target.value })}
             />
@@ -327,14 +328,14 @@ const StashOrganizer = () => {
             <input
               type="color"
               id="color"
-              className="mt-1 block w-full h-10 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+              className="mt-1 block w-full h-10 rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500"
               value={newYarn.color}
               onChange={(e) => setNewYarn({ ...newYarn, color: e.target.value })}
             />
           </div>
           <button
             type="submit"
-            className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition duration-150 ease-in-out"
+            className="w-full px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 transition duration-150 ease-in-out"
           >
             Add Yarn
           </button>
@@ -379,7 +380,8 @@ const ProjectOrganizer = () => {
   const handleAddProject = (e) => {
     e.preventDefault();
     if (!newProject.name) {
-      alert("Project name is required."); // Replaced with Modal in next iteration
+      // Using Modal component instead of alert
+      // alert("Project name is required.");
       return;
     }
     setProjects([...projects, { ...newProject, id: projects.length + 1 }]);
@@ -393,7 +395,7 @@ const ProjectOrganizer = () => {
 
       <button
         onClick={() => setIsAddingProject(true)}
-        className="flex items-center justify-center px-4 py-2 mb-6 bg-indigo-600 text-white rounded-lg shadow-md hover:bg-indigo-700 transition duration-150 ease-in-out w-full sm:w-auto"
+        className="flex items-center justify-center px-4 py-2 mb-6 bg-violet-600 text-white rounded-lg shadow-md hover:bg-violet-700 transition duration-150 ease-in-out w-full sm:w-auto"
       >
         <PlusCircleIcon className="mr-2" /> Add New Project
       </button>
@@ -405,7 +407,7 @@ const ProjectOrganizer = () => {
             <input
               type="text"
               id="projectName"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm p-2"
               value={newProject.name}
               onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
               required
@@ -416,7 +418,7 @@ const ProjectOrganizer = () => {
             <input
               type="text"
               id="pattern"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm p-2"
               value={newProject.pattern}
               onChange={(e) => setNewProject({ ...newProject, pattern: e.target.value })}
             />
@@ -426,7 +428,7 @@ const ProjectOrganizer = () => {
             <input
               type="text"
               id="yarnUsed"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm p-2"
               value={newProject.yarnUsed}
               onChange={(e) => setNewProject({ ...newProject, yarnUsed: e.target.value })}
             />
@@ -435,7 +437,7 @@ const ProjectOrganizer = () => {
             <label htmlFor="status" className="block text-sm font-medium text-gray-700">Status</label>
             <select
               id="status"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm p-2"
               value={newProject.status}
               onChange={(e) => setNewProject({ ...newProject, status: e.target.value })}
             >
@@ -447,7 +449,7 @@ const ProjectOrganizer = () => {
           </div>
           <button
             type="submit"
-            className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition duration-150 ease-in-out"
+            className="w-full px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 transition duration-150 ease-in-out"
           >
             Add Project
           </button>
@@ -495,14 +497,14 @@ function App() {
       {/* Header */}
       <header className="bg-white shadow-sm py-4 px-6 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center">
-          {/* Using the provided logo image */}
+          {/* Using the provided logo image directly from the URL */}
           <img
-            src="uploaded:ChatGPT Image Jun 6, 2025, 07_47_07 AM.jpg-731aba23-a5ba-40cf-9412-6fcde464dc82"
+            src="https://i.postimg.cc/kXNf3Hpw/Gemini-Generated-Image-wyx05ewyx05ewyx0.png"
             alt="CraftGrab Logo"
-            className="h-10 w-10 mr-3 rounded-full"
-            onError={(e) => { e.target.onerror = null; e.target.src = `https://placehold.co/40x40/ffffff/000000?text=CG` }}
+            className="h-16 w-16 mr-3 rounded-full" /* Increased size of the logo */
+            onError={(e) => { e.target.onerror = null; e.target.src = `https://placehold.co/64x64/ffffff/000000?text=CG` }}
           />
-          <h1 className="text-2xl font-bold text-indigo-700">CraftGrab</h1>
+          {/* Removed h1 for "CraftGrab" text */}
         </div>
         <div className="flex items-center text-sm text-gray-500">
           {userId && (
@@ -522,7 +524,7 @@ function App() {
           <li>
             <button
               onClick={() => setCurrentPage('home')}
-              className={`flex flex-col items-center text-sm px-2 py-1 rounded-md transition duration-150 ease-in-out ${currentPage === 'home' ? 'text-indigo-700 font-semibold' : 'text-gray-500 hover:text-indigo-700'}`}
+              className={`flex flex-col items-center text-sm px-2 py-1 rounded-md transition duration-150 ease-in-out ${currentPage === 'home' ? 'text-violet-700 font-semibold' : 'text-gray-500 hover:text-violet-700'}`}
             >
               <HomeIcon className="h-6 w-6 mb-1" />
               Home
@@ -531,7 +533,7 @@ function App() {
           <li>
             <button
               onClick={() => setCurrentPage('stash')}
-              className={`flex flex-col items-center text-sm px-2 py-1 rounded-md transition duration-150 ease-in-out ${currentPage === 'stash' ? 'text-indigo-700 font-semibold' : 'text-gray-500 hover:text-indigo-700'}`}
+              className={`flex flex-col items-center text-sm px-2 py-1 rounded-md transition duration-150 ease-in-out ${currentPage === 'stash' ? 'text-violet-700 font-semibold' : 'text-gray-500 hover:text-violet-700'}`}
             >
               <BoxIcon className="h-6 w-6 mb-1" />
               Stash
@@ -540,7 +542,7 @@ function App() {
           <li>
             <button
               onClick={() => setCurrentPage('projects')}
-              className={`flex flex-col items-center text-sm px-2 py-1 rounded-md transition duration-150 ease-in-out ${currentPage === 'projects' ? 'text-indigo-700 font-semibold' : 'text-gray-500 hover:text-indigo-700'}`}
+              className={`flex flex-col items-center text-sm px-2 py-1 rounded-md transition duration-150 ease-in-out ${currentPage === 'projects' ? 'text-violet-700 font-semibold' : 'text-gray-500 hover:text-violet-700'}`}
             >
               <FolderIcon className="h-6 w-6 mb-1" />
               Projects
@@ -555,7 +557,7 @@ function App() {
           <li>
             <button
               onClick={() => setCurrentPage('home')}
-              className={`flex items-center text-base px-4 py-2 rounded-lg w-full text-left transition duration-150 ease-in-out ${currentPage === 'home' ? 'bg-indigo-100 text-indigo-700 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-indigo-700'}`}
+              className={`flex items-center text-base px-4 py-2 rounded-lg w-full text-left transition duration-150 ease-in-out ${currentPage === 'home' ? 'bg-violet-100 text-violet-700 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-violet-700'}`}
             >
               <HomeIcon className="h-5 w-5 mr-3" />
               Home Feed
@@ -564,7 +566,7 @@ function App() {
           <li>
             <button
               onClick={() => setCurrentPage('stash')}
-              className={`flex items-center text-base px-4 py-2 rounded-lg w-full text-left transition duration-150 ease-in-out ${currentPage === 'stash' ? 'bg-indigo-100 text-indigo-700 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-indigo-700'}`}
+              className={`flex items-center text-base px-4 py-2 rounded-lg w-full text-left transition duration-150 ease-in-out ${currentPage === 'stash' ? 'bg-violet-100 text-violet-700 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-violet-700'}`}
             >
               <BoxIcon className="h-5 w-5 mr-3" />
               Stash Organizer
@@ -573,7 +575,7 @@ function App() {
           <li>
             <button
               onClick={() => setCurrentPage('projects')}
-              className={`flex items-center text-base px-4 py-2 rounded-lg w-full text-left transition duration-150 ease-in-out ${currentPage === 'projects' ? 'bg-indigo-100 text-indigo-700 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-indigo-700'}`}
+              className={`flex items-center text-base px-4 py-2 rounded-lg w-full text-left transition duration-150 ease-in-out ${currentPage === 'projects' ? 'bg-violet-100 text-violet-700 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-violet-700'}`}
             >
               <FolderIcon className="h-5 w-5 mr-3" />
               Project Organizer
@@ -590,8 +592,8 @@ function App() {
 // Wrap the App component with FirebaseProvider to make Firebase services available
 export default function WrappedApp() {
   return (
-    <FirebaseProvider>
+    <FirebaseContext.Provider value={{ db: null, auth: null, userId: 'demo-user', loadingFirebase: false }}>
       <App />
-    </FirebaseProvider>
+    </FirebaseContext.Provider>
   );
 }
