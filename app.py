@@ -10,7 +10,7 @@ from oauth2client.service_account import ServiceAccountCredentials # For Google 
 # --- Configuration ---
 API_KEY = st.secrets["google_cse_api_key"]  # Custom Search API Key
 CSE_ID = st.secrets["google_cse_api_key"]        # Custom Search Engine ID
-OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
+OPENAI_API_KEY = st.secrets["openai_api_key"]
 openai.api_key = OPENAI_API_KEY
 
 # --- Google Sheets Configuration ---
