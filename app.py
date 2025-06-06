@@ -8,9 +8,9 @@ import gspread # For Google Sheets integration
 from oauth2client.service_account import ServiceAccountCredentials # For Google Sheets authentication
 
 # --- Configuration ---
-API_KEY = st.secrets["google_cse_api_key"]  # Custom Search API Key
-CSE_ID = st.secrets["google_cse_id"]        # Custom Search Engine ID
-OPENAI_API_KEY = st.secrets["openai_api_key"]
+API_KEY = st.secrets["GOOGLE_CSE_API_KEY"]  # Custom Search API Key
+CSE_ID = st.secrets["GOOGLE_CSE_ID"]        # Custom Search Engine ID
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 openai.api_key = OPENAI_API_KEY
 
 # --- Google Sheets Configuration ---
@@ -70,6 +70,7 @@ st.markdown("""
         }
     </style>
 """, unsafe_allow_html=True)
+
 
 # --- Header with Logo ---
 col1, col2 = st.columns([1, 4])
