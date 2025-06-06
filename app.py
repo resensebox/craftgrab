@@ -9,7 +9,7 @@ from oauth2client.service_account import ServiceAccountCredentials # For Google 
 
 # --- Configuration ---
 API_KEY = st.secrets["google_cse_api_key"]  # Custom Search API Key
-CSE_ID = st.secrets["GOOGLE_CSE_ID"]        # Custom Search Engine ID
+CSE_ID = st.secrets["google_cse_api_key"]        # Custom Search Engine ID
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 openai.api_key = OPENAI_API_KEY
 
