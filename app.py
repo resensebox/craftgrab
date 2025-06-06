@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+import json # Import json for json.dumps
 from bs4 import BeautifulSoup
 
 # Set Streamlit page config FIRST
@@ -193,6 +194,92 @@ def scrape_all_us_stores(search_term=None):
         all_results.extend(scraper_func(search_term))
     return all_results
 
+# Define the LLM API call function for Python environment
+def generate_ai_summary(product_data):
+    """
+    Generates an AI-powered summary for a given product using the Gemini API.
+    This function simulates the API call from a Python backend.
+    """
+    product_name = product_data.get("Product Name", "N/A")
+    original_price = product_data.get("Original Price", "N/A")
+    sale_price = product_data.get("Sale Price", "N/A")
+    product_url = product_data.get("Product URL", "N/A")
+    website = product_data.get("Website", "Unknown")
+
+    prompt = f"""
+    Generate a brief, engaging product description (around 2-3 sentences) for a yarn deal.
+    Highlight the sale aspect and potential uses.
+    Product Details:
+    - Name: {product_name}
+    - Original Price: {original_price}
+    - Sale Price: {sale_price}
+    - Website: {website}
+    - URL: {product_url}
+    """
+
+    # Mimicking the structure for a Python requests call to a Gemini API endpoint
+    # In a real deployed scenario, `__gemini_api_key__` would be provided by the environment
+    # For local testing, you might need to replace `""` with your actual API key
+    # or handle it via environment variables.
+    apiKey = "" 
+    apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+
+    headers = {
+        'Content-Type': 'application/json'
+    }
+    # Payload structured as per Gemini API requirements
+    payload = {
+        "contents": [
+            {
+                "role": "user",
+                "parts": [
+                    {"text": prompt}
+                ]
+            }
+        ]
+    }
+
+    try:
+        # Append API key to URL if available
+        if apiKey:
+            request_url = f"{apiUrl}?key={apiKey}"
+        else: # For environments where API key is automatically handled, e.g., Canvas runtime
+            request_url = apiUrl # The Canvas runtime will inject the key
+
+        response = requests.post(request_url, headers=headers, data=json.dumps(payload), timeout=20)
+        response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
+        result = response.json()
+        
+        if result.get("candidates") and len(result["candidates"]) > 0 and \
+           result["candidates"][0].get("content") and result["candidates"][0]["content"].get("parts") and \
+           len(result["candidates"][0]["content"]["parts"]) > 0:
+            return result["candidates"][0]["content"]["parts"][0]["text"]
+        else:
+            return "AI summary not available."
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error generating AI summary: {e}. Please check your network or API key configuration.")
+        return "AI summary generation failed."
+    except json.JSONDecodeError:
+        st.error("Error decoding AI response from LLM.")
+        return "AI summary generation failed."
+
+def display_product_with_ai(product_data):
+    """
+    Displays a single product's details along with its AI-generated summary.
+    """
+    st.markdown(f"**Product Name:** {product_data.get('Product Name', 'N/A')}")
+    st.markdown(f"**Website:** {product_data.get('Website', 'Unknown')}")
+    st.markdown(f"**Original Price:** {product_data.get('Original Price', 'N/A')}")
+    st.markdown(f"**Sale Price:** {product_data.get('Sale Price', 'N/A')}")
+    st.markdown(f"**Product URL:** [Link]({product_data.get('Product URL', '#')})")
+
+    # Add a loading spinner specifically for AI summary generation
+    with st.spinner("Generating AI summary..."):
+        ai_summary = generate_ai_summary(product_data)
+    st.write(ai_summary)
+    st.markdown("---") # Separator for products
+
+
 # Pages
 if page == "Home":
     st.title("Welcome to CraftGrab!")
@@ -200,41 +287,47 @@ if page == "Home":
 
     search_term_input = st.text_input("Search for a specific yarn or brand (optional):", "")
     
-    # Add a loading spinner while scraping
     if st.button("Search"):
         with st.spinner("Searching for deals... This might take a moment."):
             results = scrape_all_us_stores(search_term_input if search_term_input else None)
         
         if results:
             df = pd.DataFrame(results)
-            # Assign 'Website' based on URL, ensuring consistency and handling unknown cases
-            # Michaels removed from this list
             df["Website"] = df["Product URL"].apply(lambda url: next((site for site in ["Yarn.com", "Joann", "KnitPicks", "WeCrochet"] if site.lower() in url.lower() or (site.lower() == "wecrochet" and "crochet.com" in url.lower())), "Unknown"))
-            st.dataframe(df, use_container_width=True) # Use full container width for better display
+            
+            st.subheader("Found Deals with AI Summaries:")
+            if len(df) > 10: # Warn if too many AI calls might be made
+                st.warning(f"Found {len(df)} deals. Generating AI summaries for all might take some time.")
+            
+            # Display products with AI summaries
+            for index, row in df.iterrows():
+                display_product_with_ai(row.to_dict())
         else:
             st.write("No matching deals found. Try a different search term or browse all deals.")
 
 elif page == "Browse All Yarn Deals":
     st.title("🧵 All Yarn Deals by Website")
     
-    # Add a loading spinner while scraping
-    with st.spinner("Loading all yarn deals... This might take a moment."):
+    with st.spinner("Loading all yarn deals... This might take a moment, especially for many results."):
         results = scrape_all_us_stores()
     
     if results:
         df = pd.DataFrame(results)
-        # Assign 'Website' based on URL, ensuring consistency and handling unknown cases
-        # Michaels removed from this list
         df["Website"] = df["Product URL"].apply(lambda url: next((site for site in ["Yarn.com", "Joann", "KnitPicks", "WeCrochet"] if site.lower() in url.lower() or (site.lower() == "wecrochet" and "crochet.com" in url.lower())), "Unknown"))
         
-        # Define a consistent order for displaying websites
-        # Michaels removed from this list
         ordered_sites = ["Yarn.com", "Joann", "KnitPicks", "WeCrochet"]
         
+        st.subheader("All Deals with AI Summaries:")
+        if len(df) > 20: # Warn if too many AI calls might be made for browse all
+            st.warning(f"Found {len(df)} deals across all sites. Generating AI summaries for all might take significant time.")
+
         for site in ordered_sites:
             site_df = df[df["Website"] == site]
             if not site_df.empty:
                 st.subheader(f"{site} - {len(site_df)} Products")
-                st.dataframe(site_df, use_container_width=True) # Use full container width
+                for index, row in site_df.iterrows():
+                    display_product_with_ai(row.to_dict())
+            else:
+                st.info(f"No deals found for {site}.") # Inform user if a site has no deals
     else:
         st.write("No deals found. Please check your internet connection or try again later.")
