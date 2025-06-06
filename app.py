@@ -10,6 +10,28 @@ CSE_ID = "34a2fb94f239b48ce"
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 openai.api_key = OPENAI_API_KEY
 
+# --- Streamlit UI Config ---
+st.set_page_config(page_title="CraftGrab - Yarn Deals", layout="wide")
+st.markdown("""
+    <style>
+        body {
+            background-color: white;
+            font-family: 'Helvetica Neue', sans-serif;
+        }
+        .main h1, .main h2, .main h3, .main h4 {
+            color: #8F5FE8;
+        }
+        .block-container {
+            padding-top: 1rem;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- Header with Logo ---
+st.image("https://i.postimg.cc/kXNf3Hpw/Gemini-Generated-Image-wyx05ewyx05ewyx0.png", width=200)
+st.title("🧶 CraftGrab")
+st.subheader("Snag crafty deals. Track your stash. Save smart.")
+
 # --- Search Deals Function ---
 def search_yarn_deals(query):
     url = "https://www.googleapis.com/customsearch/v1"
@@ -51,11 +73,7 @@ def analyze_and_rank_deals(results):
     )
     return response.choices[0].message.content.strip()
 
-# --- Streamlit UI ---
-st.set_page_config(page_title="CraftGrab - Yarn Deals", layout="wide")
-st.title("🧶 CraftGrab")
-st.subheader("Snag crafty deals. Track your stash. Save smart.")
-
+# --- Search UI ---
 query = st.text_input("Search for a yarn deal:", "yarn sale site:joann.com")
 if st.button("Search Deals"):
     with st.spinner("Searching the internet for yarn deals..."):
@@ -68,7 +86,11 @@ if st.button("Search Deals"):
         st.markdown("### 🛍️ All Found Deals")
         for result in results:
             st.markdown(f"#### [{result['title']}]({result['link']})")
-            st.image(result.get('pagemap', {}).get('cse_image', [{}])[0].get('src', ''), width=300)
+            image_url = result.get('pagemap', {}).get('cse_image', [{}])[0].get('src', '')
+            if image_url and image_url.startswith("http"):
+                st.image(image_url, width=300)
+            else:
+                st.markdown("*(No image available)*")
             st.write(result.get("snippet", ""))
             st.write("---")
     else:
