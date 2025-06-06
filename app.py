@@ -25,6 +25,8 @@ def search_yarn_deals(query="yarn sale"):
     }
     url = "https://www.googleapis.com/customsearch/v1"
     res = requests.get(url, params=params)
+    st.markdown("#### 🔍 Raw Google API Response")
+    st.code(res.text, language="json")
     if res.status_code == 200:
         return res.json().get("items", [])
     else:
