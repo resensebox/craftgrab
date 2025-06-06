@@ -9,7 +9,7 @@ import re
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from difflib import SequenceMatcher
-        import re
+import re
 
 st.set_page_config(page_title="CraftGrab - Yarn Deals", layout="wide", initial_sidebar_state="expanded")
 
