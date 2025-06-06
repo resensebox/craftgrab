@@ -150,20 +150,21 @@ def summarize_item(item):
 
     prompt = f"""
     You are a helpful assistant specialized in e-commerce product summarization for crafting supplies, specifically yarn.
-    Analyze the provided listing and extract the following details as accurately as possible.
+    Analyze the provided listing (title and snippet ONLY) and extract the following details as accurately as possible.
+    If the information is not explicitly stated but can be clearly inferred, please provide it.
     Categorize the "Listing Type" and identify any "Coupon Code".
 
     Extract the following details:
     1. **Product Name:** (e.g., "Lion Brand Wool-Ease Thick & Quick")
     2. **Store:** (e.g., "Joann Fabrics", "LoveCrafts")
-    3. **Price:** (e.g., "$5.99", "Reg. $10, Now $7.50") - Prioritize sale price. If original and sale price are both mentioned, extract both.
+    3. **Price:** (e.g., "$5.99", "Reg. $10, Now $7.50") - Prioritize sale price. If original and sale price are both mentioned, extract both. **Crucial: Extract any numerical price found.**
     4. **Sale Details:** (e.g., "50% off", "Buy One Get One Free", "Clearance")
     5. **Yarn Type/Material:** (e.g., "Acrylic worsted yarn", "Merino wool blend")
     6. **Key Features/Notes:** (Any other important details like weight, brand, color availability, specific deal terms).
     7. **Listing Type:** (Identify as "Product Page", "Category Page", "Blog Post", or "General Website").
     8. **Coupon Code:** (If a specific code is mentioned, e.g., "SAVE20", otherwise "N/A" or "See site for details").
 
-    If a piece of information is not present, state "N/A".
+    If a piece of information is genuinely not present or cannot be inferred from the provided text, state "N/A".
     Be concise but ensure all requested information is extracted if available.
 
     Title: {title}
