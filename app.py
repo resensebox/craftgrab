@@ -98,13 +98,16 @@ def log_search_to_sheets(query, results_count):
     client = get_google_sheet_client()
     if client:
         try:
-            sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet("SearchLogs")  # ✅ fixed method name
+            sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet("SearchLogs")
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             sheet.append_row([timestamp, query, results_count])
         except gspread.exceptions.WorksheetNotFound:
-            st.warning("Worksheet 'SearchLogs' not found. Please create it in your Google Sheet with the specified ID.")
+            st.error("❌ Worksheet 'SearchLogs' not found. Please create it in your Google Sheet.")
+        except gspread.exceptions.APIError as api_error:
+            st.error(f"❌ API Error when accessing the sheet: {api_error}")
         except Exception as e:
-            st.error(f"Error logging to Google Sheets: {e}")
+            st.error(f"❌ Unexpected error logging to Google Sheets: {repr(e)}")
+
 
 # --- Search Deals Function ---
 def search_yarn_deals(query):
