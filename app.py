@@ -149,22 +149,25 @@ def summarize_item(item):
     link = item.get('link', '#')
 
     prompt = f"""
-    You are a helpful assistant specialized in e-commerce product summarization.
-    Summarize this product listing with key sale information.
-    Extract the following details as accurately as possible:
+    You are a helpful assistant specialized in e-commerce product summarization for crafting supplies, specifically yarn.
+    Analyze the provided listing and extract the following details as accurately as possible.
+    Categorize the "Listing Type" and identify any "Coupon Code".
+
+    Extract the following details:
     1. **Product Name:** (e.g., "Lion Brand Wool-Ease Thick & Quick")
     2. **Store:** (e.g., "Joann Fabrics", "LoveCrafts")
-    3. **Price:** (e.g., "$5.99", "Reg. $10, Now $7.50") - Prioritize sale price, if original and sale price are both mentioned, extract both.
+    3. **Price:** (e.g., "$5.99", "Reg. $10, Now $7.50") - Prioritize sale price. If original and sale price are both mentioned, extract both.
     4. **Sale Details:** (e.g., "50% off", "Buy One Get One Free", "Clearance")
     5. **Yarn Type/Material:** (e.g., "Acrylic worsted yarn", "Merino wool blend")
     6. **Key Features/Notes:** (Any other important details like weight, brand, color availability, specific deal terms).
+    7. **Listing Type:** (Identify as "Product Page", "Category Page", "Blog Post", or "General Website").
+    8. **Coupon Code:** (If a specific code is mentioned, e.g., "SAVE20", otherwise "N/A" or "See site for details").
 
     If a piece of information is not present, state "N/A".
     Be concise but ensure all requested information is extracted if available.
 
     Title: {title}
     Snippet: {snippet}
-    HTML Body (if available): {html_snippet}
     Link: {link}
     """
     try:
@@ -173,13 +176,14 @@ def summarize_item(item):
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
-            max_tokens=250
+            max_tokens=300 # Increased max tokens to accommodate more detailed summary
         )
         summary_text = response.choices[0].message.content.strip()
 
         parsed_info = {
             "Product Name": "N/A", "Store": "N/A", "Price": "N/A",
-            "Sale Details": "N/A", "Yarn Type/Material": "N/A", "Key Features/Notes": "N/A"
+            "Sale Details": "N/A", "Yarn Type/Material": "N/A", "Key Features/Notes": "N/A",
+            "Listing Type": "N/A", "Coupon Code": "N/A" # Added new fields
         }
         for line in summary_text.split('\n'):
             if ":" in line:
@@ -352,7 +356,11 @@ def display_deals_grid(results, filters):
             st.write(f"**Price:** {summary_info.get('Price', 'N/A')}")
             st.write(f"**Sale Details:** {summary_info.get('Sale Details', 'N/A')}")
             st.write(f"**Yarn Type:** {summary_info.get('Yarn Type/Material', 'N/A')}")
+            # Display new fields
+            st.write(f"**Listing Type:** {summary_info.get('Listing Type', 'N/A')}")
+            st.write(f"**Coupon Code:** {summary_info.get('Coupon Code', 'N/A')}")
             st.write(f"**Notes:** {summary_info.get('Key Features/Notes', 'N/A')}")
+
 
             if is_in_stash(title):
                 st.success("✅ You already have this in your stash!")
