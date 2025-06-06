@@ -222,13 +222,26 @@ def extract_price_value(price_string):
     return None
 
 # --- Check if Item is in Stash ---
+
 def is_in_stash(title):
+    title = title.lower()
+    for item in st.session_state.get("stash", []):
+        stash_name = item["Name"].lower()
+        if fuzzy_match(stash_name, title):
+            return True
+    return False
+
     for item in st.session_state.get("stash", []):
         if item["Name"].lower() in title.lower():
             return True
     return False
 
 # --- Deal Ranking Logic ---
+
+from difflib import SequenceMatcher
+def fuzzy_match(a, b):
+    return SequenceMatcher(None, a, b).ratio() > 0.75
+
 def rank_deals(summarized_deals, search_query):
     ranked_deals = []
     for summary_info, raw_summary, item in summarized_deals:
@@ -305,6 +318,10 @@ def display_deals_grid(results, filters):
     summarized_items = []
     with st.spinner("Analyzing deals with AI (first-time summaries will take longer)..."):
         for item in results:
+        title_snippet_combined = (item.get('title', '') + item.get('snippet', '')).lower()
+            yarn_terms = ["yarn", "wool", "acrylic", "cotton", "fiber", "skein", "hank", "ball", "knit", "crochet"]
+            if not any(term in title_snippet_combined for term in yarn_terms):
+                continue  # Skip summarizing if clearly not yarn-related
             summary_info, raw_summary = summarize_item(item)
             if raw_summary != "Summary unavailable.":
                 summarized_items.append((summary_info, raw_summary, item))
@@ -331,6 +348,14 @@ def display_deals_grid(results, filters):
                 continue
 
         filtered_items.append((rank_score, summary_info, raw_summary, item))
+
+
+    if sort_option == "Lowest Price":
+        filtered_items.sort(key=lambda x: extract_price_value(x[1].get("Price", "")) or float('inf'))
+    elif sort_option == "Highest Discount":
+        import re
+        filtered_items.sort(key=lambda x: -1 if "%" not in x[1].get("Sale Details", "") else -int(re.findall(r'\\d+', x[1]["Sale Details"])[0]))
+
 
     if not filtered_items:
         st.info("No deals match your current filters.")
@@ -388,6 +413,9 @@ query = st.sidebar.text_input("Search for a yarn deal:", value=st.session_state.
 min_price = st.sidebar.number_input("Minimum Price", min_value=0.0, format="%.2f", value=None, key="min_price_filter")
 max_price = st.sidebar.number_input("Maximum Price", min_value=0.0, format="%.2f", value=None, key="max_price_filter")
 filter_keyword = st.sidebar.text_input("Filter by Keyword in Summary (e.g., 'merino', 'clearance')", key="keyword_filter")
+
+sort_option = st.sidebar.selectbox("Sort results by", ["Best Match", "Lowest Price", "Highest Discount"])
+
 
 search_button = st.sidebar.button("Search Deals")
 
