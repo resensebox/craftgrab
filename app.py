@@ -4,6 +4,7 @@ from datetime import datetime, date
 from fpdf import FPDF
 import re
 import json
+import base64 # Import base64 for encoding PDF content
 
 st.set_option('client.showErrorDetails', True)
 st.set_page_config(page_title="This Day in History", layout="centered")
@@ -316,16 +317,26 @@ if st.session_state['is_authenticated']:
     st.write(data['memory_prompt_section'])
 
     st.markdown("---")
-    if st.button("📄 Download Daily Page PDF"):
-        pdf_bytes = generate_full_history_pdf(
-            data, today.strftime('%B %d, %Y'), user_info, st.session_state['dementia_mode']
-        )
+    
+    # Generate PDF bytes once
+    pdf_bytes_main = generate_full_history_pdf(
+        data, today.strftime('%B %d, %Y'), user_info, st.session_state['dementia_mode']
+    )
+    
+    # Create Base64 encoded link
+    b64_pdf_main = base64.b64encode(pdf_bytes_main).decode('latin-1')
+    pdf_viewer_link_main = f'<a href="data:application/pdf;base64,{b64_pdf_main}" target="_blank">View PDF in Browser</a>'
+
+    col1, col2 = st.columns([1, 1])
+    with col1:
         st.download_button(
-            "Download PDF", 
-            pdf_bytes, 
+            "Download Daily Page PDF", 
+            pdf_bytes_main, 
             file_name=f"This_Day_in_History_{today.strftime('%Y%m%d')}.pdf",
             mime="application/pdf"
         )
+    with col2:
+        st.markdown(pdf_viewer_link_main, unsafe_allow_html=True)
     
     # --- Offline Access (Conceptual - requires local storage solution) ---
     st.sidebar.markdown("---")
@@ -413,13 +424,22 @@ for fact in demo_data['did_you_know_section']:
 st.markdown("### 💬 Memory Lane Prompt")
 st.write(demo_data['memory_prompt_section'])
 
-if st.button("📄 Download Demo PDF"):
-    demo_pdf = generate_full_history_pdf(
-        demo_data, today_demo.strftime('%B %d, %Y'), demo_user_info
-    )
+# Generate PDF bytes once for demo
+pdf_bytes_demo = generate_full_history_pdf(
+    demo_data, today_demo.strftime('%B %d, %Y'), demo_user_info
+)
+
+# Create Base64 encoded link for demo
+b64_pdf_demo = base64.b64encode(pdf_bytes_demo).decode('latin-1')
+pdf_viewer_link_demo = f'<a href="data:application/pdf;base64,{b64_pdf_demo}" target="_blank">View Example PDF in Browser</a>'
+
+col1_demo, col2_demo = st.columns([1, 1])
+with col1_demo:
     st.download_button(
-        "Download Example PDF", 
-        demo_pdf, 
+        "Download Demo PDF", 
+        pdf_bytes_demo, 
         file_name=f"example_this_day_history_{today_demo.strftime('%Y%m%d')}.pdf",
         mime="application/pdf"
     )
+with col2_demo:
+    st.markdown(pdf_viewer_link_demo, unsafe_allow_html=True)
