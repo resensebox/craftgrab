@@ -4,21 +4,69 @@ from fpdf import FPDF
 from datetime import datetime, date
 from openai import OpenAI
 import os
-import logging # Import the logging module
+import logging
+import sqlite3 # Import for SQLite database
+import bcrypt # Import for password hashing
 
 # --- Logging Setup ---
-# Configure logging to write to a file. In a production environment,
-# you might want to use a more robust logging solution (e.g., Loguru, or cloud-based logging).
 logging.basicConfig(filename='app_activity.log', level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 st.set_option('client.showErrorDetails', True)
 st.set_page_config(page_title="This Day in History", layout="centered")
 
+# --- Database Setup (SQLite) ---
+DB_NAME = 'users.db'
+
+def init_db():
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL
+        )
+    ''')
+    conn.commit()
+    conn.close()
+    logging.info("SQLite database initialized.")
+
+def add_user(username, password):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    try:
+        c.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, hashed_password))
+        conn.commit()
+        logging.info(f"User '{username}' registered successfully.")
+        return True
+    except sqlite3.IntegrityError:
+        logging.warning(f"Registration failed: Username '{username}' already exists.")
+        return False # Username already exists
+    finally:
+        conn.close()
+
+def verify_user(username, password):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT password_hash FROM users WHERE username = ?", (username,))
+    result = c.fetchone()
+    conn.close()
+    if result:
+        password_hash = result[0].encode('utf-8')
+        if bcrypt.checkpw(password.encode('utf-8'), password_hash):
+            return True
+    return False
+
+# Initialize the database on app start
+init_db()
+
 # --- Custom CSS ---
 st.markdown("""
 <style>
-body { background-color: #e8f0fe; font-family: 'Inter', sans-serif; }
+body { background-color: #e8f0fe; font-family: 'Inter', sans-serif; } /* This sets the light blue background */
+.stApp { background-color: #e8f0fe; } /* Ensure Streamlit's main app container also gets the color */
 h1 { text-align: center; color: #333333; margin: 2rem auto 1.5rem; font-size: 2.5em; font-weight: 700; }
 .stButton>button { background-color: #4CAF50; color: white; padding: 0.8em 2em; border: none; border-radius: 8px; font-weight: bold; box-shadow: 2px 2px 4px rgba(0,0,0,0.2); }
 .stButton>button:hover { background-color: #45a049; transform: translateY(-2px); }
@@ -29,7 +77,6 @@ h1 { text-align: center; color: #333333; margin: 2rem auto 1.5rem; font-size: 2.
 """, unsafe_allow_html=True)
 
 # --- OpenAI Init ---
-# Removed debug st.write statements for a cleaner UI
 api_key = os.environ.get("OPENAI_API_KEY")
 
 if not api_key and "OPENAI_API_KEY" in st.secrets:
@@ -59,7 +106,6 @@ def generate_article_pdf(title, content):
     pdf.multi_cell(0, 10, title, align='C')
     pdf.ln(10)
     pdf.set_font("Arial", "", 12)
-    # Ensure content is encoded/decoded properly for PDF to avoid errors with special characters
     pdf.multi_cell(0, 8, content.encode('latin-1', 'replace').decode('latin-1'))
     return pdf.output(dest='S').encode('latin-1')
 
@@ -73,7 +119,6 @@ def generate_full_history_pdf(event_title, event_article, born_section, fun_fact
     pdf.set_font("Arial", "B", 14)
     pdf.multi_cell(0, 10, "Significant Event:")
     pdf.set_font("Arial", "", 12)
-    # Added simple markdown parsing for bolding in PDF
     pdf.multi_cell(0, 8, f"{event_title}\n{event_article}".encode('latin-1', 'replace').decode('latin-1'))
     pdf.ln(5)
 
@@ -131,34 +176,74 @@ def get_this_day_in_history(day, month, profile, _client):
         logging.error(f"Error fetching AI data for {month:02d}-{day:02d}: {e}")
         return f"ERROR: {e}"
 
-# --- Login System Placeholder ---
+# --- Authentication Forms ---
+def register_form():
+    with st.sidebar.form("register_form"):
+        st.header("Register New Account")
+        new_username = st.text_input("New Username", key="reg_username")
+        new_password = st.text_input("New Password", type="password", key="reg_password")
+        confirm_password = st.text_input("Confirm Password", type="password", key="reg_confirm_password")
+        register_button = st.form_submit_button("Register")
+
+        if register_button:
+            if not new_username or not new_password or not confirm_password:
+                st.error("Please fill in all fields.")
+            elif new_password != confirm_password:
+                st.error("Passwords do not match.")
+            elif len(new_password) < 6:
+                st.error("Password must be at least 6 characters long.")
+            else:
+                if add_user(new_username, new_password):
+                    st.success("Account created successfully! Please log in.")
+                    logging.info(f"User '{new_username}' registered successfully.")
+                    st.session_state['show_login'] = True # Switch to login after successful registration
+                else:
+                    st.error("Username already exists. Please choose a different one.")
+                    logging.warning(f"Registration failed: Username '{new_username}' already exists.")
+
 def login_form():
-    st.sidebar.header("Login")
-    username = st.sidebar.text_input("Username")
-    password = st.sidebar.text_input("Password", type="password")
-    if st.sidebar.button("Log In"):
-        # In a real app, you would verify these credentials against a database
-        if username == "user" and password == "password": # Example credentials
-            st.session_state['logged_in'] = True
-            st.session_state['username'] = username
-            logging.info(f"User '{username}' logged in successfully.")
-            st.rerun() # Rerun to hide login form and show app
-        else:
-            st.sidebar.error("Incorrect username or password.")
-            logging.warning(f"Failed login attempt for username: {username}")
+    with st.sidebar.form("login_form"):
+        st.header("Login")
+        username = st.text_input("Username", key="login_username")
+        password = st.text_input("Password", type="password", key="login_password")
+        login_button = st.form_submit_button("Log In")
+
+        if login_button:
+            if verify_user(username, password):
+                st.session_state['logged_in'] = True
+                st.session_state['username'] = username
+                st.success(f"Welcome, {username}!")
+                logging.info(f"User '{username}' logged in successfully.")
+                st.rerun() # Rerun to hide login form and show app
+            else:
+                st.error("Incorrect username or password.")
+                logging.warning(f"Failed login attempt for username: {username}")
     st.sidebar.markdown("---")
 
 # --- Main App ---
 st.header("🗓️ This Day in History!")
 
-# Implement the login check
+# Initialize session state for login/registration flow
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
+if 'show_login' not in st.session_state:
+    st.session_state['show_login'] = True # Default to showing login form
 
+# Display authentication forms
 if not st.session_state['logged_in']:
-    login_form()
-    st.info("Please log in to use the This Day in History app.")
+    if st.session_state['show_login']:
+        login_form()
+        if st.sidebar.button("Don't have an account? Register Here"):
+            st.session_state['show_login'] = False
+            st.rerun()
+    else:
+        register_form()
+        if st.sidebar.button("Already have an account? Log In Here"):
+            st.session_state['show_login'] = True
+            st.rerun()
+    st.info("Please log in or register to use the This Day in History app.")
 else:
+    # App content when logged in
     st.sidebar.success(f"Logged in as {st.session_state['username']}")
     if st.sidebar.button("Log Out"):
         logging.info(f"User '{st.session_state['username']}' logged out.")
@@ -166,6 +251,7 @@ else:
         st.session_state.pop('username', None)
         st.session_state.pop('parsed', None)
         st.session_state.pop('last_date', None)
+        st.session_state['show_login'] = True # Go back to login form
         st.rerun()
 
     name = st.text_input("Enter Pair's Name:", "")
@@ -176,13 +262,12 @@ else:
     profile = {"name": name, "jobs": "", "hobbies": "", "decade": "", "life_experiences": ""} # Consider adding more profile inputs in the UI
 
     if name:
-        # Only fetch data if the date has changed or if it's the first time for this session
         if 'last_date' not in st.session_state or st.session_state['last_date'] != today or 'parsed' not in st.session_state:
             with st.spinner("Getting today's facts..."):
                 raw = get_this_day_in_history(day, month, profile, client_ai)
                 if raw.startswith("ERROR"):
                     st.error(raw)
-                    logging.error(f"Failed to retrieve history for {today_str} due to an AI error.")
+                    logging.error(f"Failed to retrieve history for {today_str} due to an AI error for user '{st.session_state['username']}'.")
                     st.stop()
 
                 sections = raw.split("\n\n")
@@ -206,7 +291,7 @@ else:
 
         parsed = st.session_state['parsed']
 
-        st.markdown(f"### Today is: **{today_str}**") # Bold the date
+        st.markdown(f"### Today is: **{today_str}**")
         st.subheader("Significant Event:")
         st.markdown(f"**{parsed['event_title']}**")
         st.info(parsed['event_article'])
@@ -216,7 +301,7 @@ else:
         st.markdown("---")
         st.subheader("Famous Person Born Today:")
         name_guess = parsed['born_section'].split('\n')[0] if '\n' in parsed['born_section'] else parsed['born_section']
-        st.image(f"https://placehold.co/150x150?text={name_guess}", width=150, caption=name_guess) # Added caption
+        st.image(f"https://placehold.co/150x150?text={name_guess}", width=150, caption=name_guess)
         st.markdown(parsed['born_section'])
 
         st.markdown("---")
