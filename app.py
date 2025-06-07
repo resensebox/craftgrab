@@ -256,18 +256,25 @@ def save_new_user_to_sheet(username, password, email):
 
 def get_users_from_sheet():
     """Retrieves all users from the 'Users' worksheet as a dictionary."""
+    print("Attempting to get users from sheet...") # Debugging print
     try:
         sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
-        ws = sheet.worksheet("Users")
-        # Get all records as a list of dictionaries. head=1 makes the first row headers.
+        try:
+            ws = sheet.worksheet("Users")
+            print("Found 'Users' worksheet.") # Debugging print
+        except gspread.exceptions.WorksheetNotFound:
+            print("❌ 'Users' worksheet not found. Creating it now.") # Debugging print
+            st.warning("⚠️ The 'Users' database was not found. Creating it now. Please retry your registration if this is your first time.")
+            ws = sheet.add_worksheet(title="Users", rows="100", cols="3")
+            ws.append_row(["Username", "Password", "Email"])  # Add headers if new sheet
+            return {} # Return empty dict as no users existed before this operation
+        
         users_data = ws.get_all_records(head=1)
-        # Convert to a dictionary for easy lookup: {username: password}
         users_dict = {row['Username']: row['Password'] for row in users_data if 'Username' in row and 'Password' in row}
+        print(f"Retrieved users: {list(users_dict.keys())}") # Debugging print
         return users_dict
-    except gspread.exceptions.WorksheetNotFound:
-        st.warning("⚠️ 'Users' worksheet not found. No registered users.")
-        return {}
     except Exception as e:
+        print(f"ERROR: Error retrieving users from Google Sheet: {e}") # Debugging print
         st.error(f"❌ Error retrieving users from Google Sheet: {e}")
         return {}
 
@@ -1528,7 +1535,8 @@ def show_login_register_page():
             confirm_password = st.text_input(translate_text_with_ai("Confirm Password", st.session_state['preferred_language'], client_ai), type="password", key="register_confirm_password_input")
             if st.form_submit_button(translate_text_with_ai("Register", st.session_state['preferred_language'], client_ai)):
                 if new_password == confirm_password:
-                    USERS_EXISTING = get_users_from_sheet()
+                    USERS_EXISTING = get_users_from_sheet() # Get users from Google Sheet right before check
+                    
                     if new_username in USERS_EXISTING:
                         st.error(translate_text_with_ai("Username already exists. Please choose a different username.", st.session_state['preferred_language'], client_ai))
                     else:
