@@ -21,87 +21,93 @@ st.set_page_config(page_title="This Day in History", layout="centered")
 # --- Theme Styling ---
 st.markdown("""
 <style>
-/* Core reset */
+
+/* GLOBAL RESET */
 body, .stApp {
     background-color: #f4f1f8 !important;
-    color: #222 !important;
+    color: #2b2b2b !important;
     font-family: 'Inter', sans-serif;
 }
 
-/* Headings */
+/* HEADINGS */
 h1, h2, h3, h4, h5, h6, label {
     color: #3b2f5e !important;
     font-weight: bold;
     text-align: center;
 }
 
-/* Buttons */
+/* BUTTONS */
 .stButton > button {
     background-color: #f49d37 !important;
-    color: white !important;
+    color: #ffffff !important;
     font-weight: 600;
+    font-size: 1em;
+    padding: 0.7em 1.5em;
     border: none;
     border-radius: 8px;
-    padding: 0.7em 1.5em;
-    font-size: 1em;
+    box-shadow: 2px 2px 4px rgba(0,0,0,0.1);
 }
 .stButton > button:hover {
     background-color: #d87f1f !important;
 }
 
-/* Inputs */
+/* INPUT FIELDS */
 input, textarea {
     background-color: white !important;
-    color: #222 !important;
-    border-radius: 8px !important;
+    color: #2b2b2b !important;
     border: 1px solid #ccc !important;
+    border-radius: 8px !important;
     padding: 10px !important;
 }
 
-/* Fix for Streamlit Tabs */
-.css-1h7ebrz, .css-1d391kg {
-    color: #3b2f5e !important;  /* Force all tab text to be visible */
-}
-.css-1v0mbdj > div {
-    background-color: #f0e9fc !important;
-    border-radius: 8px;
+/* STREAMLIT TABS (Login/Register) */
+div[data-baseweb="tab"] {
     color: #3b2f5e !important;
-    font-weight: 600;
+    font-weight: 600 !important;
 }
-.css-1v0mbdj > div[aria-selected="true"] {
-    background-color: white !important;
-    color: #3b2f5e !important;
+div[data-baseweb="tab"]:not([aria-selected="true"]) {
+    color: #7e7e7e !important;
 }
 
-/* Alert Boxes */
+/* INFO BOX FIX */
 div[data-testid="stAlertInfo"] {
     background-color: #e0ecff !important;
-    color: #1a3c66 !important;
+    color: #1a1a1a !important;
+    font-weight: 500;
     border-left: 6px solid #4299e1;
-}
-div[data-testid="stAlertSuccess"] {
-    background-color: #e6f4ea !important;
-    color: #276749 !important;
-    border-left: 6px solid #38a169;
-}
-div[data-testid="stAlertWarning"] {
-    background-color: #fff7e6 !important;
-    color: #975a16 !important;
-    border-left: 6px solid #ed8936;
-}
-div[data-testid="stAlertError"] {
-    background-color: #ffe5e5 !important;
-    color: #9b2c2c !important;
-    border-left: 6px solid #f56565;
+    border-radius: 6px;
+    padding: 1rem;
 }
 
-/* Sidebar fix */
+/* SUCCESS BOX */
+div[data-testid="stAlertSuccess"] {
+    background-color: #e6f4ea !important;
+    color: #1c4532 !important;
+    border-left: 6px solid #38a169;
+}
+
+/* WARNING BOX */
+div[data-testid="stAlertWarning"] {
+    background-color: #fffaf0 !important;
+    color: #744210 !important;
+    border-left: 6px solid #ed8936;
+}
+
+/* ERROR BOX */
+div[data-testid="stAlertError"] {
+    background-color: #fff5f5 !important;
+    color: #742a2a !important;
+    border-left: 6px solid #e53e3e;
+}
+
+/* SIDEBAR */
 section[data-testid="stSidebar"] {
     background-color: #e8ddf0 !important;
-    color: #222 !important;
+    color: #2b2b2b !important;
 }
 </style>
 """, unsafe_allow_html=True)
+
 
 
 
