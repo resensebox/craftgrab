@@ -259,7 +259,7 @@ def log_trivia_score(username, score):
             ws.append_row(["Username", "Score", "Timestamp"]) # Add headers if new sheet
         
         ws.append_row([
-            username,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             score,
             datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         ])
@@ -441,7 +441,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
     3. Fun Fact: Provide one interesting and unusual fun fact that occurred on this day in history.
     4. Trivia Questions: Provide five concise, direct trivia questions based on today’s date. These should be actual questions that require a factual answer, and should not be "Did You Know?" statements or prompts for reflection. Topics can include history, famous birthdays, pop culture, or global events. The questions should be {trivia_complexity}. For each question, provide the correct answer in parentheses and a short, distinct hint in square brackets (e.g., "What year did the Berlin Wall fall? (1989) [Hint: Cold War era]").
     5. Did You Know?: Provide three "Did You Know?" facts related to nostalgic content (e.g., old prices, inventions, fashion facts) from past decades (e.g., 1930s-1970s).
-    6. Memory Prompt: Provide one engaging question to encourage reminiscing and conversation (e.g., "Do you remember your first concert?", "What was your favorite childhood game?").
+    6. Memory Prompt: Provide **three** engaging questions to encourage reminiscing and conversation. Each prompt should be on a new line and start with a hyphen. (e.g., "- Do you remember your first concert?", "- What was your favorite childhood game?", "- What's a memorable school event from your youth?").
 
     Format your response clearly with these headings. Ensure articles are within the specified word counts.
     """
@@ -456,8 +456,10 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         event_article_match = re.search(r"1\. Event Article:\s*(.*?)(?=\n2\. Born on this Day Article:|\Z)", content, re.DOTALL)
         born_article_match = re.search(r"2\. Born on this Day Article:\s*(.*?)(?=\n3\. Fun Fact:|\Z)", content, re.DOTALL)
         fun_fact_match = re.search(r"3\. Fun Fact:\s*(.*?)(?=\n4\. Trivia Questions:|\Z)", content, re.DOTALL)
-        memory_prompt_match = re.search(r"6\. Memory Prompt:\s*(.*)", content, re.DOTALL)
         
+        # Updated regex for Memory Prompt to capture multiple lines
+        memory_prompt_match = re.search(r"6\. Memory Prompt:\s*(.*?)(?=\n\Z|$)", content, re.DOTALL)
+
         # Special handling for Trivia Questions to extract questions, answers, and hints
         trivia_questions = []
         trivia_text_match = re.search(r"4\. Trivia Questions:\s*(.*?)(?=\n5\. Did You Know?:|\Z)", content, re.DOTALL)
@@ -512,7 +514,25 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         born_article = born_article_match.group(1).strip() if born_article_match else "No birth article found."
         fun_fact_section = fun_fact_match.group(1).strip() if fun_fact_match else "No fun fact found."
         
-        memory_prompt_section = memory_prompt_match.group(1).strip() if memory_prompt_match else "No memory prompt available."
+        # Parse multiple memory prompts into a list
+        memory_prompts_list = []
+        if memory_prompt_match:
+            raw_prompts = memory_prompt_match.group(1).strip()
+            for line in raw_prompts.split('\n'):
+                cleaned_line = line.strip()
+                if cleaned_line.startswith('- '):
+                    cleaned_line = cleaned_line[2:].strip() # Remove the hyphen and space
+                if cleaned_line:
+                    memory_prompts_list.append(cleaned_line)
+        
+        # Ensure there are always at least a few prompts, even if AI fails
+        if not memory_prompts_list:
+            memory_prompts_list = [
+                "No memory prompts available.",
+                "Consider your favorite childhood memory.",
+                "What's a happy moment from your past week?"
+            ]
+
 
         return {
             'event_article': event_article,
@@ -520,7 +540,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
             'fun_fact_section': fun_fact_section,
             'trivia_section': trivia_questions, # Now a list of dicts {question, answer, hint}
             'did_you_know_section': did_you_know_lines,
-            'memory_prompt_section': memory_prompt_section
+            'memory_prompt_section': memory_prompts_list # Now a list of prompts
         }
     except Exception as e:
         st.error(f"Error generating history: {e}")
@@ -530,7 +550,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
             'fun_fact_section': "Could not fetch fun fact.",
             'trivia_section': [], # Empty list if error
             'did_you_know_section': ["No 'Did You Know?' facts available for today. Please try again or adjust preferences."], # Ensure default content
-            'memory_prompt_section': "No memory prompt available."
+            'memory_prompt_section': ["No memory prompts available.", "Consider your favorite childhood memory.", "What's a happy moment from your past week?"]
         }
 
 def generate_full_history_pdf(data, today_date_str, user_info): # Removed dementia_mode parameter
@@ -685,8 +705,11 @@ def generate_full_history_pdf(data, today_date_str, user_info): # Removed dement
         pdf.multi_cell(col_width, line_height_normal, "Memory Prompt-") # Replaced ? with -
         current_y_col2 += line_height_normal
         pdf.set_font("Arial", "", article_text_font_size)
-        pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['memory_prompt_section']))
-        current_y_col2 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
+        # Iterate and display each memory prompt
+        for prompt_text in data['memory_prompt_section']:
+            pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(f"- {prompt_text}"))
+            current_y_col2 = pdf.get_y() # Update Y after each prompt line
+        current_y_col2 += section_spacing_normal # Spacing after section
         pdf.set_y(current_y_col2)
 
 
@@ -874,7 +897,12 @@ def show_main_app_page():
 
     st.markdown("---")
     st.subheader("💬 Memory Lane Prompt-") # Replaced ? with -
-    st.write(data['memory_prompt_section'])
+    # Iterate and display each memory prompt
+    if data['memory_prompt_section']:
+        for prompt_text in data['memory_prompt_section']:
+            st.write(f"- {prompt_text}")
+    else:
+        st.write("No memory prompts available.")
 
     st.markdown("---")
     
@@ -1222,7 +1250,13 @@ def show_login_register_page():
         st.markdown(f"- {fact}")
 
     st.markdown("### 💬 Memory Lane Prompt-") # Replaced ? with -
-    st.write(example_data['memory_prompt_section'])
+    # Iterate and display each memory prompt for example data
+    if example_data['memory_prompt_section']:
+        for prompt_text in example_data['memory_prompt_section']:
+            st.write(f"- {prompt_text}")
+    else:
+        st.write("No memory prompts available.")
+
 
     # Generate PDF bytes once for example content
     pdf_bytes_example = generate_full_history_pdf(
