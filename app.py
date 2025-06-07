@@ -785,7 +785,7 @@ def show_trivia_page():
             # Add expander for related article - ONLY show if out of chances
             if q_state.get('out_of_chances', False):
                 with st.expander(f"Show Explanation for Q{i+1}"):
-                    if q_state['related_article_content'] is None: # Corrected from === None
+                    if q_state['related_article_content'] is None:
                         # Generate article if it hasn't been generated yet
                         with st.spinner("Generating explanation..."):
                             generated_article = generate_related_trivia_article(
@@ -937,7 +937,7 @@ if st.session_state['is_authenticated']:
     # --- Sidebar content (always visible when authenticated) ---
     st.sidebar.title("This Day in History")
     # Add the logo here
-    st.sidebar.image("https://i.postimg.cc/8CRsCGCC/Chat-GPT-Image-Jun-7-2025-12-32-18-AM.png", use_column_width=True)
+    st.sidebar.image("https://i.postimg.cc/8CRsCGCC/Chat-GPT-Image-Jun-7-2025-12-32-18-AM.png", use_container_width=True) # Changed to use_container_width
     st.sidebar.markdown("---")
     st.sidebar.header("Navigation")
     if st.sidebar.button("🏠 Home", key="sidebar_home_btn"):
