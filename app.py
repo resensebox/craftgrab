@@ -5,6 +5,7 @@ import json
 from fpdf import FPDF
 from datetime import datetime, date
 from openai import OpenAI
+import os
 
 st.set_option('client.showErrorDetails', True)
 st.set_page_config(page_title="This Day in History", layout="centered")
@@ -23,11 +24,12 @@ h1 { text-align: center; color: #333333; margin: 2rem auto 1.5rem; font-size: 2.
 """, unsafe_allow_html=True)
 
 # --- OpenAI Init ---
+api_key = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
+if not api_key:
+    st.error("❌ OPENAI_API_KEY is missing from environment or secrets.")
+    st.stop()
 try:
-    if "OPENAI_API_KEY" not in st.secrets:
-        st.error("❌ OPENAI_API_KEY is missing from secrets. Please add it to your Streamlit secrets.")
-        st.stop()
-    client_ai = OpenAI(api_key=st.secrets["OPEN_AI_KEY"])
+    client_ai = OpenAI(api_key=api_key)
 except Exception as e:
     st.error(f"Failed to initialize OpenAI. Error: {e}")
     st.stop()
@@ -166,4 +168,3 @@ if name:
     st.download_button("Download Full PDF", full_pdf, file_name=f"This_Day_{today.strftime('%Y_%m_%d')}.pdf")
 else:
     st.info("Enter a Pair's Name to begin")
-
