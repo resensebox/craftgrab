@@ -536,80 +536,80 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         if trivia_text_match:
             raw_trivia_block = trivia_text_match.group(1).strip()
             
-            # Regex to find each trivia entry: starts with a letter/number and '.', captures content until next entry or end.
-            # This is designed to capture the entire block of text associated with a question,
-            # even if the answer/hint are on separate lines or malformed.
-            # It looks for a numbered/lettered prefix, then captures non-greedily everything until the next prefix or end of string.
-            trivia_entry_pattern = re.compile(r'^\s*([a-eA-E]|\d+)\.\s*(.*?)(?=\n\s*[a-eA-E]\.|\n\s*\d+\.|\Z)', re.MULTILINE | re.DOTALL)
+            # Split the block into individual trivia entries using a regex that assumes each entry starts with a letter/number and a dot.
+            # This regex is more robust to variations in how AI might format the questions.
+            trivia_entry_pattern = re.compile(r'^\s*([a-eA-E]|\d+)\.\s*(.*?)(?=(?:\n\s*[a-eA-E]\.|\n\s*\d+\.|\Z))', re.MULTILINE | re.DOTALL)
             
-            for match in trivia_entry_pattern.finditer(raw_trivia_block):
-                full_entry_text = match.group(2).strip() # This is the content after "a. " or "1. " for a single trivia item.
+            # Use findall for all matches
+            all_trivia_entries = trivia_entry_pattern.findall(raw_trivia_block)
+
+            # If findall returns empty, try a fallback pattern that captures the full entry text more broadly
+            if not all_trivia_entries:
+                fallback_trivia_pattern = re.compile(r'^\s*(?:[a-eA-E]|\d+)\.\s*(.*?)(?=(?:\n\s*[a-eA-E]\.|\n\s*\d+\.|\Z))', re.MULTILINE | re.DOTALL)
+                all_trivia_entries = fallback_trivia_pattern.findall(raw_trivia_block)
+                # If using fallback, we only get the content, not the prefix, so we'll add dummy prefixes
+                all_trivia_entries = [(str(i+1), entry_content) for i, entry_content in enumerate(all_trivia_entries)]
+
+
+            for index_prefix, full_entry_text_raw in all_trivia_entries:
+                full_entry_text = full_entry_text_raw.strip()
                 
                 question = ""
                 answer = ""
                 hint = ""
                 
-                # First, try to extract the question itself. Assume the first line of the entry is the question.
-                entry_lines = full_entry_text.split('\n')
-                if entry_lines:
-                    question = entry_lines[0].strip() # Take the first line as the primary question candidate
-                    remaining_text = "\n".join(entry_lines[1:]) # Rest of the lines for answer/hint search
-                else:
-                    remaining_text = "" # No remaining text if only one line
+                # --- Attempt to extract Answer and Hint using specific patterns ---
                 
-                # Try to extract Answer (can be in parentheses or preceded by "Answer:"/"Reponse:")
-                ans_found = False
-                ans_match_paren = re.search(r'\(([^)]*?)\)', question) # Non-greedy inside parentheses
-                if ans_match_paren:
-                    answer = ans_match_paren.group(1).strip()
-                    question = question.replace(ans_match_paren.group(0), '').strip() # Remove answer from question
-                    ans_found = True
-                
-                if not ans_found: # If not found in parentheses, look for prefix in the full entry text
-                    # Look for "Answer:" or "Reponse:" followed by text until a newline or hint bracket/prefix
-                    # Using [^\n\[]*? for non-greedy capture and stopping at newline or '['
-                    ans_match_prefix = re.search(r'^(?:Reponse|Answer):\s*([^\n\[]*?)(?=\n|\[|Hint:|Indice:|\Z)', full_entry_text, re.IGNORECASE | re.MULTILINE)
-                    if ans_match_prefix:
-                        answer = ans_match_prefix.group(1).strip()
-                        # Remove the matched answer text from full_entry_text to avoid re-matching for hint
-                        full_entry_text = full_entry_text.replace(ans_match_prefix.group(0), '', 1).strip()
-                        ans_found = True
-                
-                # Try to extract Hint (can be in square brackets or preceded by "Hint:"/"Indice:")
-                hint_found = False
-                hint_match_bracket = re.search(r'\[([^\]]*?)\]', full_entry_text) # Non-greedy inside brackets
+                # 1. Try to extract hint first (often at the end or in brackets)
+                # Look for Hint: or Indice: or content in square brackets
+                hint_match_prefix = re.search(r'(?:Hint|Indice):\s*([^\n]*?)(?:\n|\Z)', full_entry_text, re.IGNORECASE | re.DOTALL)
+                hint_match_bracket = re.search(r'\[(.*?)\]', full_entry_text, re.DOTALL)
+
                 if hint_match_bracket:
                     hint = hint_match_bracket.group(1).strip()
                     full_entry_text = full_entry_text.replace(hint_match_bracket.group(0), '', 1).strip()
-                    hint_found = True
+                elif hint_match_prefix: # If no brackets, check for prefix
+                    hint = hint_match_prefix.group(1).strip()
+                    full_entry_text = full_entry_text.replace(hint_match_prefix.group(0), '', 1).strip()
                 
-                if not hint_found:
-                    # Look for "Hint:" or "Indice:" followed by text until a newline or end of string
-                    # Using [^\n]*? for non-greedy capture stopping at newline
-                    hint_match_prefix = re.search(r'^(?:Hint|Indice):\s*([^\n]*?)(?=\n|\Z)', full_entry_text, re.IGNORECASE | re.MULTILINE)
-                    if hint_match_prefix:
-                        hint = hint_match_prefix.group(1).strip()
-                        full_entry_text = full_entry_text.replace(hint_match_prefix.group(0), '', 1).strip()
-                        hint_found = True
+                # Truncate hint if it's still too long (e.g., if it picked up a lot of text)
+                if len(hint) > 100 or '\n' in hint:
+                    hint = hint.split('\n')[0].strip()
+                    if len(hint) > 100: hint = hint[:100].strip() + "..."
                 
-                # After extraction, if the answer or hint still contain newlines, it's likely an article.
-                # Restrict answer/hint to a single line or very short text.
-                if '\n' in answer:
-                    answer = answer.split('\n')[0].strip() # Take only the first line
-                if len(answer) > 50: # Further truncate if still too long after newline split
-                    answer = answer[:50].strip() + "..." if len(answer) > 50 else answer
+                # 2. Try to extract Answer
+                # Look for Answer: or Reponse: or content in parentheses
+                answer_match_prefix = re.search(r'(?:Answer|Reponse):\s*([^\n\[]*?)(?:\n|\[|\Z)', full_entry_text, re.IGNORECASE | re.DOTALL)
+                answer_match_paren = re.search(r'\((.*?)\)', full_entry_text, re.DOTALL)
+
+                if answer_match_paren:
+                    answer = answer_match_paren.group(1).strip()
+                    full_entry_text = full_entry_text.replace(answer_match_paren.group(0), '', 1).strip()
+                elif answer_match_prefix: # If no parentheses, check for prefix
+                    answer = answer_match_prefix.group(1).strip()
+                    full_entry_text = full_entry_text.replace(answer_match_prefix.group(0), '', 1).strip()
+
+                # Truncate answer if it's still too long
+                if len(answer) > 50 or '\n' in answer:
+                    answer = answer.split('\n')[0].strip()
+                    if len(answer) > 50: answer = answer[:50].strip() + "..."
                 
-                if '\n' in hint:
-                    hint = hint.split('\n')[0].strip() # Take only the first line
-                if len(hint) > 100: # Further truncate if still too long
-                    hint = hint[:100].strip() + "..." if len(hint) > 100 else hint
+                # Whatever remains in full_entry_text after extracting answer and hint is the question.
+                question = full_entry_text.strip()
+                
+                # Remove any leading hyphens or common "Did you know/Memory prompts" phrases from the question
+                question = re.sub(r'^-?\s*', '', question).strip()
+                # Aggressively remove any "Did you know" or "Memory prompts" phrases from the question
+                question = re.sub(r'(?:Sabías que\?|Did you know\?|Disparadores de memoria|Memory Prompts):?\s*', '', question, flags=re.IGNORECASE).strip()
+
 
                 # Final cleaning of the question to remove any residual answer/hint parts
                 question = re.sub(r'\s*\((.*?)\)', '', question).strip() # Remove any remaining parentheses content
                 question = re.sub(r'\s*\[.*?\]', '', question).strip() # Remove any remaining bracket content
-                # Also remove leading hyphens if AI added them
-                question = re.sub(r'^-?\s*', '', question).strip()
-
+                # If the question was actually a "Did You Know?" or "Memory Prompt" mistakenly, clear it
+                if any(phrase.lower() in question.lower() for phrase in ["sabías que", "did you know", "disparadores de memoria", "memory prompts"]):
+                    question = "" # Clear if it's a misidentified prompt
+                
                 # Take the first line of the question as the definitive question.
                 # This handles cases where AI might put more text after the initial question statement
                 # if there were no (Answer) [Hint] to delimit it.
@@ -791,32 +791,40 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     current_y_col1 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
     pdf.set_y(current_y_col1)
 
-    # Daily Trivia
-    pdf.set_font("Arial", "B", section_title_font_size)
-    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Daily Trivia", current_language, client_ai))) # Translated
-    current_y_col1 += line_height_normal
-    pdf.set_font("Arial", "", trivia_q_font_size) # Reset font to regular for trivia text if needed
+    # Daily Trivia / Fun Fact for Translated PDFs
+    if current_language == "English":
+        pdf.set_font("Arial", "B", section_title_font_size)
+        pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Daily Trivia", current_language, client_ai))) # Translated
+        current_y_col1 += line_height_normal
+        pdf.set_font("Arial", "", trivia_q_font_size) # Reset font to regular for trivia text if needed
 
-    # Loop through the first 4 trivia questions for the PDF
-    for i, item in enumerate(data['trivia_section'][:4]): # Limit to 4 questions for PDF
-        # Ensure question marks are preserved by not replacing them in clean_text_for_latin1
-        question_text_clean = clean_text_for_latin1(f"{chr(97+i)}. - {item['question']}") # Added hyphen
-        answer_text_prefix = translate_text_with_ai("Answer:", current_language, client_ai) # Translated prefix
-        answer_text_clean = clean_text_for_latin1(f"{answer_text_prefix} {item['answer']}")
-        hint_text_prefix = translate_text_with_ai("Hint:", current_language, client_ai) # Translated prefix
-        hint_text_clean = clean_text_for_latin1(f"{hint_text_prefix} {item['hint']}")
+        # Loop through the first 4 trivia questions for the PDF
+        for i, item in enumerate(data['trivia_section'][:4]): # Limit to 4 questions for PDF
+            question_text_clean = clean_text_for_latin1(f"{chr(97+i)}. - {item['question']}") # Added hyphen
+            answer_text_prefix = translate_text_with_ai("Answer:", current_language, client_ai) # Translated prefix
+            answer_text_clean = clean_text_for_latin1(f"{answer_text_prefix} {item['answer']}")
+            hint_text_prefix = translate_text_with_ai("Hint:", current_language, client_ai) # Translated prefix
+            hint_text_clean = clean_text_for_latin1(f"{hint_text_prefix} {item['hint']}")
 
-        pdf.set_font("Arial", "B", trivia_q_font_size) # Bold for question
-        pdf.multi_cell(col_width, line_height_trivia_ans_hint, question_text_clean)
-        
-        pdf.set_font("Arial", "", trivia_ans_hint_font_size) # Smaller, regular for answer
-        pdf.multi_cell(col_width, line_height_trivia_ans_hint, answer_text_clean)
-        pdf.multi_cell(col_width, line_height_trivia_ans_hint, hint_text_clean) # Display hint
-        pdf.ln(3) # Small spacing after each trivia question
+            pdf.set_font("Arial", "B", trivia_q_font_size) # Bold for question
+            pdf.multi_cell(col_width, line_height_trivia_ans_hint, question_text_clean)
+            
+            pdf.set_font("Arial", "", trivia_ans_hint_font_size) # Smaller, regular for answer
+            pdf.multi_cell(col_width, line_height_trivia_ans_hint, answer_text_clean)
+            pdf.multi_cell(col_width, line_height_trivia_ans_hint, hint_text_clean) # Display hint
+            pdf.ln(3) # Small spacing after each trivia question
 
-        current_y_col1 = pdf.get_y() # Get current Y to accurately track position
+            current_y_col1 = pdf.get_y() # Get current Y to accurately track position
+    else: # For translated languages, display fun fact instead of trivia
+        pdf.set_font("Arial", "B", section_title_font_size)
+        pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Fun Fact", current_language, client_ai))) # Translated
+        current_y_col1 += line_height_normal
+        pdf.set_font("Arial", "", article_text_font_size)
+        pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['fun_fact_section']))
+        current_y_col1 = pdf.get_y() # Update Y after fact
 
-    current_y_col1 += section_spacing_normal # Spacing after trivia section
+
+    current_y_col1 += section_spacing_normal # Spacing after trivia/fun fact section
     pdf.set_y(current_y_col1)
 
 
@@ -1098,7 +1106,7 @@ def show_main_app_page():
     else: # This covers cases where local_city/state are not set, or AI failed to generate
         st.markdown("---")
         st.subheader(translate_text_with_ai("📍 Local History", st.session_state['preferred_language'], client_ai))
-        st.info(translate_text_with_ai("Could not retrieve a local history fact for your settings. Please try again with different inputs or leave blank for a general US fact.", st.session_state['preferred_language'], client_ai))
+        st.info(translate_text_with_ai("Could not retrieve a local history fact for your settings. Please try again with different inputs or leave blank for a general U.S. historical fact.", st.session_state['preferred_language'], client_ai))
 
 
     st.markdown("---")
@@ -1478,7 +1486,7 @@ def show_login_register_page():
     else:
         st.markdown("---")
         st.subheader(translate_text_with_ai("📍 Local History", st.session_state['preferred_language'], client_ai))
-        st.info(translate_text_with_ai("Could not retrieve a local history fact for your settings. Please try again with different inputs or leave blank for a general US fact.", st.session_state['preferred_language'], client_ai))
+        st.info(translate_text_with_ai("Could not retrieve a local history fact for your settings. Please try again with different inputs or leave blank for a general U.S. historical fact.", st.session_state['preferred_language'], client_ai))
 
 
     st.markdown(translate_text_with_ai("### 🧠 Test Your Knowledge!", st.session_state['preferred_language'], client_ai))
