@@ -5,3 +5,5 @@ pandas
 openai
 python-dotenv
 beautifulsoup4
+fpdf
+duckduckgo-search
