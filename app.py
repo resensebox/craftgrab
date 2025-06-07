@@ -134,7 +134,15 @@ def generate_full_history_pdf(event_title, event_article, born_section, fun_fact
 
 # --- App UI ---
 if st.session_state['is_authenticated']:
-    st.title("📅 This Day in History")
+    st.sidebar.title("This Day in History")
+
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🚪 Log Out"):
+        st.session_state['is_authenticated'] = False
+        st.session_state['logged_in_username'] = ""
+        st.rerun()
+
+st.title("📅 This Day in History")
     today = datetime.today()
     day, month = today.day, today.month
     user_info = {
@@ -169,7 +177,7 @@ else:
                     st.session_state['is_authenticated'] = True
                     st.session_state['logged_in_username'] = username
                     st.success(f"Welcome {username}!")
-                    log_event('login', username)
+                    log_event("login", username)
                     st.rerun()
                 else:
                     st.error("Invalid credentials.")
@@ -184,7 +192,7 @@ else:
                     st.session_state['is_authenticated'] = True
                     st.session_state['logged_in_username'] = new_username
                     st.success("Account created!")
-                    log_event('register', new_username)
+                    log_event("register", new_username)
                     st.rerun()
                 else:
                     st.error("Passwords do not match.")
