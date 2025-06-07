@@ -1,11 +1,14 @@
 import streamlit as st
 from openai import OpenAI
-from datetime import datetime, date
+from datetime import datetime, date, timedelta # Import timedelta for date calculations
 from fpdf import FPDF
 import re
 import json
 import base64 # Import base64 for encoding PDF content
 import time # Import time for st.spinner delays
+import zipfile # NEW: Import zipfile for creating ZIP archives
+import tempfile # NEW: Import tempfile for creating temporary directories and files
+import os # NEW: Import os for path manipulation
 
 st.set_option('client.showErrorDetails', True)
 st.set_page_config(page_title="This Day in History", layout="centered")
@@ -707,7 +710,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
                 "What's a happy moment from your past week?"
             ]
 
-        # Extract Local History Fact - ensure a fact is always provided by AI.
+        # Extract Local History (if available)
         local_history_fact = "Could not generate local history fact." # Default if AI fails
         local_history_match = re.search(r"7\. Local History Fact:\s*(.*?)(?=\n\Z|$)", content, re.DOTALL)
         if local_history_match:
@@ -1117,7 +1120,7 @@ def show_main_app_page():
         translate_text_with_ai(
             """💡 Scroll down to download and print your This Day In History worksheet! 
 You can download each day's content as a printable PDF—perfect for sharing with your residents or using in group activities!
-Want to make it your own? You can even customize the masthead to match your community—try something fun like Arbor Courts Gazette or The Morning Maple 🍁.
+Want to make it your own? You can even customize the masthead to match your community—try something fun like Arbor Courts Courts Gazette or The Morning Maple 🍁.
 
 🌍 Need another language? Use the left-hand menu to translate the entire page and your downloadable PDF.
 
@@ -1463,6 +1466,99 @@ def show_trivia_page():
     else: # Added an else block here to explicitly state if no trivia is loaded
         st.info(translate_text_with_ai("No trivia questions are available for today. Please check your content preferences or try again later.", st.session_state['preferred_language'], client_ai))
 
+# NEW: Weekly Planner Page Function
+def show_weekly_planner_page():
+    st.title(translate_text_with_ai("🗓️ Weekly Planner", st.session_state['preferred_language'], client_ai))
+    st.write(translate_text_with_ai("Generate 'This Day in History' PDFs for an entire week, starting from your chosen date, and download them as a single ZIP file.", st.session_state['preferred_language'], client_ai))
+
+    # User selects the start date for the week.
+    start_date = st.date_input(translate_text_with_ai("Select a Start Date for the Week", st.session_state['preferred_language'], client_ai), datetime.today().date())
+
+    # Button to trigger the PDF generation and zipping process.
+    if st.button(translate_text_with_ai("Generate Weekly PDFs", st.session_state['preferred_language'], client_ai)):
+        # Check if the AI client is initialized before proceeding.
+        if 'client_ai' not in st.session_state or st.session_state['client_ai'] is None:
+            st.warning(translate_text_with_ai("The AI client is not initialized. Please ensure your OpenAI client is correctly set up to fetch daily data.", st.session_state['preferred_language'], client_ai))
+            return
+
+        # Use a spinner to indicate that a process is running, as it might take time.
+        with st.spinner(translate_text_with_ai("Generating weekly PDFs and zipping them... This may take a moment.", st.session_state['preferred_language'], client_ai)):
+            pdf_files_to_zip = [] # List to store paths of generated PDF files.
+
+            try:
+                # Create a temporary directory. This directory and its contents will be
+                # automatically cleaned up when the `with` block exits.
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    user_info_for_pdf = {
+                        'name': st.session_state['logged_in_username'],
+                        'jobs': '', 'hobbies': '', 'decade': '', 'life_experiences': '', 'college_chapter': ''
+                    }
+                    # Loop through 7 days to generate a PDF for each.
+                    for i in range(7):
+                        current_date = start_date + timedelta(days=i) # Calculate the current date for the loop.
+                        date_str = current_date.strftime("%Y-%m-%d") # Format date for filename.
+                        st.info(translate_text_with_ai(f"Processing: {current_date.strftime('%B %d, %Y')}...", st.session_state['preferred_language'], client_ai))
+
+                        # Fetch daily historical data using your existing function.
+                        # Always fetch raw data in English first, then pass to PDF generator
+                        daily_raw_data = get_this_day_in_history_facts(
+                            current_date.day, current_date.month, user_info_for_pdf, client_ai,
+                            topic=st.session_state.get('preferred_topic_main_app') if st.session_state.get('preferred_topic_main_app') != "None" else None,
+                            preferred_decade=st.session_state.get('preferred_decade_main_app') if st.session_state.get('preferred_decade_main_app') != "None" else None,
+                            difficulty=st.session_state['difficulty'],
+                            local_city=st.session_state['local_city'] if st.session_state['local_city'].strip() else None,
+                            local_state_country=st.session_state['local_state_country'] if st.session_state['local_state_country'].strip() else None
+                        )
+
+                        # Generate PDF content using your existing function.
+                        # Pass the raw data, and the current language for content inside PDF
+                        pdf_bytes = generate_full_history_pdf(
+                            daily_raw_data,
+                            current_date.strftime('%B %d, %Y'),
+                            user_info_for_pdf,
+                            st.session_state['preferred_language'],
+                            st.session_state['custom_masthead_text']
+                        )
+
+                        # Define the path for the temporary PDF file.
+                        pdf_filename = os.path.join(tmpdir, f"This_Day_in_History_{date_str}.pdf")
+                        # Write the PDF bytes to the temporary file.
+                        with open(pdf_filename, "wb") as f:
+                            f.write(pdf_bytes)
+                        pdf_files_to_zip.append(pdf_filename) # Add the file path to the list.
+                        time.sleep(0.1) # Small delay to improve UX and prevent hammering resources/APIs.
+
+                    # Define the path for the output ZIP file.
+                    zip_filepath = os.path.join(tempfile.gettempdir(), "This_Week_in_History.zip")
+                    # Create the ZIP file and add all generated PDFs to it.
+                    with zipfile.ZipFile(zip_filepath, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                        for pdf_file in pdf_files_to_zip:
+                            # Add each PDF to the ZIP file, using only its basename for internal path.
+                            zipf.write(pdf_file, os.path.basename(pdf_file))
+
+                    # Read the generated ZIP file content into bytes for the download button.
+                    with open(zip_filepath, "rb") as f:
+                        zip_bytes = f.read()
+
+                    # Provide the download button to the user.
+                    st.download_button(
+                        label=translate_text_with_ai("⬇️ Download This_Week_in_History.zip", st.session_state['preferred_language'], client_ai),
+                        data=zip_bytes,
+                        file_name="This_Week_in_History.zip",
+                        mime="application/zip",
+                        key="download_weekly_zip_button" # Unique key for the button.
+                    )
+                    st.success(translate_text_with_ai("Weekly PDFs generated and zipped successfully! Click the button above to download.", st.session_state['preferred_language'], client_ai))
+
+            except Exception as e:
+                # General error handling for any issues during the process.
+                st.error(translate_text_with_ai(f"An error occurred during PDF generation or zipping: {e}", st.session_state['preferred_language'], client_ai))
+                st.error(translate_text_with_ai("Please ensure your `generate_full_history_pdf` and data fetching logic are correctly implemented and accessible.", st.session_state['preferred_language'], client_ai))
+        
+    st.markdown("---") # Visual separator
+    # Navigation buttons within the page for convenience.
+    st.button(translate_text_with_ai("⬅️ Back to Main App", st.session_state['preferred_language'], client_ai), on_click=lambda: set_page('main_app'))
+    st.button(translate_text_with_ai("🧠 Go to Trivia", st.session_state['preferred_language'], client_ai), on_click=lambda: set_page('trivia_page'))
 
 def show_login_register_page():
     # Centering the logo using columns
@@ -1659,6 +1755,9 @@ if st.session_state['is_authenticated']:
         set_page('main_app')
     if st.sidebar.button(translate_text_with_ai("🎮 Play Trivia!", st.session_state['preferred_language'], client_ai), key="sidebar_trivia_btn"):
         set_page('trivia_page')
+    # NEW: Weekly Planner button in sidebar
+    if st.sidebar.button(translate_text_with_ai("🗓️ Weekly Planner", st.session_state['preferred_language'], client_ai), key="sidebar_weekly_planner_btn"):
+        set_page('weekly_planner_page')
 
     st.sidebar.markdown("---")
     st.sidebar.header(translate_text_with_ai("Settings", st.session_state['preferred_language'], client_ai))
@@ -1713,6 +1812,8 @@ if st.session_state['is_authenticated']:
         show_main_app_page()
     elif st.session_state['current_page'] == 'trivia_page':
         show_trivia_page()
+    elif st.session_state['current_page'] == 'weekly_planner_page': # NEW: Condition to render the Weekly Planner page
+        show_weekly_planner_page()
     # Default to main_app if current_page is somehow not set to a valid page
     else:
         st.session_state['current_page'] = 'main_app'
