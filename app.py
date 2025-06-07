@@ -1,4 +1,3 @@
-
 import streamlit as st
 from openai import OpenAI
 from datetime import datetime, date
@@ -48,29 +47,6 @@ def save_new_user_to_sheet(username, password, email):
         ws.append_row([username, password, email])
     except Exception as e:
         st.warning(f"⚠️ Could not register user '{username}': {e}")
-
-def save_new_user_to_sheet(username, password, email):
-    try:
-        sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
-        try:
-            ws = sheet.worksheet("Users")
-        except gspread.exceptions.WorksheetNotFound:
-            ws = sheet.add_worksheet(title="Users", rows="100", cols="3")
-            ws.append_row(["Username", "Password", "Email"])
-        ws.append_row([username, password, email])
-    except Exception as e:
-        st.warning(f"⚠️ Could not register user '{username}': {e}")
-
-    try:
-        sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
-        ws = sheet.worksheet("LoginLogs")
-        ws.append_row([
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            event_type,
-            username
-        ])
-    except Exception as e:
-        st.warning(f"⚠️ Could not log event '{event_type}' for '{username}': {e}")
 
 if "OPENAI_API_KEY" not in st.secrets:
     st.error("❌ OPENAI_API_KEY is missing from Streamlit secrets.")
@@ -171,9 +147,9 @@ if st.session_state['is_authenticated']:
     
     st.sidebar.markdown("---")
     if st.sidebar.button("🚪 Log Out"):
-    st.session_state['is_authenticated'] = False
-    st.session_state['logged_in_username'] = ""
-    st.rerun()
+        st.session_state['is_authenticated'] = False
+        st.session_state['logged_in_username'] = ""
+        st.rerun()
     
     st.title("📅 This Day in History")
     today = datetime.today()
@@ -191,13 +167,13 @@ if st.session_state['is_authenticated']:
     st.write(data['fun_fact_section'])
     st.subheader("🧠 Trivia")
     for q in data['trivia_section']:
-    st.write(q)
+        st.write(q)
     if st.button("📄 Download PDF"):
-    pdf_bytes = generate_full_history_pdf(
-    data['event_title'], data['event_article'], data['born_section'],
-    data['fun_fact_section'], data['trivia_section'], today.strftime('%B %d'), user_info
-    )
-    st.download_button("Download History PDF", pdf_bytes, file_name="this_day_in_history.pdf")
+        pdf_bytes = generate_full_history_pdf(
+        data['event_title'], data['event_article'], data['born_section'],
+        data['fun_fact_section'], data['trivia_section'], today.strftime('%B %d'), user_info
+        )
+        st.download_button("Download History PDF", pdf_bytes, file_name="this_day_in_history.pdf")
 else:
     st.title("Login to Access")
     login_tab, register_tab = st.tabs(["Log In", "Register"])
@@ -214,6 +190,23 @@ else:
                     st.rerun()
                 else:
                     st.error("Invalid credentials.")
+
+    with register_tab:
+        with st.form("register_form"):
+            new_username = st.text_input("New Username")
+            new_email = st.text_input("Email")
+            new_password = st.text_input("New Password", type="password")
+            confirm_password = st.text_input("Confirm Password", type="password")
+            if st.form_submit_button("Register"): # Corrected indentation for the submit button
+                if new_password == confirm_password:
+                    save_new_user_to_sheet(new_username, new_password, new_email) # Corrected function call
+                    st.session_state['is_authenticated'] = True
+                    st.session_state['logged_in_username'] = new_username
+                    st.success("Account created!")
+                    log_event("register", new_username)
+                    st.rerun()
+                else:
+                    st.error("Passwords do not match.")
 
 # --- Demo Preview on Login Page ---
 st.markdown("---")
@@ -241,21 +234,3 @@ if st.button("📄 Download Demo PDF"):
         demo_data['trivia_section'], "June 6", demo_user_info
     )
     st.download_button("Download Example PDF", demo_pdf, file_name="example_this_day_history.pdf")
-
-
-    with register_tab:
-        with st.form("register_form"):
-    new_username = st.text_input("New Username")
-    new_email = st.text_input("Email")
-    new_password = st.text_input("New Password", type="password")
-    confirm_password = st.text_input("Confirm Password", type="password")
-    st.form_submit_button("Register"):
-                if new_password == confirm_password:
-                    save_new_user(new_username, new_password)
-                    st.session_state['is_authenticated'] = True
-                    st.session_state['logged_in_username'] = new_username
-                    st.success("Account created!")
-                    log_event("register", new_username)
-                    st.rerun()
-                else:
-                    st.error("Passwords do not match.")
