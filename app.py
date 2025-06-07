@@ -19,7 +19,8 @@ if "GOOGLE_SERVICE_JSON" not in st.secrets:
     st.error("❌ GOOGLE_SERVICE_JSON is missing from Streamlit secrets.")
     st.stop()
 
-service_account_info = dict(st.secrets["GOOGLE_SERVICE_JSON"])
+import json
+service_account_info = json.loads(st.secrets["GOOGLE_SERVICE_JSON"])
 creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
 gs_client = gspread.authorize(creds)
 
