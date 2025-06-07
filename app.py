@@ -7,7 +7,7 @@ import os
 import logging
 import sqlite3
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from oauth22client.service_account import ServiceAccountCredentials
 import smtplib
 from email.mime.text import MIMEText
 
@@ -109,13 +109,13 @@ section[data-testid="stSidebar"] {
 """, unsafe_allow_html=True)
 
 
-
-
 # --- Google Sheets Configuration ---
-GSHEET_USERS_ID = '15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4'
+GSHEET_USERS_ID = '15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4' # Replace with your actual Google Sheet ID
 
 # --- Google Sheets Debugging ---
+@st.cache_resource
 def get_gsheet_client():
+    """Authorizes and returns a gspread client."""
     try:
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         
@@ -131,56 +131,66 @@ def get_gsheet_client():
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
         logging.debug("Google Sheets client successfully authorized.")
-        
-        # Display the service account email for debugging permissions
-        st.info(f"Google Sheets Service Account Email: {creds.service_account_email}. Please ensure this email has edit access to your Google Sheet.")
-        
         return client
     except Exception as e:
         logging.error(f"Google Sheets auth failed: {e}")
-        st.warning(f"Failed to authorize Google Sheets: {e}. Please check your GOOGLE_SERVICE_JSON secret and ensure the service account has access to the sheet.")
+        st.warning(f"Failed to authorize Google Sheets: {e}. Please check your GOOGLE_SERVICE_JSON secret and ensure the service account has edit access to your Google Sheet.")
         return None
 
-# --- Updated add_user to log to specific Sheet ---
+# --- User Management Functions ---
+def init_db():
+    """Initializes the SQLite database for user storage."""
+    conn = sqlite3.connect("users.db")
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            password_plain TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+# Initialize the database on app startup
+init_db()
+
 def add_user(username, password):
+    """Adds a new user to the SQLite database and logs to Google Sheets."""
     conn = sqlite3.connect("users.db")
     c = conn.cursor()
     try:
         c.execute("INSERT INTO users (username, password_plain) VALUES (?, ?)", (username, password))
         conn.commit()
+        
         client = get_gsheet_client()
         if client:
             try:
                 sheet = client.open_by_key(GSHEET_USERS_ID).worksheet("Users")
-                # ✅ Now includes password in the sheet logging
                 sheet.append_row([username, password, str(datetime.now())])
                 logging.info(f"User {username} registered and logged to Google Sheets with password.")
-                st.success(f"User '{username}' registered and logged to Google Sheet!")
             except Exception as sheet_error:
                 logging.error(f"Failed to log user to Google Sheet: {sheet_error}")
                 st.error(f"Error logging user registration to Google Sheet: {sheet_error}")
         return True
     except sqlite3.IntegrityError:
-        return False
+        return False # Username already exists
     finally:
         conn.close()
 
-
-# --- Add login logging ---
 def log_login(username):
+    """Logs user login attempts to Google Sheets."""
     client = get_gsheet_client()
     if client:
         try:
-            sheet = client.open_by_key(GSHEET_USERS_ID).worksheet("Users")
-            sheet.append_row([f"LOGIN: {username}", str(datetime.now())])
+            sheet = client.open_by_key(GSHEET_USERS_ID).worksheet("Logins") # Use a different sheet for logins
+            sheet.append_row([username, str(datetime.now())])
             logging.info(f"Login by {username} logged to Google Sheets.")
-            st.success(f"Login by '{username}' logged to Google Sheet!")
         except Exception as sheet_error:
             logging.error(f"Failed to log login to Google Sheet: {sheet_error}")
             st.error(f"Error logging user login to Google Sheet: {sheet_error}")
 
-# --- Verify user login ---
 def verify_user(username, password):
+    """Verifies user credentials against the SQLite database."""
     conn = sqlite3.connect("users.db")
     c = conn.cursor()
     c.execute("SELECT password_plain FROM users WHERE username = ?", (username,))
@@ -191,22 +201,27 @@ def verify_user(username, password):
         return True
     return False
 
-# Ready to use `add_user()` and `verify_user()` in your Streamlit forms.
+# --- OpenAI API Interaction ---
+@st.cache_resource
+def get_openai_client():
+    """Initializes and returns the OpenAI client."""
+    try:
+        return OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    except KeyError:
+        st.error("OpenAI API key not found in Streamlit secrets. Please add OPENAI_API_KEY to your secrets.toml file.")
+        return None
 
-# Assuming these functions are defined elsewhere in your app.py
-# If they are not, you will need to add their definitions.
-
-# @st.cache_data is important for performance with Streamlit
-@st.cache_data
-def get_history_data(day, month, _ai_client): # Added underscore to _ai_client
+@st.cache_data(show_spinner="Fetching historical events...")
+def get_history_data(day, month, ai_client):
     """
     Fetches historical events for a given day and month using the OpenAI API.
-    The _ai_client parameter is not hashed by Streamlit's cache.
     """
+    if not ai_client:
+        return []
     try:
         prompt = f"Tell me about historical events that happened on {month}/{day}. Provide the information in a concise, engaging, and informative manner, suitable for a 'This Day in History' app. Format the output as a JSON object with a single key 'events' which is a list of objects. Each object should have 'year', 'event', 'category' (e.g., 'Historical', 'Scientific', 'Cultural', 'Births', 'Deaths', 'Inventions'), and 'source' (if applicable, or 'AI Generated' if not). Aim for 5-7 significant events."
 
-        response = _ai_client.chat.completions.create(
+        response = ai_client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that provides historical facts."},
@@ -217,19 +232,25 @@ def get_history_data(day, month, _ai_client): # Added underscore to _ai_client
         )
         history_json = json.loads(response.choices[0].message.content)
         return history_json.get('events', [])
+    except json.JSONDecodeError:
+        logging.error("OpenAI response was not a valid JSON.")
+        st.error("Failed to parse historical events. Please try again.")
+        return []
     except Exception as e:
         logging.error(f"Error fetching history data from OpenAI: {e}")
+        st.error(f"An error occurred while fetching historical data: {e}")
         return []
 
-@st.cache_data
-def summarize_text(text, _ai_client): # Added underscore to _ai_client
+@st.cache_data(show_spinner="Summarizing event...")
+def summarize_text(text, ai_client):
     """
     Summarizes a given text using the OpenAI API.
-    The _ai_client parameter is not hashed by Streamlit's cache.
     """
+    if not ai_client:
+        return "Summary service not available."
     try:
-        prompt = f"Summarize the following text: {text}"
-        response = _ai_client.chat.completions.create(
+        prompt = f"Summarize the following text concisely: {text}"
+        response = ai_client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that summarizes text."},
@@ -244,6 +265,7 @@ def summarize_text(text, _ai_client): # Added underscore to _ai_client
         return "Could not generate summary."
 
 def send_email(to_email, subject, body):
+    """Sends an email using SMTP."""
     try:
         gmail_user = st.secrets["EMAIL_USERNAME"]
         gmail_password = st.secrets["EMAIL_PASSWORD"]
@@ -260,90 +282,92 @@ def send_email(to_email, subject, body):
         server.close()
         logging.info(f"Email sent to {to_email}")
         return True
+    except KeyError:
+        st.error("Email credentials not found in Streamlit secrets. Please add EMAIL_USERNAME and EMAIL_PASSWORD.")
+        return False
     except Exception as e:
         logging.error(f"Failed to send email: {e}")
         return False
 
-# --- Database Initialization (only run once) ---
-def init_db():
-    conn = sqlite3.connect("users.db")
-    c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            username TEXT PRIMARY KEY,
-            password_plain TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
+# --- Streamlit App Logic ---
 
-init_db()
-
-# --- User Authentication Flow ---
-# Ensure 'logged_in' is initialized to False for new sessions or if it's in an inconsistent state.
-# This makes sure the login/register screen is shown on a fresh load.
-if 'logged_in' not in st.session_state or st.session_state.get('username') is None:
+# Initialize session state variables if not already present
+if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
-    st.session_state['username'] = None # Clear username if not logged in
+if 'username' not in st.session_state:
+    st.session_state['username'] = None
+if 'pdf_generated' not in st.session_state:
+    st.session_state['pdf_generated'] = False
+if 'email_sent' not in st.session_state:
+    st.session_state['email_sent'] = False
 
+# --- Authentication Section ---
 if not st.session_state['logged_in']:
     st.title("Welcome to This Day in History!")
 
-    # Login / Register tabs
     tab1, tab2 = st.tabs(["Login", "Register"])
 
     with tab1:
         st.subheader("Login")
-        login_username = st.text_input("Username", key="login_username")
-        login_password = st.text_input("Password", type="password", key="login_password")
-        if st.button("Login", key="login_button"):
-            if verify_user(login_username, login_password):
-                st.session_state['logged_in'] = True
-                st.session_state['username'] = login_username
-                st.success("Logged in successfully!")
-                st.rerun()
-            else:
-                st.error("Invalid username or password.")
+        with st.form("login_form"):
+            login_username = st.text_input("Username", key="login_username_input")
+            login_password = st.text_input("Password", type="password", key="login_password_input")
+            login_submit = st.form_submit_button("Login")
+
+            if login_submit:
+                if verify_user(login_username, login_password):
+                    st.session_state['logged_in'] = True
+                    st.session_state['username'] = login_username
+                    st.success("Logged in successfully!")
+                    st.experimental_rerun() # Use rerun to update the entire app state
+                else:
+                    st.error("Invalid username or password.")
 
     with tab2:
         st.subheader("Register")
-        new_username = st.text_input("New Username", key="new_username")
-        new_password = st.text_input("New Password", type="password", key="new_password")
-        if st.button("Register", key="register_button"):
-            if add_user(new_username, new_password):
-                st.success("Registration successful! Please log in.")
-            else:
-                st.error("Username already exists.")
+        with st.form("register_form"):
+            new_username = st.text_input("New Username", key="new_username_input")
+            new_password = st.text_input("New Password", type="password", key="new_password_input")
+            register_submit = st.form_submit_button("Register")
+
+            if register_submit:
+                if add_user(new_username, new_password):
+                    st.success("Registration successful! Please log in.")
+                    # Optionally clear the registration fields after successful registration
+                    st.session_state.new_username_input = "" 
+                    st.session_state.new_password_input = ""
+                else:
+                    st.error("Username already exists.")
 else:
     # --- Main App Content (after login) ---
     st.title(f"This Day in History - Welcome, {st.session_state['username']}!")
 
     today = date.today()
+    ai_client = get_openai_client() # Get the cached OpenAI client
 
-    # Get history data using the modified function call
-    # OpenAI client initialization moved to here
-    ai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-    output = get_history_data(today.day, today.month, ai_client)
-
+    output = []
+    if ai_client:
+        output = get_history_data(today.day, today.month, ai_client)
+    else:
+        st.warning("Cannot fetch historical events because OpenAI client failed to initialize.")
 
     if output:
         st.subheader(f"Events on {today.strftime('%B %d')}:")
-        for event in output:
+        for i, event in enumerate(output):
             with st.container(border=True):
                 st.markdown(f"### {event['year']}: {event['event']}")
                 st.markdown(f"**Category:** {event['category']}")
-                if 'source' in event:
-                    st.markdown(f"**Source:** {event['source']}")
-                else:
-                    st.markdown(f"**Source:** AI Generated")
+                st.markdown(f"**Source:** {event.get('source', 'AI Generated')}")
 
-                if st.button(f"Summarize this event", key=f"summarize_{event['year']}_{event['event']}"):
-                    summary = summarize_text(event['event'], ai_client) # Pass the ai_client
+                if st.button(f"Summarize this event", key=f"summarize_button_{i}"):
+                    summary = summarize_text(event['event'], ai_client)
                     st.info(summary)
     else:
         st.info("No historical events found for this date, or there was an error fetching data.")
 
-    # PDF Download Functionality
+    st.markdown("---") # Separator
+
+    # --- PDF Download Functionality ---
     def create_pdf(events, filename="This_Day_in_History.pdf"):
         pdf = FPDF()
         pdf.add_page()
@@ -356,39 +380,54 @@ else:
         pdf.output(filename)
         return filename
 
-    if st.button("Download as PDF"):
-        if output:
-            pdf_file = create_pdf(output)
-            with open(pdf_file, "rb") as f:
-                st.download_button(
-                    label="Click to Download PDF",
-                    data=f.read(),
-                    file_name=pdf_file,
-                    mime="application/pdf"
-                )
-            os.remove(pdf_file) # Clean up the generated PDF file
-        else:
-            st.warning("No events to download.")
+    st.subheader("Download & Share Events")
+    
+    col_pdf, col_email = st.columns(2)
 
-    # Email Sharing
-    st.subheader("Share Today's Events")
-    recipient_email = st.text_input("Recipient Email")
-    if st.button("Send Email"):
-        if output and recipient_email:
-            email_body = f"Hello,\n\nHere are some historical events for {today.strftime('%B %d')}:\n\n"
-            for event in output:
-                email_body += f"- {event['year']}: {event['event']} (Category: {event['category']})\n"
-            email_body += "\nEnjoy your day!"
-
-            if send_email(recipient_email, "This Day in History", email_body):
-                st.success("Email sent successfully!")
+    with col_pdf:
+        if st.button("Generate PDF for Download"):
+            if output:
+                pdf_file = create_pdf(output)
+                with open(pdf_file, "rb") as f:
+                    st.download_button(
+                        label="Click to Download PDF",
+                        data=f.read(),
+                        file_name=f"This_Day_in_History_{today.strftime('%Y%m%d')}.pdf",
+                        mime="application/pdf",
+                        key="download_pdf_button"
+                    )
+                os.remove(pdf_file) # Clean up the generated PDF file immediately
+                st.session_state['pdf_generated'] = True
             else:
-                st.error("Failed to send email. Please check your email configuration.")
-        else:
-            st.warning("Please enter a recipient email and ensure events are loaded.")
+                st.warning("No events to download.")
+
+    with col_email:
+        with st.form("email_form"):
+            recipient_email = st.text_input("Recipient Email", key="recipient_email_input")
+            send_email_button = st.form_submit_button("Send Email")
+
+            if send_email_button:
+                if output and recipient_email:
+                    email_body = f"Hello,\n\nHere are some historical events for {today.strftime('%B %d')}:\n\n"
+                    for event in output:
+                        email_body += f"- {event['year']}: {event['event']} (Category: {event['category']})\n"
+                    email_body += f"\n--\nSent from This Day in History app by {st.session_state['username']}"
+
+                    if send_email(recipient_email, f"This Day in History - {today.strftime('%B %d')}", email_body):
+                        st.success("Email sent successfully!")
+                        st.session_state['email_sent'] = True
+                        st.session_state.recipient_email_input = "" # Clear email field
+                    else:
+                        st.error("Failed to send email. Please check your email configuration and try again.")
+                else:
+                    st.warning("Please enter a recipient email and ensure events are loaded before sending.")
+    
+    st.markdown("---") # Separator
 
     # Logout Button
-    if st.button("Logout"):
+    if st.button("Logout", help="Click to log out and return to the login screen."):
         st.session_state['logged_in'] = False
         st.session_state['username'] = None
-        st.rerun()
+        st.session_state['pdf_generated'] = False # Reset PDF state
+        st.session_state['email_sent'] = False # Reset email state
+        st.experimental_rerun() # Use rerun to clear the entire app state and show login
