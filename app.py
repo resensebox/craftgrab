@@ -3,9 +3,9 @@ from openai import OpenAI
 from datetime import datetime, date
 from fpdf import FPDF
 import re
-import json # Ensure json is imported at the top
-from gtts import gTTS # Import gTTS for text-to-speech
-import io # Import io for audio bytes
+import json
+from gtts import gTTS
+import io
 
 st.set_option('client.showErrorDetails', True)
 st.set_page_config(page_title="This Day in History", layout="centered")
@@ -262,7 +262,7 @@ if st.session_state['is_authenticated']:
 
     st.sidebar.markdown("---")
     if st.sidebar.button("🚪 Log Out"):
-        log_event("logout", st.session_state['logged_in_username'])
+        log_event("logout", st.session_state['logged_in_username']) # Log logout event
         st.session_state['is_authenticated'] = False
         st.session_state['logged_in_username'] = ""
         st.rerun()
