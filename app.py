@@ -739,18 +739,28 @@ def generate_full_history_pdf(data, today_date_str, user_info): # Removed dement
     # Local History (if available)
     if data['local_history_section'] and data['local_history_section'] != "No local history fact found.":
         pdf.set_font("Arial", "B", section_title_font_size)
-        # Check if there's enough space in column 2, otherwise move to column 1 or next page
-        if current_y_col2 < pdf.h - 40: # If enough space remaining on current page in column 2
-            pdf.set_y(current_y_col2)
+        # Determine which column has more space and use that one, or add a new page if needed.
+        # Let's prioritize adding it to the column that currently has less content,
+        # or add a new page if both are getting full.
+        
+        # Calculate available space in each column
+        space_col1 = pdf.h - pdf.b_margin - current_y_col1
+        space_col2 = pdf.h - pdf.b_margin - current_y_col2
+
+        # Estimate height of local history section (approx. 3 lines)
+        estimated_height_local_history = 3 * line_height_normal + section_spacing_normal
+
+        if space_col2 >= estimated_height_local_history: # Try column 2 first
+            pdf.set_xy(page_width / 2 + 5, current_y_col2)
             pdf.multi_cell(col_width, line_height_normal, "Local History:")
             pdf.set_font("Arial", "", article_text_font_size)
             pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['local_history_section']))
-        elif current_y_col1 < pdf.h - 40: # If not, try column 1
-            pdf.set_xy(left_margin, current_y_col1) # Switch back to column 1
+        elif space_col1 >= estimated_height_local_history: # If not enough space in column 2, try column 1
+            pdf.set_xy(left_margin, current_y_col1)
             pdf.multi_cell(col_width, line_height_normal, "Local History:")
             pdf.set_font("Arial", "", article_text_font_size)
             pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['local_history_section']))
-        else: # Otherwise, add a new page
+        else: # Otherwise, add a new page for it
             pdf.add_page()
             pdf.set_left_margin(left_margin)
             pdf.set_right_margin(right_margin)
@@ -763,16 +773,10 @@ def generate_full_history_pdf(data, today_date_str, user_info): # Removed dement
 
 
     # --- Page 2 Content ---
-    # Ensure a new page if content from page 1 flows too much or if local history caused a new page
-    if pdf.get_y() > pdf.h - 40: # If near bottom of current page
-        pdf.add_page()
+    # ALWAYS add a new page before starting the "About Us" section to ensure it's on page 2.
+    pdf.add_page()
 
-    # Set new, better margins for page 2 content
-    # These definitions are moved to the top of the function to ensure they are always available.
-    # left_margin_p2 = 25
-    # right_margin_p2 = 25
-    # content_width_p2 = page_width - left_margin_p2 - right_margin_p2
-
+    # Set margins and starting Y for the new page (Page 2)
     pdf.set_left_margin(left_margin_p2)
     pdf.set_right_margin(right_margin_p2)
     pdf.set_x(left_margin_p2) # Start content at the new left margin
