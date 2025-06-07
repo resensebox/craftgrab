@@ -620,7 +620,8 @@ def generate_full_history_pdf(data, today_date_str, user_info): # Removed dement
     current_y_col1 += line_height_normal
     pdf.set_font("Arial", "", trivia_q_font_size) # Reset font to regular for trivia text if needed
 
-    for i, item in enumerate(data['trivia_section']):
+    # Loop through the first 4 trivia questions for the PDF
+    for i, item in enumerate(data['trivia_section'][:4]): # Limit to 4 questions for PDF
         question_text_clean = clean_text_for_latin1(f"{chr(97+i)}. {item['question']}")
         answer_text_clean = clean_text_for_latin1(f"Answer: {item['answer']}")
         hint_text_clean = clean_text_for_latin1(f"Hint: {item['hint']}")
@@ -810,18 +811,6 @@ def show_feedback_form():
 def show_main_app_page():
     st.title("📅 This Day in History")
 
-    # Removed dementia-friendly styling if enabled
-    # if st.session_state['dementia_mode']:
-    #     st.markdown(
-    #         """
-    #         <style>
-    #         body { font-family: 'Arial', sans-serif; font-size: 24px; line-height: 1.5; }
-    #         h1, h2, h3, h4, h5, h6 { font-family: 'Arial', sans-serif; font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
-    #         p { margin-bottom: 1em; }
-    #         </style>
-    #         """,
-    #         unsafe_allow_html=True
-    #     )
     st.markdown("<p style='font-size:24px; font-weight:bold;'>Today's Daily Page</p>", unsafe_allow_html=True)
 
 
@@ -891,7 +880,7 @@ def show_main_app_page():
     
     # Generate PDF bytes once
     pdf_bytes_main = generate_full_history_pdf(
-        data, selected_date.strftime('%B %d, %Y'), user_info # Removed dementia_mode parameter
+        data, selected_date.strftime('%B %d, %Y'), user_info
     )
     
     # Create Base64 encoded link
@@ -1216,8 +1205,9 @@ def show_login_register_page():
     st.write(example_data['fun_fact_section'])
 
     st.markdown("### 🧠 Test Your Knowledge!")
+    # Loop through the first 4 trivia questions for the example PDF
     if example_data['trivia_section']:
-        for i, trivia_item in enumerate(example_data['trivia_section']):
+        for i, trivia_item in enumerate(example_data['trivia_section'][:4]): # Limit to 4 for example PDF
             st.markdown(f"**Question {i+1}:** {trivia_item['question']}")
             st.info(f"Answer: {trivia_item['answer']}") # Display answer for example content
             # Safely display hint for example content
@@ -1269,24 +1259,6 @@ if st.session_state['is_authenticated']:
     st.sidebar.markdown("---")
     st.sidebar.header("Settings")
     
-    # Removed dementia mode checkbox and info popover
-    # col_dementia, col_info = st.sidebar.columns([0.8, 0.2])
-    # with col_dementia:
-    #     st.session_state['dementia_mode'] = st.checkbox("Dementia-Friendly Mode", value=st.session_state['dementia_mode'], key="sidebar_dementia_mode")
-    # with col_info:
-    #     with st.popover("ⓘ"):
-    #         st.markdown(
-    #             """
-    #             The dementia-friendly mode is designed to make the daily history content more accessible, particularly for users with cognitive impairments. When this mode is active, the generated PDF download will feature:
-
-    #             * **Larger Font Size**: The text in the PDF will be displayed in a significantly larger font (24pt Arial) compared to the standard mode (12pt-20pt). This improves readability and reduces eye strain.
-    #             * **Increased Line Height and Spacing**: There is more vertical space between lines of text and between different sections. This reduces visual clutter and makes it easier to follow the content.
-    #             * **Simplified Formatting**: The PDF uses a simpler layout without bolding for subheadings within the content, focusing on clear, unobstructed presentation of information.
-                
-    #             These adjustments ensure that the content is presented in a way that is easier to read and comprehend, enhancing accessibility for individuals who may benefit from simplified visual and textual presentation.
-    #             """
-    #         )
-
     st.sidebar.subheader("Content Customization")
     st.session_state['preferred_topic_main_app'] = st.sidebar.selectbox(
         "Preferred Topic for Events (Optional)",
