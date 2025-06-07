@@ -440,7 +440,11 @@ def show_main_app_page():
 
 
     today = datetime.today()
-    day, month, year = today.day, today.month, today.year
+    
+    # --- Date Picker for Main Page Content ---
+    selected_date = st.date_input("Select a date", value=today, key="date_picker_main_app")
+    day, month, year = selected_date.day, selected_date.month, selected_date.year
+
     user_info = {
         'name': st.session_state['logged_in_username'],
         'jobs': '', 'hobbies': '', 'decade': '', 'life_experiences': '', 'college_chapter': ''
@@ -448,7 +452,7 @@ def show_main_app_page():
 
     # Fetch daily data if not already fetched for the current day/user/preferences
     # This key ensures data is re-fetched if date or preferences change
-    current_data_key = f"{day}-{month}-{year}-{st.session_state['logged_in_username']}-" \
+    current_data_key = f"{selected_date.strftime('%Y-%m-%d')}-{st.session_state['logged_in_username']}-" \
                        f"{st.session_state.get('preferred_topic_main_app', 'None')}-" \
                        f"{st.session_state.get('preferred_decade_main_app', 'None')}"
 
@@ -467,8 +471,8 @@ def show_main_app_page():
 
     data = st.session_state['daily_data']
 
-    # Display content - Re-added articles to the main page
-    st.subheader(f"✨ A Look Back at {today.strftime('%B %d')}")
+    # Display content - Articles are back on the main page
+    st.subheader(f"✨ A Look Back at {selected_date.strftime('%B %d')}")
 
     st.markdown("---")
     st.subheader("🗓️ Significant Event")
@@ -495,7 +499,7 @@ def show_main_app_page():
     
     # Generate PDF bytes once
     pdf_bytes_main = generate_full_history_pdf(
-        data, today.strftime('%B %d, %Y'), user_info, st.session_state['dementia_mode']
+        data, selected_date.strftime('%B %d, %Y'), user_info, st.session_state['dementia_mode']
     )
     
     # Create Base64 encoded link
@@ -507,7 +511,7 @@ def show_main_app_page():
         st.download_button(
             "Download Daily Page PDF", 
             pdf_bytes_main, 
-            file_name=f"This_Day_in_History_{today.strftime('%Y%m%d')}.pdf",
+            file_name=f"This_Day_in_History_{selected_date.strftime('%Y%m%d')}.pdf",
             mime="application/pdf"
         )
     with col2:
@@ -687,7 +691,8 @@ def show_login_register_page():
         with st.form("login_form"):
             username = st.text_input("Username", key="login_username_input")
             password = st.text_input("Password", type="password", key="login_password_input")
-            if st.form_submit_button("Log In", key="login_submit_button"):
+            # Removed the 'key' argument from st.form_submit_button
+            if st.form_submit_button("Log In"):
                 USERS = get_users_from_sheet() # Get users from Google Sheet
                 if username in USERS and USERS[username] == password:
                     st.session_state['is_authenticated'] = True
@@ -704,7 +709,8 @@ def show_login_register_page():
             new_email = st.text_input("Email", key="register_email_input")
             new_password = st.text_input("New Password", type="password", key="register_password_input")
             confirm_password = st.text_input("Confirm Password", type="password", key="register_confirm_password_input")
-            if st.form_submit_button("Register", key="register_submit_button"):
+            # Removed the 'key' argument from st.form_submit_button
+            if st.form_submit_button("Register"):
                 if new_password == confirm_password:
                     USERS_EXISTING = get_users_from_sheet()
                     if new_username in USERS_EXISTING:
