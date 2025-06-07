@@ -288,7 +288,6 @@ def log_trivia_score(username, score):
             ws = sheet.add_worksheet(title="History", rows="100", cols="3")
             ws.append_row(["Username", "Score", "Timestamp"]) # Add headers if new sheet
         
-        # Corrected order: [Username, Score, Timestamp]
         ws.append_row([
             username,
             score,
@@ -758,10 +757,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     date_font_size = 10
     section_title_font_size = 12
     article_text_font_size = 10
-    trivia_q_font_size = 10
-    trivia_ans_hint_font_size = 9
     line_height_normal = 5
-    line_height_trivia_ans_hint = 4
     section_spacing_normal = 5
 
     # Define page 2 margins at the beginning
@@ -812,8 +808,9 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("On This Date", current_language, client_ai)))
     current_y_col1 += line_height_normal # Update Y after title
     pdf.set_font("Arial", "", article_text_font_size) # Ensure font is not bold for article text
-    # Pass already translated data directly, assuming it's handled by translate_content
-    pdf.multi_cell(col_width, line_height_normal, data.get('event_article', ''))
+    # Translate content explicitly before adding to PDF
+    translated_event_article = translate_text_with_ai(data.get('event_article', ''), current_language, client_ai)
+    pdf.multi_cell(col_width, line_height_normal, translated_event_article)
     current_y_col1 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
 
     pdf.set_y(current_y_col1) # Ensure position is updated
@@ -823,27 +820,13 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Fun Fact:", current_language, client_ai))) # Translated
     current_y_col1 += line_height_normal
     pdf.set_font("Arial", "", article_text_font_size) # Ensure font is not bold for article text
-    # Pass already translated data directly
-    pdf.multi_cell(col_width, line_height_normal, data.get('fun_fact_section', ''))
+    # Translate content explicitly before adding to PDF
+    translated_fun_fact = translate_text_with_ai(data.get('fun_fact_section', ''), current_language, client_ai)
+    pdf.multi_cell(col_width, line_height_normal, translated_fun_fact)
     current_y_col1 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
     pdf.set_y(current_y_col1)
 
     # Removed: Daily Trivia section for PDF (as per user request)
-    # if data.get('trivia_section'):
-    #     pdf.set_font("Arial", "B", section_title_font_size)
-    #     pdf.multi_cell(col_width, line_height_normal, "Daily Trivia")
-    #     current_y_col1 += line_height_normal
-    #     for i, item in enumerate(data['trivia_section'][:4]):
-    #         question_text_clean = clean_text_for_latin1(f"{chr(97+i)}. - {item.get('question', '')}")
-    #         answer_text_clean = clean_text_for_latin1(f"Answer: {item.get('answer', '')}")
-    #         hint_text_clean = clean_text_for_latin1(f"Hint: {item.get('hint', '')}")
-    #         pdf.set_font("Arial", "B", trivia_q_font_size)
-    #         pdf.multi_cell(col_width, line_height_trivia_ans_hint, question_text_clean)
-    #         pdf.set_font("Arial", "", trivia_ans_hint_font_size)
-    #         pdf.multi_cell(col_width, line_height_trivia_ans_hint, answer_text_clean)
-    #         pdf.multi_cell(col_width, line_height_trivia_ans_hint, hint_text_clean)
-    #         pdf.ln(3)
-    #         current_y_col1 = pdf.get_y()
 
     current_y_col1 += section_spacing_normal # Spacing after content section
     pdf.set_y(current_y_col1)
@@ -871,8 +854,9 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Happy Birthday!", current_language, client_ai))) # Translated
     current_y_col2 += line_height_normal
     pdf.set_font("Arial", "", article_text_font_size) # Ensure font is not bold for article text
-    # Pass already translated data directly
-    pdf.multi_cell(col_width, line_height_normal, data.get('born_article', ''))
+    # Translate content explicitly before adding to PDF
+    translated_born_article = translate_text_with_ai(data.get('born_article', ''), current_language, client_ai)
+    pdf.multi_cell(col_width, line_height_normal, translated_born_article)
     current_y_col2 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
     pdf.set_y(current_y_col2)
 
@@ -883,8 +867,9 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
         current_y_col2 += line_height_normal
         pdf.set_font("Arial", "", article_text_font_size)
         for item in data['did_you_know_section']:
-            # Ensure item is treated as string for clean_text_for_latin1
-            pdf.multi_cell(col_width, line_height_normal, f"- {item if item is not None else ''}") # No clean_text_for_latin1 here
+            # Translate each item explicitly before adding to PDF
+            translated_item = translate_text_with_ai(item if item is not None else '', current_language, client_ai)
+            pdf.multi_cell(col_width, line_height_normal, f"- {translated_item}")
             current_y_col2 = pdf.get_y() # Update Y after each fact line
         current_y_col2 += section_spacing_normal # Spacing after section
         pdf.set_y(current_y_col2)
@@ -897,8 +882,9 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
         pdf.set_font("Arial", "", article_text_font_size)
         # Iterate and display up to the first 3 memory prompts for PDF
         for prompt_text in data['memory_prompt_section'][:3]: # Limit to first 3 prompts
-            # Ensure prompt_text is treated as string for clean_text_for_latin1
-            pdf.multi_cell(col_width, line_height_normal, prompt_text if prompt_text is not None else '') # No clean_text_for_latin1 here
+            # Translate each prompt explicitly before adding to PDF
+            translated_prompt = translate_text_with_ai(prompt_text if prompt_text is not None else '', current_language, client_ai)
+            pdf.multi_cell(col_width, line_height_normal, translated_prompt)
             pdf.ln(2) # Small line break between prompts
             current_y_col2 = pdf.get_y() # Update Y after each prompt line
         current_y_col2 += section_spacing_normal # Spacing after section
@@ -929,8 +915,9 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
 
         pdf.multi_cell(content_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Local History:", current_language, client_ai))) # Translated
         pdf.set_font("Arial", "", article_text_font_size)
-        # Pass already translated data directly
-        pdf.multi_cell(content_width, line_height_normal, local_history_content)
+        # Translate content explicitly before adding to PDF
+        translated_local_history = translate_text_with_ai(local_history_content, current_language, client_ai)
+        pdf.multi_cell(content_width, line_height_normal, translated_local_history)
         
         # Restore original margins for subsequent content (Page 2)
         pdf.set_left_margin(original_left_margin)
