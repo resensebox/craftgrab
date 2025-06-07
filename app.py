@@ -455,7 +455,6 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         event_article_match = re.search(r"1\. Event Article:\s*(.*?)(?=\n2\. Born on this Day Article:|\Z)", content, re.DOTALL)
         born_article_match = re.search(r"2\. Born on this Day Article:\s*(.*?)(?=\n3\. Fun Fact:|\Z)", content, re.DOTALL)
         fun_fact_match = re.search(r"3\. Fun Fact:\s*(.*?)(?=\n4\. Trivia Questions:|\Z)", content, re.DOTALL)
-        did_you_know_match = re.search(r"5\. Did You Know:\?\s*(.*?)(?=\n6\. Memory Prompt:|\Z)", content, re.DOTALL)
         memory_prompt_match = re.search(r"6\. Memory Prompt:\s*(.*)", content, re.DOTALL)
         
         # Special handling for Trivia Questions to extract questions, answers, and hints
@@ -490,17 +489,28 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
                 if len(trivia_questions) >= 5:
                     break
 
+        # Special handling for Did You Know? to make parsing more robust
+        did_you_know_lines = []
+        did_you_know_match = re.search(r"5\. Did You Know\??:?\s*(?:\(Answer:\)\s*)?(.*?)(?=\n6\. Memory Prompt:|\Z)", content, re.DOTALL)
+        if did_you_know_match:
+            raw_facts_content = did_you_know_match.group(1).strip()
+            for line in raw_facts_content.split('\n'):
+                # Remove common prefixes like 'a.', 'b.', and any '(Answer:)'
+                cleaned_line = re.sub(r'^[a-zA-Z]\.\s*', '', line).strip() # Remove "a. " "b. " etc.
+                cleaned_line = re.sub(r'\s*\(Answer:\)\s*', '', cleaned_line).strip() # Remove (Answer:)
+                if cleaned_line: # Only add if not empty after cleaning
+                    did_you_know_lines.append(cleaned_line)
+        
+        # Ensure 'Did You Know?' always has at least one item, even if AI fails to generate
+        if not did_you_know_lines:
+            did_you_know_lines = ["No 'Did You Know?' facts available for today. Please try again or adjust preferences."]
+
 
         # Extract content, providing defaults if not found
         event_article = event_article_match.group(1).strip() if event_article_match else "No event article found."
         born_article = born_article_match.group(1).strip() if born_article_match else "No birth article found."
         fun_fact_section = fun_fact_match.group(1).strip() if fun_fact_match else "No fun fact found."
         
-        did_you_know_lines = [f.strip() for f in did_you_know_match.group(1).strip().split('\n') if f.strip()] if did_you_know_match else []
-        # Ensure 'Did You Know?' always has at least one item, even if AI fails to generate
-        if not did_you_know_lines:
-            did_you_know_lines = ["No 'Did You Know?' facts available for today. Please try again or adjust preferences."]
-
         memory_prompt_section = memory_prompt_match.group(1).strip() if memory_prompt_match else "No memory prompt available."
 
         return {
