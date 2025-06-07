@@ -657,7 +657,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     # Did You Know?
     if data['did_you_know_section']:
         pdf.set_font("Arial", "B", 12)
-        pdf.multi_cell(col_width, 6, "Did You Know?")
+        pdf.multi_cell(col_width, 6, "Did You Know-") # Replaced ? with -
         current_y_col2 += 6
         pdf.set_font("Arial", "", 10)
         for item in data['did_you_know_section']:
@@ -670,7 +670,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     # Memory Prompt
     if data['memory_prompt_section']:
         pdf.set_font("Arial", "B", 12)
-        pdf.multi_cell(col_width, 6, "Memory Prompt:")
+        pdf.multi_cell(col_width, 6, "Memory Prompt-") # Replaced ? with -
         current_y_col2 += 6
         pdf.set_font("Arial", "", 10)
         pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['memory_prompt_section']))
@@ -692,21 +692,31 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
 
     # About Us Title
     pdf.set_font("Arial", "B", 18) # Slightly smaller font for longer title
-    new_about_us_title = clean_text_for_latin1("Learn More About US! 🧠📚 Mindful Libraries – A Dementia-Inclusive Reading Program")
+    new_about_us_title = clean_text_for_latin1("Learn More About US! Mindful Libraries - A Dementia-Inclusive Reading Program")
     pdf.multi_cell(content_width_p2, 10, new_about_us_title, 0, 'C') # Using multi_cell for title as it's long
     pdf.ln(5) # Smaller line break after title
 
     # About Us Text
     pdf.set_font("Arial", "", 11) # Slightly smaller font for better fit
-    new_about_us_text = clean_text_for_latin1("""Mindful Libraries is a collaborative initiative between Resense, Nana’s Books, and Mirador Magazine, designed to bring adaptive, nostalgic reading experiences to individuals living with dementia. This innovative program provides:
-
-📦 Curated Libraries of dementia-friendly newspapers, books, and magazines
-🎓 Staff Training accredited by NCCAP, focusing on reminiscence, person-centered care, and meaningful engagement
-💻 Digital Access Tools like downloadable discussion guides, activity templates, and reading prompts
-🤝 Partnerships with Long-Term Care Communities to build inclusive, life-enriching environments
+    new_about_us_text = clean_text_for_latin1("""Mindful Libraries is a collaborative initiative between Resense, Nana's Books, and Mirador
+Magazine, designed to bring adaptive, nostalgic reading experiences to individuals living
+with dementia. This innovative program provides:
+- Curated Libraries of dementia-friendly newspapers, books, and magazines
+- Staff Training accredited by NCCAP, focusing on reminiscence, person-centered care,
+and meaningful engagement
+- Digital Access Tools like downloadable discussion guides, activity templates, and reading
+prompts
+- Partnerships with Long-Term Care Communities to build inclusive, life-enriching
+environments
 Mindful Libraries empowers care teams to reconnect residents with their pasts, spark joyful conversation, and foster dignity through storytelling and memory-based engagement.""")
     pdf.multi_cell(content_width_p2, 6, new_about_us_text, 0, 'L') # Left align for readability
-    pdf.ln(15) # More space after About Us text
+    pdf.ln(5) # Add space after About Us text
+
+    # New line for learning more
+    pdf.set_font("Arial", "B", 12) # Set font to bold for this line
+    pdf.multi_cell(content_width_p2, 7, clean_text_for_latin1("Learn more about our program at www.mindfullibraries.com"), 0, 'C') # Centered and bold
+    pdf.set_font("Arial", "", 12) # Reset font to normal
+    pdf.ln(10) # More space after this line
 
     # Logo - still centered horizontally on the page
     logo_width = 70
@@ -723,7 +733,7 @@ Mindful Libraries empowers care teams to reconnect residents with their pasts, s
     pdf.multi_cell(0, 7, clean_text_for_latin1("Email: thisdayinhistoryapp@gmail.com"), 0, 'C')
     pdf.multi_cell(0, 7, clean_text_for_latin1("Website: ThisDayInHistoryApp.com (Coming Soon!)"), 0, 'C')
     
-    # Add the bold website URL
+    # Original bold website URL, keep if intended to have two website mentions
     pdf.set_font("Arial", "B", 12) # Set font to bold
     pdf.multi_cell(0, 7, clean_text_for_latin1("www.mindfullibraries.com"), 0, 'C')
     pdf.set_font("Arial", "", 12) # Reset font to normal
@@ -859,12 +869,12 @@ def show_main_app_page():
     st.write(data['fun_fact_section'])
 
     st.markdown("---")
-    st.subheader("🌟 Did You Know?")
+    st.subheader("🌟 Did You Know-") # Replaced ? with -
     for i, fact in enumerate(data['did_you_know_section']):
         st.write(f"- {fact}")
 
     st.markdown("---")
-    st.subheader("💬 Memory Lane Prompt")
+    st.subheader("💬 Memory Lane Prompt-") # Replaced ? with -
     st.write(data['memory_prompt_section'])
 
     st.markdown("---")
@@ -1207,11 +1217,11 @@ def show_login_register_page():
         st.write("No trivia questions available.")
 
 
-    st.markdown("### 🌟 Did You Know?")
+    st.markdown("### 🌟 Did You Know-") # Replaced ? with -
     for fact in example_data['did_you_know_section']:
         st.markdown(f"- {fact}")
 
-    st.markdown("### 💬 Memory Lane Prompt")
+    st.markdown("### 💬 Memory Lane Prompt-") # Replaced ? with -
     st.write(example_data['memory_prompt_section'])
 
     # Generate PDF bytes once for example content
@@ -1303,3 +1313,4 @@ if st.session_state['is_authenticated']:
         show_main_app_page()
 else: # Not authenticated, show login/register and January 1st example
     show_login_register_page()
+
