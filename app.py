@@ -366,10 +366,10 @@ def clean_text_for_latin1(text):
     text = text.replace('\u2013', '-')  # En dash
     text = text.replace('\u2014', '--') # Em dash
     text = text.replace('\u2026', '...') # Ellipsis
+    # Removed: text = text.replace('?', '-')  # DO NOT replace question marks with dashes
     text = text.replace('\u00e9', 'e')  # é (e acute)
     text = text.replace('\u00e2', 'a')  # â (a circumflex)
     text = text.replace('\u00e7', 'c')  # ç (c cedilla)
-    text = text.replace('?', '-') # Replace question marks with dashes
     # Add more replacements as needed for other common problematic characters
     
     # Fallback for any remaining non-latin-1 characters (replace with '?')
@@ -645,6 +645,7 @@ def generate_full_history_pdf(data, today_date_str, user_info): # Removed dement
 
     # Loop through the first 4 trivia questions for the PDF
     for i, item in enumerate(data['trivia_section'][:4]): # Limit to 4 questions for PDF
+        # Ensure question marks are preserved by not replacing them in clean_text_for_latin1
         question_text_clean = clean_text_for_latin1(f"{chr(97+i)}. {item['question']}")
         answer_text_clean = clean_text_for_latin1(f"Answer: {item['answer']}")
         hint_text_clean = clean_text_for_latin1(f"Hint: {item['hint']}")
@@ -689,10 +690,10 @@ def generate_full_history_pdf(data, today_date_str, user_info): # Removed dement
     current_y_col2 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
     pdf.set_y(current_y_col2)
 
-    # Did You Know-
+    # Did You Know? - Title now ends with '?'
     if data['did_you_know_section']:
         pdf.set_font("Arial", "B", section_title_font_size)
-        pdf.multi_cell(col_width, line_height_normal, "Did You Know-") # Replaced ? with -
+        pdf.multi_cell(col_width, line_height_normal, "Did You Know?") # Changed to '?'
         current_y_col2 += line_height_normal
         pdf.set_font("Arial", "", article_text_font_size)
         for item in data['did_you_know_section']:
@@ -702,10 +703,10 @@ def generate_full_history_pdf(data, today_date_str, user_info): # Removed dement
         current_y_col2 += section_spacing_normal # Spacing after section
         pdf.set_y(current_y_col2)
 
-    # Memory Prompt-
+    # Memory Prompt? - Title now ends with '?'
     if data['memory_prompt_section']:
         pdf.set_font("Arial", "B", section_title_font_size)
-        pdf.multi_cell(col_width, line_height_normal, "Memory Prompt-") # Replaced ? with -
+        pdf.multi_cell(col_width, line_height_normal, "Memory Prompt?") # Changed to '?'
         current_y_col2 += line_height_normal
         pdf.set_font("Arial", "", article_text_font_size)
         # Iterate and display up to the first 3 memory prompts for PDF
@@ -896,12 +897,12 @@ def show_main_app_page():
     st.write(data['fun_fact_section'])
 
     st.markdown("---")
-    st.subheader("🌟 Did You Know-") # Replaced ? with -
+    st.subheader("🌟 Did You Know?") # Changed to '?'
     for i, fact in enumerate(data['did_you_know_section']):
         st.write(f"- {fact}")
 
     st.markdown("---")
-    st.subheader("💬 Memory Lane Prompt-") # Replaced ? with -
+    st.subheader("💬 Memory Lane Prompt?") # Changed to '?'
     # Iterate and display each memory prompt without hyphens
     if data['memory_prompt_section']:
         for prompt_text in data['memory_prompt_section']:
@@ -1018,6 +1019,7 @@ def show_trivia_page():
             q_state = st.session_state['trivia_question_states'][question_key_base]
 
             st.markdown(f"---")
+            # Ensure question marks are preserved by not replacing them in clean_text_for_latin1
             st.markdown(f"**Question {i+1}:** {trivia_item['question']}")
 
             col_input, col_check, col_hint = st.columns([0.6, 0.2, 0.2])
@@ -1250,11 +1252,11 @@ def show_login_register_page():
         st.write("No trivia questions available.")
 
 
-    st.markdown("### 🌟 Did You Know-") # Replaced ? with -
+    st.markdown("### 🌟 Did You Know?") # Changed to '?'
     for fact in example_data['did_you_know_section']:
         st.markdown(f"- {fact}")
 
-    st.markdown("### 💬 Memory Lane Prompt-") # Replaced ? with -
+    st.markdown("### 💬 Memory Lane Prompt?") # Changed to '?'
     # Iterate and display each memory prompt for example data without hyphens
     if example_data['memory_prompt_section']:
         for prompt_text in example_data['memory_prompt_section']:
@@ -1334,3 +1336,4 @@ if st.session_state['is_authenticated']:
         show_main_app_page()
 else: # Not authenticated, show login/register and January 1st example
     show_login_register_page()
+
