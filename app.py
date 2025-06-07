@@ -431,8 +431,9 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
 
     local_history_clause = ""
     if local_city and local_state_country:
+        # Modified prompt for local history
         local_history_clause = f"""
-    7. Local History Fact: Provide one significant historical fact that occurred on this day in {local_city}, {local_state_country}. If no specific event is available, provide a general historical fact about {local_city}, {local_state_country} or its founding/development, or a relevant local custom/tradition.
+    7. Local History Fact: Provide one significant historical fact that occurred on this day in {local_city}, {local_state_country}. If no specific event is available for this *exact date*, then provide a general historical fact about {local_city}, {local_state_country} (e.g., related to its founding, a major historical event, or a significant person). In all cases, *always include the specific date or year* of the fact within the fact itself. If no relevant historical fact can be found *at all* for the location, then state: "No relevant historical fact found for {local_city}, {local_state_country}."
     """
 
     prompt = f"""
@@ -541,7 +542,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
             ]
 
         # Extract Local History Fact
-        local_history_fact = "No local history fact found."
+        local_history_fact = "No relevant historical fact found for your location." # Default if not found by AI
         if local_history_clause: # Only try to find if clause was included in prompt
             local_history_match = re.search(r"7\. Local History Fact:\s*(.*?)(?=\n\Z|$)", content, re.DOTALL)
             if local_history_match:
@@ -737,32 +738,28 @@ def generate_full_history_pdf(data, today_date_str, user_info): # Removed dement
         pdf.set_y(current_y_col2)
 
     # Local History (if available) - This section will now rely on auto_page_break
-    if data['local_history_section'] and data['local_history_section'] != "No local history fact found.":
+    # It will only be displayed if it's not one of the "not found" messages.
+    if data['local_history_section'] and \
+       not data['local_history_section'].startswith("Could not fetch local history") and \
+       not data['local_history_section'].startswith("No relevant historical fact found"):
         pdf.set_font("Arial", "B", section_title_font_size)
-        # Determine which column has more space and use that one.
-        # We will now rely on auto_page_break if it doesn't fit in either column.
         
         # Calculate available space in each column.
-        # Use the current Y position of the PDF object, not the tracked column Y,
-        # as content may have flowed or manual line breaks occurred.
-        current_y_after_main_content = pdf.get_y() 
-
+        current_y_after_main_content = max(current_y_col1, current_y_col2) # Get the lowest point of content in either column
+        
         # Temporarily save current margins and x to restore after local history section
         original_left_margin = pdf.l_margin
         original_right_margin = pdf.r_margin
         original_x = pdf.x
 
-        # If current Y is too close to bottom of page (arbitrary threshold, e.g., 20mm from bottom margin)
-        # and we know the local history content might be long, we could manually add_page here.
-        # However, for now, let's rely on auto_page_break for simplicity and avoid extra blank pages.
-        
-        # Set margins for the local history section (single column, full width)
+        # Reset margins for single column local history display
         pdf.set_left_margin(left_margin)
         pdf.set_right_margin(right_margin)
         pdf.set_x(left_margin) # Reset X to left margin
 
-        # Print the Local History content. auto_page_break will handle new pages if content overflows.
-        pdf.set_y(current_y_after_main_content + section_spacing_normal) # Place after existing content with some spacing
+        # Set Y to the max of current column Ys, then add some spacing
+        pdf.set_y(current_y_after_main_content + section_spacing_normal) 
+
         pdf.multi_cell(content_width, line_height_normal, "Local History:")
         pdf.set_font("Arial", "", article_text_font_size)
         pdf.multi_cell(content_width, line_height_normal, clean_text_for_latin1(data['local_history_section']))
@@ -954,16 +951,18 @@ def show_main_app_page():
     st.subheader("💡 Fun Fact")
     st.write(data['fun_fact_section'])
 
-    # Display Local History if available and not default "not found" message
-    if data['local_history_section'] and data['local_history_section'] != "No local history fact found." and not data['local_history_section'].startswith("Could not fetch local history"):
+    # Display Local History if available and not the "not found" messages
+    if data['local_history_section'] and \
+       not data['local_history_section'].startswith("Could not fetch local history") and \
+       not data['local_history_section'].startswith("No relevant historical fact found"):
         st.markdown("---")
         st.subheader("📍 Local History")
         st.write(data['local_history_section'])
     elif st.session_state['local_city'].strip() or st.session_state['local_state_country'].strip():
-        # Display a message if local history was requested but not found
+        # Display a message if local history was requested but not found (either API error or AI couldn't find anything)
         st.markdown("---")
         st.subheader("📍 Local History")
-        st.info(data['local_history_section']) # This will show the "Could not fetch..." message
+        st.info(data['local_history_section']) # This will show the "Could not fetch..." or "No relevant..." message
 
     st.markdown("---")
     st.subheader("🌟 Did You Know?") # Changed to '?'
@@ -1328,16 +1327,18 @@ def show_login_register_page():
     st.markdown("### 💡 Fun Fact")
     st.write(example_data['fun_fact_section'])
 
-    # Display Local History if available and not default "not found" message
-    if example_data['local_history_section'] and example_data['local_history_section'] != "No local history fact found." and not example_data['local_history_section'].startswith("Could not fetch local history"):
+    # Display Local History if available and not the "not found" messages
+    if example_data['local_history_section'] and \
+       not example_data['local_history_section'].startswith("Could not fetch local history") and \
+       not example_data['local_history_section'].startswith("No relevant historical fact found"):
         st.markdown("---")
         st.subheader("📍 Local History")
         st.write(example_data['local_history_section'])
     elif st.session_state['local_city'].strip() or st.session_state['local_state_country'].strip():
-        # Display a message if local history was requested but not found
+        # Display a message if local history was requested but not found (either API error or AI couldn't find anything)
         st.markdown("---")
         st.subheader("📍 Local History")
-        st.info(example_data['local_history_section']) # This will show the "Could not fetch..." message
+        st.info(example_data['local_history_section']) # This will show the "Could not fetch..." or "No relevant..." message
 
 
     st.markdown("### 🧠 Test Your Knowledge!")
