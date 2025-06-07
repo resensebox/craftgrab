@@ -15,7 +15,6 @@ if 'is_authenticated' not in st.session_state:
     st.session_state['is_authenticated'] = False
 if 'logged_in_username' not in st.session_state:
     st.session_state['logged_in_username'] = ""
-# Removed 'dementia_mode' from session state
 if 'current_page' not in st.session_state:
     st.session_state['current_page'] = 'main_app' # Default page for authenticated users
 if 'daily_data' not in st.session_state: # Store daily data to avoid re-fetching on page switch
@@ -34,6 +33,10 @@ if 'score_logged_today' not in st.session_state:
     st.session_state['score_logged_today'] = False
 if 'difficulty' not in st.session_state: # New session state for difficulty
     st.session_state['difficulty'] = 'Medium' # Default difficulty
+if 'local_city' not in st.session_state:
+    st.session_state['local_city'] = ""
+if 'local_state_country' not in st.session_state:
+    st.session_state['local_state_country'] = ""
 
 
 # --- Custom CSS for Sidebar Styling and Default App Theme (Black) ---
@@ -404,16 +407,14 @@ def generate_related_trivia_article(question, answer, _ai_client):
 
 
 # --- This Day in History Logic ---
-def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_client, preferred_decade=None, topic=None, difficulty='Medium'):
+def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_client, preferred_decade=None, topic=None, difficulty='Medium', local_city=None, local_state_country=None):
     """
     Generates 'This Day in History' facts using OpenAI API with specific content requirements.
-    Incorporates customization options for decade, topic, and difficulty.
+    Incorporates customization options for decade, topic, difficulty, and local history.
     """
     current_date_str = f"{current_month:02d}-{current_day:02d}"
 
-    # Adjust parameters based on difficulty for Trivia Questions ONLY
-    # Main articles word count and language tone do not change with difficulty
-    event_word_count, born_word_count = 300, 150 # Increased event_word_count by 100 words
+    event_word_count, born_word_count = 300, 150
     trivia_complexity = ""
     if difficulty == 'Easy':
         trivia_complexity = "very well-known facts, common knowledge"
@@ -422,16 +423,17 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
     else: # Medium
         trivia_complexity = "general historical facts, moderately challenging"
 
-    # Build prompt for event and born date ranges
     event_year_range = "between the years 1800 and 1960"
     born_year_range = "between 1800 and 1970"
 
-    # Add topic customization to prompt if selected
     topic_clause = f" focusing on {topic}" if topic else ""
-    
-    # Add decade customization to prompt if selected (AI may need more fine-tuning to adhere perfectly)
     decade_clause = f" specifically from the {preferred_decade}" if preferred_decade and preferred_decade != "None" else ""
 
+    local_history_clause = ""
+    if local_city and local_state_country:
+        local_history_clause = f"""
+    7. Local History Fact: Provide one significant historical fact that occurred on this day in {local_city}, {local_state_country}. If no specific event is available, provide a general historical fact about {local_city}, {local_state_country} or its founding/development, or a relevant local custom/tradition.
+    """
 
     prompt = f"""
     You are an assistant generating 'This Day in History' facts for {current_date_str}.
@@ -443,6 +445,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
     4. Trivia Questions: Provide five concise, direct trivia questions based on today’s date. These should be actual questions that require a factual answer, and should not be "Did You Know?" statements or prompts for reflection. Topics can include history, famous birthdays, pop culture, or global events. The questions should be {trivia_complexity}. For each question, provide the correct answer in parentheses and a short, distinct hint in square brackets (e.g., "What year did the Berlin Wall fall? (1989) [Hint: Cold War era]").
     5. Did You Know?: Provide three "Did You Know?" facts related to nostalgic content (e.g., old prices, inventions, fashion facts) from past decades (e.g., 1930s-1970s).
     6. Memory Prompts: Provide **two to three** engaging questions to encourage reminiscing and conversation. Each prompt should be a complete sentence or question, without leading hyphens or bullet points in the raw output, ready to be formatted as paragraphs. (e.g., "Do you remember your first concert?", "What was your favorite childhood game?", "What's a memorable school event from your youth?").
+    {local_history_clause}
 
     Format your response clearly with these headings. Ensure articles are within the specified word counts.
     """
@@ -459,7 +462,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         fun_fact_match = re.search(r"3\. Fun Fact:\s*(.*?)(?=\n4\. Trivia Questions:|\Z)", content, re.DOTALL)
         
         # Updated regex for Memory Prompt to capture multiple lines, allowing for paragraph form
-        memory_prompt_match = re.search(r"6\. Memory Prompts:\s*(.*?)(?=\n\Z|$)", content, re.DOTALL)
+        memory_prompt_match = re.search(r"6\. Memory Prompts:\s*(.*?)(?=\n7\. Local History Fact:|\Z|$)", content, re.DOTALL)
 
         # Special handling for Trivia Questions to extract questions, answers, and hints
         trivia_questions = []
@@ -537,6 +540,13 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
                 "What's a happy moment from your past week?"
             ]
 
+        # Extract Local History Fact
+        local_history_fact = "No local history fact found."
+        if local_history_clause: # Only try to find if clause was included in prompt
+            local_history_match = re.search(r"7\. Local History Fact:\s*(.*?)(?=\n\Z|$)", content, re.DOTALL)
+            if local_history_match:
+                local_history_fact = local_history_match.group(1).strip()
+
 
         return {
             'event_article': event_article,
@@ -544,7 +554,8 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
             'fun_fact_section': fun_fact_section,
             'trivia_section': trivia_questions, # Now a list of dicts {question, answer, hint}
             'did_you_know_section': did_you_know_lines,
-            'memory_prompt_section': memory_prompts_list # Now a list of prompts
+            'memory_prompt_section': memory_prompts_list, # Now a list of prompts
+            'local_history_section': local_history_fact # New local history fact
         }
     except Exception as e:
         st.error(f"Error generating history: {e}")
@@ -554,7 +565,8 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
             'fun_fact_section': "Could not fetch fun fact.",
             'trivia_section': [], # Empty list if error
             'did_you_know_section': ["No 'Did You Know?' facts available for today. Please try again or adjust preferences."], # Ensure default content
-            'memory_prompt_section': ["No memory prompts available.", "Consider your favorite childhood memory.", "What's a happy moment from your past week?"]
+            'memory_prompt_section': ["No memory prompts available.", "Consider your favorite childhood memory.", "What's a happy moment from your past week?"],
+            'local_history_section': "Could not fetch local history for your area. Please check your location settings or try again."
         }
 
 def generate_full_history_pdf(data, today_date_str, user_info): # Removed dementia_mode parameter
@@ -719,13 +731,36 @@ def generate_full_history_pdf(data, today_date_str, user_info): # Removed dement
         current_y_col2 += section_spacing_normal # Spacing after section
         pdf.set_y(current_y_col2)
 
+    # Local History (if available)
+    if data['local_history_section'] and data['local_history_section'] != "No local history fact found.":
+        pdf.set_font("Arial", "B", section_title_font_size)
+        # Check if there's enough space in column 2, otherwise move to column 1 or next page
+        if current_y_col2 < pdf.h - 40: # If enough space remaining on current page in column 2
+            pdf.set_y(current_y_col2)
+            pdf.multi_cell(col_width, line_height_normal, "Local History:")
+            pdf.set_font("Arial", "", article_text_font_size)
+            pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['local_history_section']))
+        elif current_y_col1 < pdf.h - 40: # If not, try column 1
+            pdf.set_xy(left_margin, current_y_col1) # Switch back to column 1
+            pdf.multi_cell(col_width, line_height_normal, "Local History:")
+            pdf.set_font("Arial", "", article_text_font_size)
+            pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['local_history_section']))
+        else: # Otherwise, add a new page
+            pdf.add_page()
+            pdf.set_left_margin(left_margin)
+            pdf.set_right_margin(right_margin)
+            pdf.set_x(left_margin)
+            pdf.set_y(20) # Start further down on the new page
+            pdf.set_font("Arial", "B", section_title_font_size)
+            pdf.multi_cell(content_width, line_height_normal, "Local History:")
+            pdf.set_font("Arial", "", article_text_font_size)
+            pdf.multi_cell(content_width, line_height_normal, clean_text_for_latin1(data['local_history_section']))
+
 
     # --- Page 2 Content ---
-    pdf.add_page()
-    # Set new, better margins for page 2 content
-    left_margin_p2 = 25
-    right_margin_p2 = 25
-    content_width_p2 = page_width - left_margin_p2 - right_margin_p2
+    # Ensure a new page if content from page 1 flows too much or if local history caused a new page
+    if pdf.get_y() > pdf.h - 40: # If near bottom of current page
+        pdf.add_page()
 
     pdf.set_left_margin(left_margin_p2)
     pdf.set_right_margin(right_margin_p2)
@@ -861,7 +896,9 @@ def show_main_app_page():
     current_data_key = f"{selected_date.strftime('%Y-%m-%d')}-{st.session_state['logged_in_username']}-" \
                        f"{st.session_state.get('preferred_topic_main_app', 'None')}-" \
                        f"{st.session_state.get('preferred_decade_main_app', 'None')}-" \
-                       f"trivia_difficulty_{st.session_state['difficulty']}" # Still include trivia difficulty so data regenerates if it changes
+                       f"trivia_difficulty_{st.session_state['difficulty']}-" \
+                       f"local_city_{st.session_state['local_city']}-" \
+                       f"local_state_country_{st.session_state['local_state_country']}"
 
     if st.session_state['last_fetched_date'] != current_data_key or st.session_state['daily_data'] is None:
         with st.spinner("Fetching today's historical facts and generating content..."):
@@ -869,7 +906,9 @@ def show_main_app_page():
                 day, month, user_info, client_ai, 
                 topic=st.session_state.get('preferred_topic_main_app') if st.session_state.get('preferred_topic_main_app') != "None" else None,
                 preferred_decade=st.session_state.get('preferred_decade_main_app') if st.session_state.get('preferred_decade_main_app') != "None" else None,
-                difficulty=st.session_state['difficulty'] # Pass the selected difficulty to generate trivia
+                difficulty=st.session_state['difficulty'], # Pass the selected difficulty to generate trivia
+                local_city=st.session_state['local_city'] if st.session_state['local_city'].strip() else None,
+                local_state_country=st.session_state['local_state_country'] if st.session_state['local_state_country'].strip() else None
             )
             st.session_state['last_fetched_date'] = current_data_key
             st.session_state['trivia_question_states'] = {} # Reset trivia states for new day's data
@@ -897,6 +936,17 @@ def show_main_app_page():
     st.markdown("---")
     st.subheader("💡 Fun Fact")
     st.write(data['fun_fact_section'])
+
+    # Display Local History if available and not default "not found" message
+    if data['local_history_section'] and data['local_history_section'] != "No local history fact found." and not data['local_history_section'].startswith("Could not fetch local history"):
+        st.markdown("---")
+        st.subheader("📍 Local History")
+        st.write(data['local_history_section'])
+    elif st.session_state['local_city'].strip() or st.session_state['local_state_country'].strip():
+        # Display a message if local history was requested but not found
+        st.markdown("---")
+        st.subheader("📍 Local History")
+        st.info(data['local_history_section']) # This will show the "Could not fetch..." message
 
     st.markdown("---")
     st.subheader("🌟 Did You Know?") # Changed to '?'
@@ -976,7 +1026,10 @@ def show_trivia_page():
     data_key_for_trivia_regen = f"{current_selected_date.strftime('%Y-%m-%d')}-{st.session_state['logged_in_username']}-" \
                                f"{st.session_state.get('preferred_topic_main_app', 'None')}-" \
                                f"{st.session_state.get('preferred_decade_main_app', 'None')}-" \
-                               f"trivia_difficulty_{st.session_state['difficulty']}"
+                               f"trivia_difficulty_{st.session_state['difficulty']}-" \
+                               f"local_city_{st.session_state['local_city']}-" \
+                               f"local_state_country_{st.session_state['local_state_country']}"
+
 
     # Only re-fetch if the selected difficulty or date has changed
     if st.session_state['last_fetched_date'] != data_key_for_trivia_regen:
@@ -986,7 +1039,9 @@ def show_trivia_page():
                 {'name': st.session_state['logged_in_username']}, client_ai, 
                 topic=st.session_state.get('preferred_topic_main_app') if st.session_state.get('preferred_topic_main_app') != "None" else None,
                 preferred_decade=st.session_state.get('preferred_decade_main_app') if st.session_state.get('preferred_decade_main_app') != "None" else None,
-                difficulty=st.session_state['difficulty']
+                difficulty=st.session_state['difficulty'],
+                local_city=st.session_state['local_city'] if st.session_state['local_city'].strip() else None,
+                local_state_country=st.session_state['local_state_country'] if st.session_state['local_state_country'].strip() else None
             )
             st.session_state['last_fetched_date'] = data_key_for_trivia_regen # Update fetched key
             st.session_state['trivia_question_states'] = {} # Reset trivia states for new difficulty's data
@@ -1111,7 +1166,7 @@ def show_trivia_page():
             # Add expander for related article - ONLY show if out of chances
             if q_state.get('out_of_chances', False):
                 with st.expander(f"Show Explanation for Q{i+1}"):
-                    if q_state['related_article_content'] is None: # Corrected from === to is
+                    if q_state['related_article_content'] is None:
                         # Generate article if it hasn't been generated yet
                         with st.spinner("Generating explanation..."):
                             generated_article = generate_related_trivia_article(
@@ -1236,7 +1291,15 @@ def show_login_register_page():
     # For the example, use a default difficulty (e.g., 'Medium') as it's not user-selectable here
     
     with st.spinner("Loading example content..."):
-        example_data = get_this_day_in_history_facts(january_1st_example_date.day, january_1st_example_date.month, example_user_info, client_ai, difficulty='Medium')
+        example_data = get_this_day_in_history_facts(
+            january_1st_example_date.day, 
+            january_1st_example_date.month, 
+            example_user_info, 
+            client_ai, 
+            difficulty='Medium',
+            local_city=st.session_state['local_city'] if st.session_state['local_city'].strip() else None,
+            local_state_country=st.session_state['local_state_country'] if st.session_state['local_state_country'].strip() else None
+        )
 
     st.markdown(f"### ✨ A Look Back at {january_1st_example_date.strftime('%B %d')}")
     st.markdown("### 🗓️ Significant Event")
@@ -1247,6 +1310,18 @@ def show_login_register_page():
 
     st.markdown("### 💡 Fun Fact")
     st.write(example_data['fun_fact_section'])
+
+    # Display Local History if available and not default "not found" message
+    if example_data['local_history_section'] and example_data['local_history_section'] != "No local history fact found." and not example_data['local_history_section'].startswith("Could not fetch local history"):
+        st.markdown("---")
+        st.subheader("📍 Local History")
+        st.write(example_data['local_history_section'])
+    elif st.session_state['local_city'].strip() or st.session_state['local_state_country'].strip():
+        # Display a message if local history was requested but not found
+        st.markdown("---")
+        st.subheader("📍 Local History")
+        st.info(example_data['local_history_section']) # This will show the "Could not fetch..." message
+
 
     st.markdown("### 🧠 Test Your Knowledge!")
     # Loop through the first 4 trivia questions for the example PDF
@@ -1325,8 +1400,18 @@ if st.session_state['is_authenticated']:
     )
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("Local History (Planned)")
-    st.sidebar.info("Integrating local historical facts specific to your area is a planned feature. This would require a separate local history database.")
+    st.sidebar.subheader("📍 Local History Settings")
+    st.session_state['local_city'] = st.sidebar.text_input(
+        "Your City (Optional)",
+        value=st.session_state['local_city'],
+        key='sidebar_local_city'
+    )
+    st.session_state['local_state_country'] = st.sidebar.text_input(
+        "Your State/Country (Optional)",
+        value=st.session_state['local_state_country'],
+        key='sidebar_local_state_country'
+    )
+    st.sidebar.info("Integrating local historical facts specific to your area. Please fill in both fields for best results.")
     
     st.sidebar.markdown("---")
     if st.sidebar.button("🚪 Log Out", key="sidebar_logout_btn"):
