@@ -560,7 +560,7 @@ def show_trivia_page():
                                     q_state['points_earned'] = 0 # Explicitly set to 0
                             else:
                                 q_state['feedback'] = f"❌ Incorrect. Try again! (Attempts: {q_state['attempts']}/3)"
-                        st.rerun() # Rerun to update feedback/disable input immediately
+                        # No st.rerun() needed here; button click triggers rerun automatically
 
             with col_hint:
                 # Show hint button only if not correct, not out of chances, hints remaining, not already revealed, and hint content exists
@@ -568,8 +568,7 @@ def show_trivia_page():
                     if st.button(f"Hint ({st.session_state['hints_remaining']})", key=f"hint_btn_{question_key_base}"):
                         st.session_state['hints_remaining'] -= 1
                         q_state['hint_revealed'] = True
-                        # st.info(f"Hint: {trivia_item['hint']}") # This will be handled by the feedback section below
-                        st.rerun() # Rerun to update hint count and hide button
+                        # No st.rerun() needed here; button click triggers rerun automatically
                 # Always display hint if it was revealed for this question AND hint content exists
                 elif q_state['hint_revealed'] and trivia_item.get('hint'):
                     st.info(f"Hint: {trivia_item['hint']}")
@@ -585,6 +584,16 @@ def show_trivia_page():
                     st.error(q_state['feedback'])
                 else: # Incorrect but still has chances
                     st.error(q_state['feedback'])
+
+            # Add expander for article context
+            with st.expander(f"Show Article Context for Q{i+1}"):
+                if st.session_state['daily_data']:
+                    st.markdown("##### Significant Event Article:")
+                    st.write(st.session_state['daily_data']['event_article'])
+                    st.markdown("##### Born on this Day Article:")
+                    st.write(st.session_state['daily_data']['born_article'])
+                else:
+                    st.info("No daily data available to show article context.")
             
         st.markdown("---")
         # Check if all questions are answered correctly or out of chances
