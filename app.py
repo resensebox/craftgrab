@@ -1087,13 +1087,19 @@ def show_main_app_page():
     st.subheader(translate_text_with_ai(f"✨ A Look Back at {selected_date.strftime('%B %d')}", st.session_state['preferred_language'], client_ai))
 
     # New note for scrolling down to download/print at the top of the main page
-    st.info(translate_text_with_ai("""💡 Scroll down to download and print your This Day In History worksheet! 
+st.info(
+    translate_text_with_ai(
+        """💡 Scroll down to download and print your This Day In History worksheet! 
 You can download each day's content as a printable PDF—perfect for sharing with your residents or using in group activities!
 Want to make it your own? You can even customize the masthead to match your community—try something fun like Arbor Courts Gazette or The Morning Maple 🍁.
 
 🌍 Need another language? Use the left-hand menu to translate the entire page and your downloadable PDF.
-👉 Click here to choose your language.
-""")), st.session_state['preferred_language'], client_ai))
+👉 Click here to choose your language.""",
+        st.session_state['preferred_language'],
+        client_ai
+    )
+)
+
 
     st.markdown("---")
     st.subheader(translate_text_with_ai("🗓️ Significant Event", st.session_state['preferred_language'], client_ai))
