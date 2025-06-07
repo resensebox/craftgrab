@@ -52,6 +52,8 @@ if 'local_state_country' not in st.session_state:
     st.session_state['local_state_country'] = ""
 if 'preferred_language' not in st.session_state:
     st.session_state['preferred_language'] = 'English' # Default language
+if 'custom_masthead_text' not in st.session_state: # NEW: Custom masthead text for PDF
+    st.session_state['custom_masthead_text'] = ""
 
 
 # --- Custom CSS for Sidebar Styling and Default App Theme (Black) ---
@@ -700,7 +702,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
             'local_history_section': "Could not fetch local history for your area. Please check your location settings or try again."
         }
 
-def generate_full_history_pdf(data, today_date_str, user_info, current_language="English"): # Added current_language parameter
+def generate_full_history_pdf(data, today_date_str, user_info, current_language="English", custom_masthead_text=None): # Added custom_masthead_text parameter
     """
     Generates a PDF of 'This Day in History' facts, formatted over two pages.
     Page 1: Two-column layout with daily content.
@@ -737,7 +739,10 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     pdf.set_y(10) # Start from top
     pdf.set_x(left_margin)
     pdf.set_font("Times", "B", title_font_size) # Large, bold font for the title
-    pdf.cell(0, 15, clean_text_for_latin1(translate_text_with_ai("The Daily Resense Register", current_language, client_ai)), align='C') # Translated
+    
+    # Use custom masthead text if provided, otherwise default
+    masthead_to_display = custom_masthead_text if custom_masthead_text and custom_masthead_text.strip() else "The Daily Resense Register"
+    pdf.cell(0, 15, clean_text_for_latin1(translate_text_with_ai(masthead_to_display, current_language, client_ai)), align='C') # Translated
     pdf.ln(15)
 
     # Separator line
@@ -1126,11 +1131,23 @@ def show_main_app_page():
         st.write(translate_text_with_ai("No memory prompts available.", st.session_state['preferred_language'], client_ai))
 
     st.markdown("---")
+
+    st.subheader(translate_text_with_ai("PDF Customization", st.session_state['preferred_language'], client_ai))
+    st.session_state['custom_masthead_text'] = st.text_input(
+        translate_text_with_ai("Optional: Custom Masthead for PDF (e.g., Your Company Name, Care Community Name)", st.session_state['preferred_language'], client_ai),
+        value=st.session_state['custom_masthead_text'],
+        help=translate_text_with_ai("Leave blank to use the default 'The Daily Resense Register'.", st.session_state['preferred_language'], client_ai),
+        key="custom_masthead_input"
+    )
     
     # Generate PDF bytes once
     with st.spinner(translate_text_with_ai("Preparing your PDF worksheet...", st.session_state['preferred_language'], client_ai)):
         pdf_bytes_main = generate_full_history_pdf(
-            raw_data_for_pdf, selected_date.strftime('%B %d, %Y'), user_info, st.session_state['preferred_language'] # Pass raw_data_for_pdf and language
+            raw_data_for_pdf, 
+            selected_date.strftime('%B %d, %Y'), 
+            user_info, 
+            st.session_state['preferred_language'],
+            st.session_state['custom_masthead_text'] # Pass the custom masthead text
         )
     
     # Create Base64 encoded link
@@ -1349,8 +1366,8 @@ def show_trivia_page():
                 else: # Incorrect but still has chances
                     st.error(q_state['feedback'])
 
-            # Add expander for related article - ONLY show if out of chances
-            if q_state.get('out_of_chances', False):
+            # Add expander for related article - ONLY show if out of chances or correct
+            if q_state.get('out_of_chances', False) or q_state['is_correct']: # Show explanation if correct OR out of chances
                 with st.expander(translate_text_with_ai(f"Show Explanation for Q{i+1}", st.session_state['preferred_language'], client_ai)):
                     if q_state['related_article_content'] is None:
                         # Generate article in English first
@@ -1546,7 +1563,12 @@ def show_login_register_page():
     # Generate PDF bytes once for example content
     with st.spinner(translate_text_with_ai("Preparing example PDF...", st.session_state['preferred_language'], client_ai)):
         pdf_bytes_example = generate_full_history_pdf(
-            fetched_raw_example_data, january_1st_example_date.strftime('%B %d, %Y'), example_user_info, st.session_state['preferred_language'] # Pass raw data and language
+            fetched_raw_example_data, 
+            january_1st_example_date.strftime('%B %d, %Y'), 
+            example_user_info, 
+            st.session_state['preferred_language'],
+            # No custom masthead for the example PDF, so pass None or empty string
+            "" 
         )
 
     # Create Base64 encoded link for example content
