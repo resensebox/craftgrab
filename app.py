@@ -35,7 +35,6 @@ def log_event(event_type, username):
     except Exception as e:
         st.warning(f"⚠️ Could not log event '{event_type}' for '{username}': {e}")
 
-
 def save_new_user_to_sheet(username, password, email):
     try:
         sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
@@ -48,6 +47,24 @@ def save_new_user_to_sheet(username, password, email):
     except Exception as e:
         st.warning(f"⚠️ Could not register user '{username}': {e}")
 
+# Function to retrieve user data from Google Sheet
+def get_users_from_sheet():
+    try:
+        sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
+        ws = sheet.worksheet("Users")
+        # Get all records as a list of dictionaries
+        users_data = ws.get_all_records()
+        # Convert to a dictionary for easy lookup: {username: password}
+        users_dict = {row['Username']: row['Password'] for row in users_data if 'Username' in row and 'Password' in row}
+        return users_dict
+    except gspread.exceptions.WorksheetNotFound:
+        st.warning("⚠️ 'Users' worksheet not found. No registered users.")
+        return {}
+    except Exception as e:
+        st.error(f"❌ Error retrieving users from Google Sheet: {e}")
+        return {}
+
+
 if "OPENAI_API_KEY" not in st.secrets:
     st.error("❌ OPENAI_API_KEY is missing from Streamlit secrets.")
     st.stop()
@@ -58,10 +75,6 @@ if 'is_authenticated' not in st.session_state:
     st.session_state['is_authenticated'] = False
 if 'logged_in_username' not in st.session_state:
     st.session_state['logged_in_username'] = ""
-
-# --- Dummy User Store (in production, use Google Sheets or database) ---
-USERS = {"demo": "demo123"}
-
 
 # --- This Day in History Logic ---
 def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_client, max_retries=2):
@@ -182,6 +195,8 @@ else:
             username = st.text_input("Username")
             password = st.text_input("Password", type="password")
             if st.form_submit_button("Log In"):
+                # Get users from Google Sheet
+                USERS = get_users_from_sheet() 
                 if username in USERS and USERS[username] == password:
                     st.session_state['is_authenticated'] = True
                     st.session_state['logged_in_username'] = username
@@ -197,14 +212,19 @@ else:
             new_email = st.text_input("Email")
             new_password = st.text_input("New Password", type="password")
             confirm_password = st.text_input("Confirm Password", type="password")
-            if st.form_submit_button("Register"): # Corrected indentation for the submit button
+            if st.form_submit_button("Register"):
                 if new_password == confirm_password:
-                    save_new_user_to_sheet(new_username, new_password, new_email) # Corrected function call
-                    st.session_state['is_authenticated'] = True
-                    st.session_state['logged_in_username'] = new_username
-                    st.success("Account created!")
-                    log_event("register", new_username)
-                    st.rerun()
+                    # Check if username already exists
+                    USERS_EXISTING = get_users_from_sheet()
+                    if new_username in USERS_EXISTING:
+                        st.error("Username already exists. Please choose a different username.")
+                    else:
+                        save_new_user_to_sheet(new_username, new_password, new_email)
+                        st.session_state['is_authenticated'] = True
+                        st.session_state['logged_in_username'] = new_username
+                        st.success("Account created!")
+                        log_event("register", new_username)
+                        st.rerun()
                 else:
                     st.error("Passwords do not match.")
 
