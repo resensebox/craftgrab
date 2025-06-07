@@ -25,6 +25,30 @@ creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, s
 gs_client = gspread.authorize(creds)
 
 def log_event(event_type, username):
+    try:
+        sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
+        ws = sheet.worksheet("LoginLogs")
+        ws.append_row([
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            event_type,
+            username
+        ])
+    except Exception as e:
+        st.warning(f"⚠️ Could not log event '{event_type}' for '{username}': {e}")
+
+
+def save_new_user_to_sheet(username, password, email):
+    try:
+        sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
+        try:
+            ws = sheet.worksheet("Users")
+        except gspread.exceptions.WorksheetNotFound:
+            ws = sheet.add_worksheet(title="Users", rows="100", cols="3")
+            ws.append_row(["Username", "Password", "Email"])
+        ws.append_row([username, password, email])
+    except Exception as e:
+        st.warning(f"⚠️ Could not register user '{username}': {e}")
+
 def save_new_user_to_sheet(username, password, email):
     try:
         sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
@@ -190,6 +214,35 @@ else:
                     st.rerun()
                 else:
                     st.error("Invalid credentials.")
+    
+# --- Demo Preview on Login Page ---
+st.markdown("---")
+st.subheader("📋 Example: This Day in History")
+demo_user_info = {'name': 'Demo User', 'jobs': '', 'hobbies': '', 'decade': '', 'life_experiences': '', 'college_chapter': ''}
+demo_data = get_this_day_in_history_facts(6, 6, demo_user_info, client_ai)
+
+st.markdown(f"### ⭐ {demo_data['event_title']}")
+st.write(demo_data['event_article'])
+
+st.markdown("### 🎉 Born on this Day")
+st.write(demo_data['born_section'])
+
+st.markdown("### 💡 Fun Fact")
+st.write(demo_data['fun_fact_section'])
+
+st.markdown("### 🧠 Trivia")
+for q in demo_data['trivia_section']:
+    st.markdown(f"- {q}")
+
+if st.button("📄 Download Demo PDF"):
+    demo_pdf = generate_full_history_pdf(
+        demo_data['event_title'], demo_data['event_article'],
+        demo_data['born_section'], demo_data['fun_fact_section'],
+        demo_data['trivia_section'], "June 6", demo_user_info
+    )
+    st.download_button("Download Example PDF", demo_pdf, file_name="example_this_day_history.pdf")
+
+
     with register_tab:
         with st.form("register_form"):
             new_username = st.text_input("New Username")
