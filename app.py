@@ -686,49 +686,48 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     max_y_content = max(current_y_col1, current_y_col2)
     
     # Calculate required footer height (approximate)
-    footer_height_estimate = 4 * 4 + 10 # 4 lines of text + some line breaks + logo height (approx 10mm) + spacing
+    # 25mm (logo height) + 2mm (logo buffer) + 4 lines * 4mm/line = 16mm (text) = 43mm
+    footer_height_estimate = 25 + 2 + (4 * 4) + 5 # Add extra 5mm for bottom spacing
 
     # Determine desired Y position for the footer
-    # Try to place it at the very bottom, respecting margins, but pull it up if content pushes it
     desired_y_footer = pdf.h - right_margin - footer_height_estimate
     
     # Ensure footer starts at least 15mm below the main content, but not too high
-    # And ensure it's not below the desired bottom position
     final_y_footer = max(max_y_content + 15, desired_y_footer) # Ensures it's always below content but also near bottom
+
+    # Adjust if current position is already past calculated final_y_footer (e.g., content ran long)
+    if pdf.get_y() > final_y_footer:
+        final_y_footer = pdf.get_y() + 5 # Add small buffer if current Y is already below target
 
     pdf.set_y(final_y_footer)
 
-    pdf.set_left_margin(left_margin)
-    pdf.set_right_margin(right_margin)
-    pdf.set_x(left_margin)
-    
-    # Enhanced Contact Information in PDF - Centered at the bottom
-    # Place logo and text side-by-side (using columns conceptually)
+    # Center the logo and text
+    pdf.set_left_margin(0) # Temporarily remove margins for centering
+    pdf.set_right_margin(0)
     
     # Logo dimensions
     logo_width = 25 # mm
     logo_height = 25 # mm, assuming square or proportional
 
     # Calculate X position for centered logo
-    # This will center the logo relative to the entire page width, not just the left column
     logo_x = (page_width - logo_width) / 2
     
-    # Need to save current Y before adding image and then move back if adding text next to it.
-    # For now, let's stack logo above centered text.
     pdf.image("https://i.postimg.cc/8CRsCGCC/Chat-GPT-Image-Jun-7-2025-12-32-18-AM.png", x=logo_x, y=pdf.get_y(), w=logo_width, h=logo_height)
     pdf.ln(logo_height + 2) # Move cursor down after logo, with a small buffer
 
+    # Center the text
+    pdf.set_x(0) # Reset X to 0 for full-width cell for centering
     pdf.set_font("Arial", "B", 8)
-    pdf.multi_cell(0, 4, "--- Mindful Libraries ---", align='C') # Changed name here
+    pdf.multi_cell(pdf.w, 4, "--- Mindful Libraries ---", align='C') # Full width cell for centering
     pdf.set_font("Arial", "", 7)
-    pdf.multi_cell(0, 4, "Email: thisdayinhistoryapp@gmail.com", align='C')
-    pdf.multi_cell(0, 4, "Website: ThisDayInHistoryApp.com (Coming Soon!)", align='C')
-    pdf.multi_cell(0, 4, "Phone: 412-212-6701 (For Support)", align='C') # Changed phone number here
+    pdf.multi_cell(pdf.w, 4, "Email: thisdayinhistoryapp@gmail.com", align='C')
+    pdf.multi_cell(pdf.w, 4, "Website: ThisDayInHistoryApp.com (Coming Soon!)", align='C')
+    pdf.multi_cell(pdf.w, 4, "Phone: 412-212-6701 (For Support)", align='C')
     pdf.ln(2)
 
     if not dementia_mode:
         pdf.set_font("Arial", "I", 8)
-        pdf.multi_cell(0, 4, clean_text_for_latin1(f"Generated for {user_info['name']}"), align='C')
+        pdf.multi_cell(pdf.w, 4, clean_text_for_latin1(f"Generated for {user_info['name']}"), align='C')
         
     return pdf.output(dest='S').encode('latin-1')
 
