@@ -108,9 +108,15 @@ def get_leaderboard_data():
             username = entry.get('Username')
             score = entry.get('Score')
             
-            if username and isinstance(score, (int, float)): # Ensure score is a number
-                if username not in user_highest_scores or score > user_highest_scores[username]:
-                    user_highest_scores[username] = score
+            # Ensure score is a number and update highest score for this user
+            if username and score is not None:
+                try:
+                    score = int(score) # Convert score to integer
+                    if username not in user_highest_scores or score > user_highest_scores[username]:
+                        user_highest_scores[username] = score
+                except ValueError:
+                    # Handle cases where score might not be a valid integer
+                    continue 
         
         # Sort users by highest score in descending order
         sorted_leaderboard = sorted(user_highest_scores.items(), key=lambda item: item[1], reverse=True)
@@ -174,6 +180,8 @@ if 'total_possible_daily_trivia_score' not in st.session_state:
     st.session_state['total_possible_daily_trivia_score'] = 0
 if 'score_logged_today' not in st.session_state:
     st.session_state['score_logged_today'] = False
+if 'difficulty' not in st.session_state: # New session state for difficulty
+    st.session_state['difficulty'] = 'Medium' # Default difficulty
 
 # --- Helper function to clean text for Latin-1 compatibility ---
 def clean_text_for_latin1(text):
@@ -225,12 +233,28 @@ def generate_related_trivia_article(question, answer, _ai_client):
 
 
 # --- This Day in History Logic ---
-def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_client, preferred_decade=None, topic=None):
+def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_client, preferred_decade=None, topic=None, difficulty='Medium'):
     """
     Generates 'This Day in History' facts using OpenAI API with specific content requirements.
-    Incorporates customization options for decade and topic.
+    Incorporates customization options for decade, topic, and difficulty.
     """
     current_date_str = f"{current_month:02d}-{current_day:02d}"
+
+    # Adjust parameters based on difficulty
+    event_word_count, born_word_count, trivia_complexity, language_tone = 200, 150, "", ""
+    if difficulty == 'Easy':
+        event_word_count = 150
+        born_word_count = 100
+        trivia_complexity = "very well-known facts, common knowledge"
+        language_tone = "simple, straightforward language"
+    elif difficulty == 'Hard':
+        event_word_count = 250
+        born_word_count = 200
+        trivia_complexity = "obscure facts, specific details, challenging"
+        language_tone = "advanced vocabulary, intricate details"
+    else: # Medium
+        trivia_complexity = "general historical facts, moderately challenging"
+        language_tone = "clear, informative language"
 
     # Build prompt for event and born date ranges
     event_year_range = "between the years 1800 and 1960"
@@ -247,10 +271,10 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
     You are an assistant generating 'This Day in History' facts for {current_date_str}.
     Please provide:
 
-    1. Event Article: Write a short article (around 200 words) about a famous historical event that happened on this day {event_year_range}{topic_clause}{decade_clause}.
-    2. Born on this Day Article: Write a brief article (around 150-200 words) about a well-known person born on this day {born_year_range}{decade_clause}.
+    1. Event Article: Write a short article (around {event_word_count} words) about a famous historical event that happened on this day {event_year_range}{topic_clause}{decade_clause}. Use {language_tone}.
+    2. Born on this Day Article: Write a brief article (around {born_word_count} words) about a well-known person born on this day {born_year_range}{decade_clause}. Use {language_tone}.
     3. Fun Fact: Provide one interesting and unusual fun fact that occurred on this day in history.
-    4. Trivia Questions: Provide five concise, direct trivia questions based on today’s date. These should be actual questions that require a factual answer, and should not be "Did You Know?" statements or prompts for reflection. Topics can include history, famous birthdays, pop culture, or global events. For each question, provide the correct answer in parentheses and a short, distinct hint in square brackets (e.g., "What year did the Berlin Wall fall? (1989) [Hint: Cold War era]").
+    4. Trivia Questions: Provide five concise, direct trivia questions based on today’s date. These should be actual questions that require a factual answer, and should not be "Did You Know?" statements or prompts for reflection. Topics can include history, famous birthdays, pop culture, or global events. The questions should be {trivia_complexity}. For each question, provide the correct answer in parentheses and a short, distinct hint in square brackets (e.g., "What year did the Berlin Wall fall? (1989) [Hint: Cold War era]").
     5. Did You Know?: Provide three "Did You Know?" facts related to nostalgic content (e.g., old prices, inventions, fashion facts) from past decades (e.g., 1930s-1970s).
     6. Memory Prompt: Provide one engaging question to encourage reminiscing and conversation (e.g., "Do you remember your first concert?", "What was your favorite childhood game?").
 
@@ -454,13 +478,15 @@ def show_main_app_page():
     # This key ensures data is re-fetched if date or preferences change
     current_data_key = f"{selected_date.strftime('%Y-%m-%d')}-{st.session_state['logged_in_username']}-" \
                        f"{st.session_state.get('preferred_topic_main_app', 'None')}-" \
-                       f"{st.session_state.get('preferred_decade_main_app', 'None')}"
+                       f"{st.session_state.get('preferred_decade_main_app', 'None')}-" \
+                       f"{st.session_state.get('difficulty', 'Medium')}" # Include difficulty in key
 
     if st.session_state['last_fetched_date'] != current_data_key or st.session_state['daily_data'] is None:
         st.session_state['daily_data'] = get_this_day_in_history_facts(
             day, month, user_info, client_ai, 
             topic=st.session_state.get('preferred_topic_main_app') if st.session_state.get('preferred_topic_main_app') != "None" else None,
-            preferred_decade=st.session_state.get('preferred_decade_main_app') if st.session_state.get('preferred_decade_main_app') != "None" else None
+            preferred_decade=st.session_state.get('preferred_decade_main_app') if st.session_state.get('preferred_decade_main_app') != "None" else None,
+            difficulty=st.session_state['difficulty'] # Pass the selected difficulty
         )
         st.session_state['last_fetched_date'] = current_data_key
         st.session_state['trivia_question_states'] = {} # Reset trivia states for new day's data
@@ -803,6 +829,13 @@ if st.session_state['is_authenticated']:
     st.session_state['dementia_mode'] = st.sidebar.checkbox("Dementia-Friendly Mode", value=st.session_state['dementia_mode'], key="sidebar_dementia_mode")
 
     st.sidebar.subheader("Content Customization")
+    # New: Difficulty selection
+    st.session_state['difficulty'] = st.sidebar.selectbox(
+        "Content Difficulty",
+        options=["Easy", "Medium", "Hard"],
+        index=["Easy", "Medium", "Hard"].index(st.session_state['difficulty']), # Set initial value from session state
+        key='sidebar_difficulty_select'
+    )
     st.session_state['preferred_topic_main_app'] = st.sidebar.selectbox(
         "Preferred Topic for Events (Optional)",
         options=["None", "Sports", "Music", "Inventions", "Politics", "Science", "Arts"],
