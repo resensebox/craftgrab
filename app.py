@@ -552,82 +552,69 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
 
 
             for index_prefix, full_entry_text_raw in all_trivia_entries:
-                full_entry_text = full_entry_text_raw.strip()
+                current_entry_content = full_entry_text_raw.strip()
                 
-                question = ""
-                answer = ""
-                hint = ""
-                
-                # --- Attempt to extract Answer and Hint using specific patterns ---
-                
-                # 1. Try to extract hint first (often at the end or in brackets)
-                # Look for Hint: or Indice: or content in square brackets
-                hint_match_prefix = re.search(r'(?:Hint|Indice):\s*([^\n]*?)(?:\n|\Z)', full_entry_text, re.IGNORECASE | re.DOTALL)
-                hint_match_bracket = re.search(r'\[(.*?)\]', full_entry_text, re.DOTALL)
+                question_text = ""
+                answer_text = "No answer found."
+                hint_text = "No hint found."
 
-                if hint_match_bracket:
-                    hint = hint_match_bracket.group(1).strip()
-                    full_entry_text = full_entry_text.replace(hint_match_bracket.group(0), '', 1).strip()
-                elif hint_match_prefix: # If no brackets, check for prefix
-                    hint = hint_match_prefix.group(1).strip()
-                    full_entry_text = full_entry_text.replace(hint_match_prefix.group(0), '', 1).strip()
-                
+                # Step 1: Extract hint first (most likely to be at the very end in brackets)
+                hint_match = re.search(r'\[(.*?)\]', current_entry_content, re.DOTALL)
+                if hint_match:
+                    hint_text = hint_match.group(1).strip()
+                    # Remove the matched hint from the content
+                    current_entry_content = current_entry_content.replace(hint_match.group(0), '', 1).strip()
+                else: # Fallback to "Hint:" prefix if no brackets
+                    hint_match_prefix = re.search(r'(?:Hint|Indice):\s*([^\n]*?)(?:\n|\Z)', current_entry_content, re.IGNORECASE | re.DOTALL)
+                    if hint_match_prefix:
+                        hint_text = hint_match_prefix.group(1).strip()
+                        current_entry_content = current_entry_content.replace(hint_match_prefix.group(0), '', 1).strip()
+
                 # Truncate hint if it's still too long (e.g., if it picked up a lot of text)
-                if len(hint) > 100 or '\n' in hint:
-                    hint = hint.split('\n')[0].strip()
-                    if len(hint) > 100: hint = hint[:100].strip() + "..."
+                if len(hint_text) > 100 or '\n' in hint_text:
+                    hint_text = hint_text.split('\n')[0].strip()
+                    if len(hint_text) > 100: hint_text = hint_text[:100].strip() + "..."
                 
-                # 2. Try to extract Answer
-                # Look for Answer: or Reponse: or content in parentheses
-                answer_match_prefix = re.search(r'(?:Answer|Reponse):\s*([^\n\[]*?)(?:\n|\[|\Z)', full_entry_text, re.IGNORECASE | re.DOTALL)
-                answer_match_paren = re.search(r'\((.*?)\)', full_entry_text, re.DOTALL)
-
-                if answer_match_paren:
-                    answer = answer_match_paren.group(1).strip()
-                    full_entry_text = full_entry_text.replace(answer_match_paren.group(0), '', 1).strip()
-                elif answer_match_prefix: # If no parentheses, check for prefix
-                    answer = answer_match_prefix.group(1).strip()
-                    full_entry_text = full_entry_text.replace(answer_match_prefix.group(0), '', 1).strip()
-
+                # Step 2: Extract answer (likely in parentheses)
+                answer_match = re.search(r'\((.*?)\)', current_entry_content, re.DOTALL)
+                if answer_match:
+                    answer_text = answer_match.group(1).strip()
+                    # Remove the matched answer from the content
+                    current_entry_content = current_entry_content.replace(answer_match.group(0), '', 1).strip()
+                else: # Fallback to "Answer:" prefix if no parentheses
+                    answer_match_prefix = re.search(r'(?:Answer|Reponse):\s*([^\n\[]*?)(?:\n|\[|\Z)', current_entry_content, re.IGNORECASE | re.DOTALL)
+                    if answer_match_prefix:
+                        answer_text = answer_match_prefix.group(1).strip()
+                        current_entry_content = current_entry_content.replace(answer_match_prefix.group(0), '', 1).strip()
+                
                 # Truncate answer if it's still too long
-                if len(answer) > 50 or '\n' in answer:
-                    answer = answer.split('\n')[0].strip()
-                    if len(answer) > 50: answer = answer[:50].strip() + "..."
+                if len(answer_text) > 50 or '\n' in answer_text:
+                    answer_text = answer_text.split('\n')[0].strip()
+                    if len(answer_text) > 50: answer_text = answer_text[:50].strip() + "..."
+
+                # Step 3: What remains is the question
+                question_text = current_entry_content.strip()
+
+                # Clean the question (remove any leading bullet points or numbers if not already removed by main regex)
+                question_text = re.sub(r'^\s*([a-eA-E]|\d+)\.\s*', '', question_text).strip()
+                question_text = re.sub(r'^-?\s*', '', question_text).strip() # Remove any remaining leading hyphens
+
+                # Ensure it's not a "Did You Know" or "Memory Prompt" mistakenly caught
+                if any(phrase.lower() in question_text.lower() for phrase in ["sabías que", "did you know", "disparadores de memoria", "memory prompts"]):
+                    question_text = "No question found." # Clear if it's a misidentified prompt
                 
-                # Whatever remains in full_entry_text after extracting answer and hint is the question.
-                question = full_entry_text.strip()
-                
-                # Remove any leading hyphens or common "Did you know/Memory prompts" phrases from the question
-                question = re.sub(r'^-?\s*', '', question).strip()
-                # Aggressively remove any "Did you know" or "Memory prompts" phrases from the question
-                question = re.sub(r'(?:Sabías que\?|Did you know\?|Disparadores de memoria|Memory Prompts):?\s*', '', question, flags=re.IGNORECASE).strip()
+                # Use only the first line of the question to avoid extraneous text
+                question_text = question_text.split('\n')[0].strip()
 
-
-                # Final cleaning of the question to remove any residual answer/hint parts
-                question = re.sub(r'\s*\((.*?)\)', '', question).strip() # Remove any remaining parentheses content
-                question = re.sub(r'\s*\[.*?\]', '', question).strip() # Remove any remaining bracket content
-                # If the question was actually a "Did You Know?" or "Memory Prompt" mistakenly, clear it
-                if any(phrase.lower() in question.lower() for phrase in ["sabías que", "did you know", "disparadores de memoria", "memory prompts"]):
-                    question = "" # Clear if it's a misidentified prompt
-                
-                # Take the first line of the question as the definitive question.
-                # This handles cases where AI might put more text after the initial question statement
-                # if there were no (Answer) [Hint] to delimit it.
-                question_lines = question.split('\n')
-                question = question_lines[0].strip()
-
-                # If the question is still prefixed by "a.", "b.", etc., remove it (already handled by outer regex `([a-eA-E]|\d+)\.\s*`) but double check.
-                question = re.sub(r'^\s*([a-eA-E]|\d+)\.\s*', '', question).strip()
-
-                # If after all parsing, question, answer, or hint are empty, fill with placeholder
-                if not question: question = "No question found."
-                if not answer: answer = "No answer found."
-                if not hint: hint = "No hint found."
+                # Fallback for empty question/answer/hint
+                if not question_text: question_text = "No question found."
+                if not answer_text: answer_text = "No answer found."
+                if not hint_text: hint_text = "No hint found."
 
                 trivia_questions.append({
-                    'question': question.strip(),
-                    'answer': answer.strip(),
-                    'hint': hint.strip()
+                    'question': question_text,
+                    'answer': answer_text,
+                    'hint': hint_text
                 })
                 
                 if len(trivia_questions) >= 5: # Limit to 5 questions explicitly
