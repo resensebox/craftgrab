@@ -1,18 +1,11 @@
 import streamlit as st
 from openai import OpenAI
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 from fpdf import FPDF
 import re
 import json
 import base64 # Import base64 for encoding PDF content
 import time # Import time for st.spinner delays
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-from gtts import gTTS
-import qrcode
-from io import BytesIO
-from PIL import Image # Needed by qrcode[pil]
-import zipfile # For creating ZIP files
 
 st.set_option('client.showErrorDetails', True)
 st.set_page_config(page_title="This Day in History", layout="centered")
@@ -25,8 +18,7 @@ _INITIAL_EMPTY_DATA = {
     'trivia_section': [],
     'did_you_know_section': ["No 'Did You Know?' facts available. Please try again."],
     'memory_prompt_section': ["No memory prompts available.", "Consider your favorite childhood memory.", "What's a happy moment from your past week?"],
-    'local_history_section': "No local history data available. Please try again.",
-    'companion_activities': "No companion activities available. Please try again." # NEW: Default for companion activities
+    'local_history_section': "No local history data available. Please try again."
 }
 
 # --- Session State Initialization ---
@@ -64,46 +56,6 @@ if 'custom_masthead_text' not in st.session_state: # NEW: Custom masthead text f
     st.session_state['custom_masthead_text'] = ""
 if 'last_download_status' not in st.session_state: # NEW: To track PDF download logging status for user feedback
     st.session_state['last_download_status'] = None
-
-# NEW: Session states for new features
-if 'toggle_weekly_planner' not in st.session_state:
-    st.session_state['toggle_weekly_planner'] = False
-if 'toggle_group_mode' not in st.session_state:
-    st.session_state['toggle_group_mode'] = False
-if 'toggle_audio_qr' not in st.session_state:
-    st.session_state['toggle_audio_qr'] = False
-if 'toggle_companion_activities' not in st.session_state:
-    st.session_state['toggle_companion_activities'] = False
-if 'toggle_memory_journal' not in st.session_state:
-    st.session_state['toggle_memory_journal'] = False
-if 'toggle_large_print_pdf' not in st.session_state:
-    st.session_state['toggle_large_print_pdf'] = False
-if 'toggle_offline_pack' not in st.session_state:
-    st.session_state['toggle_offline_pack'] = False
-if 'toggle_autopilot_email' not in st.session_state:
-    st.session_state['toggle_autopilot_email'] = False
-
-# Group Mode Specific States
-if 'group_mode_active' not in st.session_state:
-    st.session_state['group_mode_active'] = False # This will be set by the toggle_group_mode checkbox
-if 'current_trivia_slide' not in st.session_state:
-    st.session_state['current_trivia_slide'] = 0
-if 'reveal_answer' not in st.session_state:
-    st.session_state['reveal_answer'] = False
-if 'resident_scores' not in st.session_state:
-    st.session_state['resident_scores'] = [{'name': f'Resident {i+1}', 'score': 0} for i in range(5)] # Default 5 residents
-
-# Memory Journal Specific States
-if 'current_memory_entry_text' not in st.session_state:
-    st.session_state['current_memory_entry_text'] = ""
-if 'current_resident_name_journal' not in st.session_state:
-    st.session_state['current_resident_name_journal'] = ""
-
-# Autopilot Email States
-if 'email_recipient' not in st.session_state:
-    st.session_state['email_recipient'] = ""
-if 'email_frequency' not in st.session_state:
-    st.session_state['email_frequency'] = "Daily"
 
 
 # --- Custom CSS for Sidebar Styling and Default App Theme (Black) ---
@@ -256,6 +208,10 @@ st.markdown(
 
 
 # --- Google Sheets API Setup ---
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+
+# Corrected scope for Google Sheets API v4
 scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 if "GOOGLE_SERVICE_JSON" not in st.secrets:
     st.error("❌ GOOGLE_SERVICE_JSON is missing from Streamlit secrets.")
@@ -417,44 +373,6 @@ def log_pdf_download(username, filename, download_date):
         print(f"ERROR: Could not log PDF download for '{username}': {e}") # Log to console for debugging
         return False
 
-# NEW: Functions for Memory Journal Logging
-def log_memory_entry(username, resident_name, memory_text, entry_date):
-    """Logs a memory journal entry to a 'MemoryJournal' worksheet."""
-    try:
-        sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
-        try:
-            ws = sheet.worksheet("MemoryJournal")
-        except gspread.exceptions.WorksheetNotFound:
-            ws = sheet.add_worksheet(title="MemoryJournal", rows="100", cols="5") # Added 'EntryDate' column
-            ws.append_row(["Timestamp", "Username", "ResidentName", "EntryDate", "MemoryText"])
-        
-        ws.append_row([
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            username,
-            resident_name,
-            entry_date.strftime("%Y-%m-%d"),
-            memory_text
-        ])
-        return True
-    except Exception as e:
-        st.warning(f"⚠️ Could not log memory entry: {e}")
-        return False
-
-def get_memory_entries(username):
-    """Retrieves all memory journal entries for a given username."""
-    try:
-        sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
-        try:
-            ws = sheet.worksheet("MemoryJournal")
-            all_records = ws.get_all_records(head=1)
-            # Filter by username to only get current user's entries
-            return [rec for rec in all_records if rec.get('Username') == username]
-        except gspread.exceptions.WorksheetNotFound:
-            return []
-    except Exception as e:
-        st.error(f"❌ Error retrieving memory entries: {e}")
-        return []
-
 
 def check_partial_correctness_with_ai(user_answer, correct_answer, _ai_client):
     """
@@ -532,38 +450,6 @@ def generate_related_trivia_article(question, answer, _ai_client):
         st.warning(f"⚠️ Could not generate explanation for trivia question: {e}. Please try again.")
         return "An explanation could not be generated at this time."
 
-# NEW: Function to generate companion activities
-def generate_companion_activities(article_content, _ai_client, current_language="English"):
-    """
-    Generates related craft, snack, and reminiscence activities based on an article.
-    """
-    prompt = f"""
-    Based on the following historical article, suggest ONE related craft activity, ONE related snack idea, and ONE related reminiscence activity.
-    For each, provide:
-    - Activity Name
-    - Materials/Ingredients (if applicable)
-    - Simple Directions (3-5 steps)
-
-    Format your response clearly with headings for each activity type (e.g., "Craft Activity:", "Snack Idea:", "Reminiscence Activity:").
-    Translate the output to {current_language}.
-
-    Historical Article:
-    ---
-    {article_content}
-    ---
-    """
-    try:
-        response = _ai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=500,
-            temperature=0.7 # More creative
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        st.error(f"Error generating companion activities: {e}")
-        return "Could not generate companion activities."
-
 def translate_text_with_ai(text, target_language, _ai_client):
     """
     Translates a single string of text using the OpenAI API.
@@ -600,7 +486,6 @@ def translate_content(data, target_language, _ai_client):
     translated_data['born_article'] = translate_text_with_ai(data['born_article'], target_language, _ai_client)
     translated_data['fun_fact_section'] = translate_text_with_ai(data['fun_fact_section'], target_language, _ai_client)
     translated_data['local_history_section'] = translate_text_with_ai(data['local_history_section'], target_language, _ai_client)
-    translated_data['companion_activities'] = translate_text_with_ai(data['companion_activities'], target_language, _ai_client) # NEW: Translate companion activities
 
     # Translate Did You Know? section (list of strings)
     translated_data['did_you_know_section'] = [
@@ -710,16 +595,6 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
     7. Local History Fact: Provide one general historical fact about the United States, including its specific date (month, day, year) or year. This fact must be a genuine historical event.
     """
 
-    # NEW: Add companion activities request to the prompt
-    companion_activity_request = ""
-    if st.session_state.get('toggle_companion_activities', False):
-        companion_activity_request = """
-    8. Companion Activities: Based on the "Event Article", suggest ONE related craft activity, ONE related snack idea, and ONE related reminiscence activity. For each, provide:
-       - Activity Name
-       - Materials/Ingredients (if applicable)
-       - Simple Directions (3-5 steps).
-    """
-
     prompt = f"""
     You are an assistant generating 'This Day in History' facts for {current_date_str}.
     Please provide:
@@ -731,7 +606,6 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
     5. Did You Know?: Provide three "Did You Know?" facts related to nostalgic content (e.g., old prices, inventions, fashion facts) from past decades (e.g., 1930s-1970s).
     6. Memory Prompts: Provide **two to three** engaging questions to encourage reminiscing and conversation. Each prompt should be a complete sentence or question, without leading hyphens or bullet points in the raw output, ready to be formatted as paragraphs. (e.g., "Do you remember your first concert?", "What was your favorite childhood game?", "What's a memorable school event from your youth?").
     {local_history_clause}
-    {companion_activity_request}
 
     Format your response clearly with these headings. Ensure articles are within the specified word counts.
     """
@@ -749,10 +623,6 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         
         # Updated regex for Memory Prompt to capture multiple lines, allowing for paragraph form
         memory_prompt_match = re.search(r"6\. Memory Prompts:\s*(.*?)(?=\n7\. Local History Fact:|\Z|$)", content, re.DOTALL)
-        
-        # NEW: Regex for Companion Activities
-        companion_activities_match = re.search(r"8\. Companion Activities:\s*(.*?)(?=\n\Z|$)", content, re.DOTALL)
-
 
         # Special handling for Trivia Questions to extract questions, answers, and hints more robustly
         trivia_questions = []
@@ -841,18 +711,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         local_history_fact = "Could not generate local history fact." # Default if AI fails
         local_history_match = re.search(r"7\. Local History Fact:\s*(.*?)(?=\n\Z|$)", content, re.DOTALL)
         if local_history_match:
-            # Check if there's an 8. Companion Activities heading, if so, stop before it
-            temp_local_history_content = local_history_match.group(1).strip()
-            companion_activities_header_pos = temp_local_history_content.find("8. Companion Activities:")
-            if companion_activities_header_pos != -1:
-                local_history_fact = temp_local_history_content[:companion_activities_header_pos].strip()
-            else:
-                local_history_fact = temp_local_history_content
-        
-        # NEW: Extract Companion Activities
-        companion_activities_content = "No companion activities available."
-        if companion_activities_match:
-            companion_activities_content = companion_activities_match.group(1).strip()
+            local_history_fact = local_history_match.group(1).strip()
 
 
         return {
@@ -862,8 +721,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
             'trivia_section': trivia_questions, # Now a list of dicts {question, answer, hint}
             'did_you_know_section': did_you_know_lines,
             'memory_prompt_section': memory_prompts_list, # Now a list of prompts
-            'local_history_section': local_history_fact, # New local history fact
-            'companion_activities': companion_activities_content # NEW: Companion activities
+            'local_history_section': local_history_fact # New local history fact
         }
     except Exception as e:
         st.error(f"Error generating history: {e}")
@@ -874,52 +732,10 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
             'trivia_section': [], # Empty list if error
             'did_you_know_section': ["No 'Did You Know?' facts available for today. Please try again or adjust preferences."], # Ensure default content
             'memory_prompt_section': ["No memory prompts available.", "Consider your favorite childhood memory.", "What's a happy moment from your past week?"],
-            'local_history_section': "Could not fetch local history for your area. Please check your location settings or try again.",
-            'companion_activities': "No companion activities available." # NEW: Default for companion activities
+            'local_history_section': "Could not fetch local history for your area. Please check your location settings or try again."
         }
 
-# NEW: Function to generate audio bytes
-def generate_audio_bytes(text, lang='en'):
-    """Generates audio bytes for a given text using gTTS."""
-    try:
-        # Ensure text is a string before passing to gTTS
-        text_str = str(text) if text is not None else ""
-        if not text_str.strip(): # If text is empty or just whitespace
-            return None # No audio to generate
-
-        tts = gTTS(text=text_str, lang=lang, slow=False)
-        audio_bytes_io = BytesIO()
-        tts.write_to_fp(audio_bytes_io)
-        audio_bytes_io.seek(0)
-        return audio_bytes_io
-    except Exception as e:
-        print(f"Error generating audio: {e}") # Use print for backend errors
-        return None
-
-# NEW: Function to generate QR code image bytes
-def generate_qr_code_image_bytes(data_url, box_size=3, border=2):
-    """Generates QR code image bytes (PNG) from a data URL."""
-    try:
-        qr = qrcode.QRCode(
-            version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_L,
-            box_size=box_size,
-            border=border,
-        )
-        qr.add_data(data_url)
-        qr.make(fit=True)
-        img = qr.make_image(fill_color="black", back_color="white").convert('RGB')
-        
-        img_bytes_io = BytesIO()
-        img.save(img_bytes_io, format="PNG")
-        img_bytes_io.seek(0)
-        return img_bytes_io
-    except Exception as e:
-        print(f"Error generating QR code: {e}")
-        return None
-
-
-def generate_full_history_pdf(data, today_date_str, user_info, current_language="English", custom_masthead_text=None, large_print_mode=False, include_audio_qr=False): # Added new parameters
+def generate_full_history_pdf(data, today_date_str, user_info, current_language="English", custom_masthead_text=None): # Added custom_masthead_text parameter
     """
     Generates a PDF of 'This Day in History' facts, formatted over two pages.
     Page 1: Two-column layout with daily content.
@@ -937,23 +753,12 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     col_width = (content_width - 10) / 2 # 10mm gutter between columns
     
     # Font sizes (now fixed for normal mode, as dementia mode is removed)
-    if large_print_mode:
-        title_font_size = 42 # Increased for large print
-        date_font_size = 14 # Increased for large print
-        section_title_font_size = 18 # Increased for large print
-        article_text_font_size = 14 # Increased for large print
-        line_height_multiplier = 1.6 # Increased line spacing
-        section_spacing_multiplier = 2 # More spacing between sections
-    else:
-        title_font_size = 36
-        date_font_size = 10
-        section_title_font_size = 12
-        article_text_font_size = 10
-        line_height_multiplier = 1.2 # Normal line spacing
-        section_spacing_multiplier = 1 # Normal spacing
-
-    line_height = article_text_font_size * line_height_multiplier
-    section_spacing = 5 * section_spacing_multiplier
+    title_font_size = 36
+    date_font_size = 10
+    section_title_font_size = 12
+    article_text_font_size = 10
+    line_height_normal = 5
+    section_spacing_normal = 5
 
     # Define page 2 margins at the beginning
     left_margin_p2 = 25
@@ -968,21 +773,21 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     # Use custom masthead text if provided, otherwise default
     masthead_to_display = custom_masthead_text if custom_masthead_text and custom_masthead_text.strip() else "The Daily Resense Register"
     # The masthead text is specifically translated AND cleaned here.
-    pdf.cell(0, 15 * line_height_multiplier, clean_text_for_latin1(translate_text_with_ai(masthead_to_display, current_language, client_ai)), align='C')
-    pdf.ln(15 * line_height_multiplier)
+    pdf.cell(0, 15, clean_text_for_latin1(translate_text_with_ai(masthead_to_display, current_language, client_ai)), align='C')
+    pdf.ln(15)
 
     # Separator line
     pdf.set_line_width(0.5)
     pdf.line(left_margin, pdf.get_y(), page_width - right_margin, pdf.get_y())
-    pdf.ln(8 * line_height_multiplier)
+    pdf.ln(8)
 
     pdf.set_font("Arial", "", date_font_size)
-    pdf.cell(0, 5 * line_height_multiplier, today_date_str.upper(), align='C') # Date below the title
-    pdf.ln(15 * line_height_multiplier)
+    pdf.cell(0, 5, today_date_str.upper(), align='C') # Date below the title
+    pdf.ln(15)
 
     pdf.set_line_width(0.2) # Thinner line for content sections
     pdf.line(left_margin, pdf.get_y(), page_width - right_margin, pdf.get_y())
-    pdf.ln(8 * line_height_multiplier)
+    pdf.ln(8)
 
     # --- Two-Column Layout for Page 1 ---
     # Store initial Y for content columns to ensure they start at the same height
@@ -1000,48 +805,30 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
 
     # On This Date (Event Article)
     pdf.set_font("Arial", "B", section_title_font_size)
-    pdf.multi_cell(col_width, line_height, clean_text_for_latin1(translate_text_with_ai("On This Date", current_language, client_ai)))
-    current_y_col1 += line_height # Update Y after title
+    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("On This Date", current_language, client_ai)))
+    current_y_col1 += line_height_normal # Update Y after title
     pdf.set_font("Arial", "", article_text_font_size) # Ensure font is not bold for article text
     # Translate content explicitly before adding to PDF
     translated_event_article = translate_text_with_ai(data.get('event_article', ''), current_language, client_ai)
-    pdf.multi_cell(col_width, line_height, translated_event_article)
-    current_y_col1 = pdf.get_y() + section_spacing # Update Y and add spacing
+    pdf.multi_cell(col_width, line_height_normal, translated_event_article)
+    current_y_col1 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
+
     pdf.set_y(current_y_col1) # Ensure position is updated
-
-    # NEW: Audio QR for Event Article
-    if include_audio_qr:
-        event_article_audio_bytes = generate_audio_bytes(data.get('event_article', ''), lang=current_language.lower()[:2])
-        if event_article_audio_bytes:
-            # Embed audio bytes directly as data URI (large file warning)
-            audio_base64 = base64.b64encode(event_article_audio_bytes.getvalue()).decode('latin-1')
-            audio_data_url = f"data:audio/mp3;base64,{audio_base64}"
-            
-            event_article_qr_image_bytes = generate_qr_code_image_bytes(audio_data_url, box_size=max(1, int(3 * (article_text_font_size / 10))), border=2)
-            if event_article_qr_image_bytes:
-                # Add QR code to the right of the article or below it
-                qr_size = 25 # mm
-                pdf.image(event_article_qr_image_bytes, x=left_margin + col_width - qr_size - 5, y=current_y_col1, w=qr_size, h=qr_size, type='PNG')
-                pdf.set_xy(left_margin + col_width - qr_size - 5, current_y_col1 + qr_size + 2) # Position text below QR
-                pdf.set_font("Arial", "", max(8, article_text_font_size - 4))
-                pdf.multi_cell(qr_size, max(4, line_height/2), clean_text_for_latin1(translate_text_with_ai("Scan to Hear Article", current_language, client_ai)), align='C')
-                # Adjust current_y_col1 to account for QR code
-                current_y_col1 = max(current_y_col1, pdf.get_y()) + section_spacing
-                pdf.set_y(current_y_col1)
-
 
     # Fun Fact
     pdf.set_font("Arial", "B", section_title_font_size)
-    pdf.multi_cell(col_width, line_height, clean_text_for_latin1(translate_text_with_ai("Fun Fact:", current_language, client_ai))) # Translated
-    current_y_col1 += line_height
+    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Fun Fact:", current_language, client_ai))) # Translated
+    current_y_col1 += line_height_normal
     pdf.set_font("Arial", "", article_text_font_size) # Ensure font is not bold for article text
     # Translate content explicitly before adding to PDF
     translated_fun_fact = translate_text_with_ai(data.get('fun_fact_section', ''), current_language, client_ai)
-    pdf.multi_cell(col_width, line_height, translated_fun_fact)
-    current_y_col1 = pdf.get_y() + section_spacing # Update Y and add spacing
+    pdf.multi_cell(col_width, line_height_normal, translated_fun_fact)
+    current_y_col1 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
     pdf.set_y(current_y_col1)
 
-    current_y_col1 += section_spacing # Spacing after content section
+    # Removed: Daily Trivia section for PDF (as per user request)
+
+    current_y_col1 += section_spacing_normal # Spacing after content section
     pdf.set_y(current_y_col1)
 
 
@@ -1052,55 +839,55 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
 
     # Quote of the Day
     pdf.set_font("Arial", "B", section_title_font_size)
-    pdf.multi_cell(col_width, line_height, clean_text_for_latin1(translate_text_with_ai("Quote of the Day", current_language, client_ai)), align='C') # Translated
-    current_y_col2 += line_height
+    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Quote of the Day", current_language, client_ai)), align='C') # Translated
+    current_y_col2 += line_height_normal
     quote_text = clean_text_for_latin1(translate_text_with_ai('"The only way to do great work is to love what you do."', current_language, client_ai)) # Placeholder quote
     quote_author = clean_text_for_latin1(translate_text_with_ai("- Unknown", current_language, client_ai)) # Placeholder author
     pdf.set_font("Times", "I", article_text_font_size) # Italic for quote
-    pdf.multi_cell(col_width, line_height, quote_text, align='C')
-    pdf.multi_cell(col_width, line_height, quote_author, align='C')
-    current_y_col2 = pdf.get_y() + section_spacing # Update Y and add spacing
+    pdf.multi_cell(col_width, line_height_normal, quote_text, align='C')
+    pdf.multi_cell(col_width, line_height_normal, quote_author, align='C')
+    current_y_col2 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
     pdf.set_y(current_y_col2)
 
     # Happy Birthday! (Born on this Day Article)
     pdf.set_font("Arial", "B", section_title_font_size)
-    pdf.multi_cell(col_width, line_height, clean_text_for_latin1(translate_text_with_ai("Happy Birthday!", current_language, client_ai))) # Translated
-    current_y_col2 += line_height
+    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Happy Birthday!", current_language, client_ai))) # Translated
+    current_y_col2 += line_height_normal
     pdf.set_font("Arial", "", article_text_font_size) # Ensure font is not bold for article text
     # Translate content explicitly before adding to PDF
     translated_born_article = translate_text_with_ai(data.get('born_article', ''), current_language, client_ai)
-    pdf.multi_cell(col_width, line_height, translated_born_article)
-    current_y_col2 = pdf.get_y() + section_spacing # Update Y and add spacing
+    pdf.multi_cell(col_width, line_height_normal, translated_born_article)
+    current_y_col2 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
     pdf.set_y(current_y_col2)
 
     # Did You Know?
     if data.get('did_you_know_section'): # Use .get() to check if 'did_you_know_section' key exists and is not empty/None
         pdf.set_font("Arial", "B", section_title_font_size)
-        pdf.multi_cell(col_width, line_height, clean_text_for_latin1(translate_text_with_ai("Did You Know?", current_language, client_ai))) # Translated
-        current_y_col2 += line_height
+        pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Did You Know?", current_language, client_ai))) # Translated
+        current_y_col2 += line_height_normal
         pdf.set_font("Arial", "", article_text_font_size)
         for item in data['did_you_know_section']:
             # Translate each item explicitly before adding to PDF
             translated_item = translate_text_with_ai(item if item is not None else '', current_language, client_ai)
-            pdf.multi_cell(col_width, line_height, f"- {translated_item}")
+            pdf.multi_cell(col_width, line_height_normal, f"- {translated_item}")
             current_y_col2 = pdf.get_y() # Update Y after each fact line
-        current_y_col2 += section_spacing # Spacing after section
+        current_y_col2 += section_spacing_normal # Spacing after section
         pdf.set_y(current_y_col2)
 
     # Memory Prompt?
     if data.get('memory_prompt_section'): # Use .get() to check if key exists and is not empty/None
         pdf.set_font("Arial", "B", section_title_font_size)
-        pdf.multi_cell(col_width, line_height, clean_text_for_latin1(translate_text_with_ai("Memory Prompt?", current_language, client_ai))) # Translated
-        current_y_col2 += line_height
+        pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Memory Prompt?", current_language, client_ai))) # Translated
+        current_y_col2 += line_height_normal
         pdf.set_font("Arial", "", article_text_font_size)
         # Iterate and display up to the first 3 memory prompts for PDF
         for prompt_text in data['memory_prompt_section'][:3]: # Limit to first 3 prompts
             # Translate each prompt explicitly before adding to PDF
             translated_prompt = translate_text_with_ai(prompt_text if prompt_text is not None else '', current_language, client_ai)
-            pdf.multi_cell(col_width, line_height, translated_prompt)
-            pdf.ln(2 * line_height_multiplier) # Small line break between prompts
+            pdf.multi_cell(col_width, line_height_normal, translated_prompt)
+            pdf.ln(2) # Small line break between prompts
             current_y_col2 = pdf.get_y() # Update Y after each prompt line
-        current_y_col2 += section_spacing # Spacing after section
+        current_y_col2 += section_spacing_normal # Spacing after section
         pdf.set_y(current_y_col2)
 
     # Local History (if available) - This section will now rely on auto_page_break
@@ -1124,54 +911,18 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
         pdf.set_x(left_margin) # Reset X to left margin
 
         # Set Y to the max of current column Ys, then add some spacing
-        pdf.set_y(current_y_after_main_content + section_spacing) 
+        pdf.set_y(current_y_after_main_content + section_spacing_normal) 
 
-        pdf.multi_cell(content_width, line_height, clean_text_for_latin1(translate_text_with_ai("Local History:", current_language, client_ai))) # Translated
+        pdf.multi_cell(content_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Local History:", current_language, client_ai))) # Translated
         pdf.set_font("Arial", "", article_text_font_size)
         # Translate content explicitly before adding to PDF
         translated_local_history = translate_text_with_ai(local_history_content, current_language, client_ai)
-        pdf.multi_cell(content_width, line_height, translated_local_history)
+        pdf.multi_cell(content_width, line_height_normal, translated_local_history)
         
         # Restore original margins for subsequent content (Page 2)
         pdf.set_left_margin(original_left_margin)
         pdf.set_right_margin(original_right_margin)
         pdf.set_x(original_x)
-
-    # NEW: Companion Activities Section
-    if st.session_state.get('toggle_companion_activities', False) and data.get('companion_activities'):
-        companion_activities_content = data.get('companion_activities', '')
-        if companion_activities_content and not companion_activities_content.startswith("No companion activities available."):
-            pdf.add_page() # Start companion activities on a new page
-            pdf.set_left_margin(left_margin)
-            pdf.set_right_margin(right_margin)
-            pdf.set_x(left_margin)
-            pdf.set_y(20) # Start from top of new page
-
-            pdf.set_font("Arial", "B", section_title_font_size * 1.2) # Larger title for this section
-            pdf.multi_cell(content_width, line_height, clean_text_for_latin1(translate_text_with_ai("Companion Activities for Today's Article", current_language, client_ai)), align='C')
-            pdf.ln(section_spacing)
-
-            pdf.set_font("Arial", "", article_text_font_size)
-            # Use a slightly different approach to parse and print markdown-like output
-            # This is a simplified parser; a more robust one might be needed for complex markdown
-            
-            # Split the content by major headings
-            sections = re.split(r'^(Craft Activity:|Snack Idea:|Reminiscence Activity:)\s*', companion_activities_content, flags=re.MULTILINE)
-            
-            # The first element before the first heading is usually empty or intro. Skip it.
-            # Process sections in pairs (heading, content)
-            for i in range(1, len(sections), 2):
-                heading = sections[i].strip()
-                body = sections[i+1].strip()
-
-                if heading:
-                    pdf.set_font("Arial", "B", section_title_font_size)
-                    pdf.multi_cell(content_width, line_height, clean_text_for_latin1(heading))
-                    pdf.set_font("Arial", "", article_text_font_size)
-                    # Split body into lines and print, handling bullet points or new lines
-                    for line in body.split('\n'):
-                        pdf.multi_cell(content_width, line_height, clean_text_for_latin1(line.strip()))
-                    pdf.ln(section_spacing/2) # Smaller space between activities
 
 
     # --- Page 2 Content ---
@@ -1186,13 +937,13 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     pdf.set_y(20) # Start further down on the new page
 
     # About Us Title
-    pdf.set_font("Arial", "B", section_title_font_size * 1.5) # Slightly smaller font for longer title
+    pdf.set_font("Arial", "B", 18) # Slightly smaller font for longer title
     new_about_us_title = clean_text_for_latin1(translate_text_with_ai("Learn More About US! Mindful Libraries - A Dementia-Inclusive Reading Program", current_language, client_ai))
-    pdf.multi_cell(content_width_p2, 10 * line_height_multiplier, new_about_us_title, 0, 'C') # Using multi_cell for title as it's long
-    pdf.ln(5 * line_height_multiplier) # Smaller line break after title
+    pdf.multi_cell(content_width_p2, 10, new_about_us_title, 0, 'C') # Using multi_cell for title as it's long
+    pdf.ln(5) # Smaller line break after title
 
     # About Us Text
-    pdf.set_font("Arial", "", article_text_font_size * 1.1) # Slightly smaller font for better fit
+    pdf.set_font("Arial", "", 11) # Slightly smaller font for better fit
     new_about_us_text = clean_text_for_latin1(translate_text_with_ai("""Mindful Libraries is a collaborative initiative between Resense, Nana's Books, and Mirador
 Magazine, designed to bring adaptive, nostalgic reading experiences to individuals living
 with dementia. This innovative program provides:
@@ -1204,46 +955,46 @@ prompts
 - Partnerships with Long-Term Care Communities to build inclusive, life-enriching
 environments
 Mindful Libraries empowers care teams to reconnect residents with their pasts, spark joyful conversation, and foster dignity through storytelling and memory-based engagement.""", current_language, client_ai))
-    pdf.multi_cell(content_width_p2, 6 * line_height_multiplier, new_about_us_text, 0, 'L') # Left align for readability
-    pdf.ln(5 * line_height_multiplier) # Add space after About Us text
+    pdf.multi_cell(content_width_p2, 6, new_about_us_text, 0, 'L') # Left align for readability
+    pdf.ln(5) # Add space after About Us text
 
     # New line for learning more
-    pdf.set_font("Arial", "B", article_text_font_size * 1.2) # Set font to bold for this line
-    pdf.multi_cell(content_width_p2, 7 * line_height_multiplier, clean_text_for_latin1(translate_text_with_ai("Learn more about our program at www.mindfullibraries.com", current_language, client_ai)), 0, 'C') # Centered and bold
-    pdf.set_font("Arial", "", article_text_font_size) # Reset font to normal
-    pdf.ln(10 * line_height_multiplier) # More space after this line
+    pdf.set_font("Arial", "B", 12) # Set font to bold for this line
+    pdf.multi_cell(content_width_p2, 7, clean_text_for_latin1(translate_text_with_ai("Learn more about our program at www.mindfullibraries.com", current_language, client_ai)), 0, 'C') # Centered and bold
+    pdf.set_font("Arial", "", 12) # Reset font to normal
+    pdf.ln(10) # More space after this line
 
     # Logo - still centered horizontally on the page
     logo_width = 70
     logo_height = 70
     logo_x = (page_width - logo_width) / 2 # Still calculated based on full page width for centering
     pdf.image("https://i.postimg.cc/8CRsCGCC/Chat-GPT-Image-Jun-7-2025-12-32-18-AM.png", x=logo_x, y=pdf.get_y(), w=logo_width, h=logo_height)
-    pdf.ln(logo_height + (15 * line_height_multiplier)) # Add space after logo
+    pdf.ln(logo_height + 15) # Add space after logo
 
     # Contact Information - still centered horizontally on the page
-    pdf.set_font("Arial", "B", section_title_font_size * 1.3)
-    pdf.multi_cell(0, 10 * line_height_multiplier, clean_text_for_latin1(translate_text_with_ai("Contact Information", current_language, client_ai)), 0, 'C') # Translated
-    pdf.ln(5 * line_height_multiplier)
-    pdf.set_font("Arial", "", article_text_font_size * 1.2)
-    pdf.multi_cell(0, 7 * line_height_multiplier, clean_text_for_latin1(translate_text_with_ai("Email: thisdayinhistoryapp@gmail.com", current_language, client_ai)), 0, 'C') # Translated
-    pdf.multi_cell(0, 7 * line_height_multiplier, clean_text_for_latin1(translate_text_with_ai("Website: ThisDayInHistoryApp.com (Coming Soon!)", current_language, client_ai)), 0, 'C') # Translated
+    pdf.set_font("Arial", "B", 16)
+    pdf.multi_cell(0, 10, clean_text_for_latin1(translate_text_with_ai("Contact Information", current_language, client_ai)), 0, 'C') # Translated
+    pdf.ln(5)
+    pdf.set_font("Arial", "", 12)
+    pdf.multi_cell(0, 7, clean_text_for_latin1(translate_text_with_ai("Email: thisdayinhistoryapp@gmail.com", current_language, client_ai)), 0, 'C') # Translated
+    pdf.multi_cell(0, 7, clean_text_for_latin1(translate_text_with_ai("Website: ThisDayInHistoryApp.com (Coming Soon!)", current_language, client_ai)), 0, 'C') # Translated
     
     # Original bold website URL, keep if intended to have two website mentions
-    pdf.set_font("Arial", "B", article_text_font_size * 1.2) # Set font to bold
-    pdf.multi_cell(0, 7 * line_height_multiplier, clean_text_for_latin1(translate_text_with_ai("www.mindfullibraries.com", current_language, client_ai)), 0, 'C') # Translated
-    pdf.set_font("Arial", "", article_text_font_size) # Reset font to normal
+    pdf.set_font("Arial", "B", 12) # Set font to bold
+    pdf.multi_cell(0, 7, clean_text_for_latin1(translate_text_with_ai("www.mindfullibraries.com", current_language, client_ai)), 0, 'C') # Translated
+    pdf.set_font("Arial", "", 12) # Reset font to normal
 
-    pdf.multi_cell(0, 7 * line_height_multiplier, clean_text_for_latin1(translate_text_with_ai("Phone: 412-212-6701 (For Support)", current_language, client_ai)), 0, 'C') # Translated
-    pdf.ln(10 * line_height_multiplier)
+    pdf.multi_cell(0, 7, clean_text_for_latin1(translate_text_with_ai("Phone: 412-212-6701 (For Support)", current_language, client_ai)), 0, 'C') # Translated
+    pdf.ln(10)
 
     # User info at the very bottom of the second page, aligned right
-    pdf.set_font("Arial", "I", max(8, article_text_font_size - 2))
+    pdf.set_font("Arial", "I", 8)
     # Reset margins for a full width cell to align right
     pdf.set_left_margin(left_margin_p2) # Revert to page 2 margins
     pdf.set_right_margin(right_margin_p2)
     pdf.set_x(left_margin_p2)
-    pdf.set_y(pdf.h - (15 * line_height_multiplier)) # Position near bottom of the page
-    pdf.multi_cell(content_width_p2, 4 * line_height_multiplier, clean_text_for_latin1(translate_text_with_ai(f"Generated for {user_info['name']}", current_language, client_ai)), align='R') # Translated
+    pdf.set_y(pdf.h - 15) # Position near bottom of the page
+    pdf.multi_cell(content_width_p2, 4, clean_text_for_latin1(translate_text_with_ai(f"Generated for {user_info['name']}", current_language, client_ai)), align='R') # Translated
         
     return pdf.output(dest='S').encode('latin-1')
 
@@ -1253,15 +1004,12 @@ def set_page(page_name):
     """Sets the current page in session state."""
     st.session_state['current_page'] = page_name
     # Reset trivia states if navigating away from trivia page to ensure fresh start if new day
-    if page_name == 'main_app' or page_name == 'weekly_planner_page' or page_name == 'offline_pack_page': # Reset for relevant pages
+    if page_name == 'main_app':
         st.session_state['trivia_question_states'] = {}
         st.session_state['hints_remaining'] = 3 # Reset hints when going back to main page for a new day's content
         st.session_state['current_trivia_score'] = 0 # Reset score for a new day
         st.session_state['total_possible_daily_trivia_score'] = 0 # Reset total possible for a new day
         st.session_state['score_logged_today'] = False # Reset logging flag
-        st.session_state['current_trivia_slide'] = 0 # Reset for group mode
-        st.session_state['reveal_answer'] = False # Reset for group mode
-        st.session_state['resident_scores'] = [{'name': f'Resident {i+1}', 'score': 0} for i in range(len(st.session_state['resident_scores']))] # Reset group scores
     # Streamlit will automatically rerun the app when session_state is modified.
     # No st.rerun() is needed here to avoid "no-op" warnings.
 
@@ -1323,15 +1071,13 @@ def show_main_app_page():
     }
 
     # Fetch daily data if not already fetched for the current day/user/preferences/language
-    # Include new feature toggles in the key to ensure re-fetch if they change
     current_data_key = f"{selected_date.strftime('%Y-%m-%d')}-{st.session_state['logged_in_username']}-" \
                        f"{st.session_state.get('preferred_topic_main_app', 'None')}-" \
                        f"{st.session_state.get('preferred_decade_main_app', 'None')}-" \
                        f"trivia_difficulty_{st.session_state['difficulty']}-" \
                        f"local_city_{st.session_state['local_city']}-" \
                        f"local_state_country_{st.session_state['local_state_country']}-" \
-                       f"language_{st.session_state['preferred_language']}-" \
-                       f"companion_activities_enabled_{st.session_state['toggle_companion_activities']}" # ADDED COMPANION ACTIVITIES TOGGLE TO KEY
+                       f"language_{st.session_state['preferred_language']}" # ADDED LANGUAGE TO KEY
 
     if st.session_state['last_fetched_date'] != current_data_key or st.session_state['daily_data'] is None:
         with st.spinner(translate_text_with_ai("Fetching today's historical facts and generating content...", st.session_state['preferred_language'], client_ai)):
@@ -1359,10 +1105,6 @@ def show_main_app_page():
             st.session_state['current_trivia_score'] = 0 # Reset score for a new day
             st.session_state['total_possible_daily_trivia_score'] = 0 # Reset total possible for a new day
             st.session_state['score_logged_today'] = False # Reset logging flag
-            # Reset group mode states
-            st.session_state['current_trivia_slide'] = 0
-            st.session_state['reveal_answer'] = False
-            st.session_state['resident_scores'] = [{'name': f'Resident {i+1}', 'score': 0} for i in range(len(st.session_state['resident_scores']))]
 
     data = st.session_state['daily_data'] # This 'data' is now already translated if needed
     raw_data_for_pdf = st.session_state['raw_fetched_data'] # Get the raw data for PDF generation
@@ -1431,15 +1173,6 @@ Word of mouth goes a long way—if you enjoy using This Day In History, please s
     else:
         st.write(translate_text_with_ai("No memory prompts available.", st.session_state['preferred_language'], client_ai))
 
-    # NEW: Display Companion Activities if enabled
-    if st.session_state.get('toggle_companion_activities', False):
-        st.markdown("---")
-        st.subheader(translate_text_with_ai("🎨 Companion Activities", st.session_state['preferred_language'], client_ai))
-        if data.get('companion_activities') and not data.get('companion_activities').startswith("No companion activities available."):
-            st.markdown(data.get('companion_activities'))
-        else:
-            st.info(translate_text_with_ai("No companion activities generated for today's article.", st.session_state['preferred_language'], client_ai))
-
     st.markdown("---")
 
     st.subheader(translate_text_with_ai("PDF Customization", st.session_state['preferred_language'], client_ai))
@@ -1451,27 +1184,18 @@ Word of mouth goes a long way—if you enjoy using This Day In History, please s
     )
     
     # Generate PDF bytes once
-    # DEBUG PRINT: Confirming the masthead text used for PDF generation
-    print(f"DEBUG: Generating PDF with masthead: '{st.session_state['custom_masthead_text']}' for date {selected_date.strftime('%Y-%m-%d')}")
     with st.spinner(translate_text_with_ai("Preparing your PDF worksheet...", st.session_state['preferred_language'], client_ai)):
         pdf_bytes_main = generate_full_history_pdf(
             raw_data_for_pdf, 
             selected_date.strftime('%B %d, %Y'), 
             user_info, 
             st.session_state['preferred_language'],
-            st.session_state['custom_masthead_text'], # Pass the custom masthead text
-            st.session_state['toggle_large_print_pdf'], # Pass large print toggle
-            st.session_state['toggle_audio_qr'] # Pass audio QR toggle
+            st.session_state['custom_masthead_text'] # Pass the custom masthead text
         )
     
     # Create Base64 encoded link
     lang_suffix = f"_{st.session_state['preferred_language']}" if st.session_state['preferred_language'] != 'English' else ''
     pdf_file_name = f"This_Day_in_History_{selected_date.strftime('%Y%m%d')}{lang_suffix}.pdf"
-
-    # Make download button key dynamic to ensure fresh content on re-renders
-    # Using a hash of custom_masthead_text and date to ensure unique key when content changes
-    download_button_key = f"download_daily_pdf_{selected_date.strftime('%Y%m%d')}_{st.session_state['preferred_language']}_masthead_{hash(st.session_state['custom_masthead_text'])}"
-
 
     b64_pdf_main = base64.b64encode(pdf_bytes_main).decode('latin-1')
     pdf_viewer_link_main = f'<a href="data:application/pdf;base64,{b64_pdf_main}" target="_blank">{translate_text_with_ai("View PDF in Browser", st.session_state["preferred_language"], client_ai)}</a>'
@@ -1493,373 +1217,24 @@ Word of mouth goes a long way—if you enjoy using This Day In History, please s
             file_name=pdf_file_name,
             mime="application/pdf",
             on_click=handle_pdf_download_click, # Use the new handler
-            args=(st.session_state['logged_in_username'], pdf_file_name, selected_date), # Pass arguments
-            key=download_button_key # Use the dynamic key
+            args=(st.session_state['logged_in_username'], pdf_file_name, selected_date) # Pass arguments
         )
     with col2:
         st.markdown(pdf_viewer_link_main, unsafe_allow_html=True)
     
+    # --- Offline Access (Conceptual - requires local storage solution) ---
+    st.sidebar.markdown("---")
+    st.sidebar.subheader(translate_text_with_ai("Future Features", st.session_state['preferred_language'], client_ai))
+    st.sidebar.info(translate_text_with_ai("🗓️ **Offline Access:** Coming soon! Downloaded PDFs provide a workaround for now.", st.session_state['preferred_language'], client_ai))
+    
+    # --- Sharing/Email Option (Conceptual - requires external email service) ---
+    st.sidebar.info(translate_text_with_ai("📧 **Share Daily Page:** Future integration with email services for sharing daily/weekly content.", st.session_state['preferred_language'], client_ai))
+
     # Feedback form at the bottom
     show_feedback_form()
 
 
-# NEW: show_weekly_planner_page
-def show_weekly_planner_page():
-    st.title(translate_text_with_ai("🗓️ Weekly Planner View", st.session_state['preferred_language'], client_ai))
-    st.button(translate_text_with_ai("⬅️ Back to Main Page", st.session_state['preferred_language'], client_ai), on_click=set_page, args=('main_app',), key="back_to_main_from_weekly_top")
-
-    st.markdown("---")
-    st.markdown(translate_text_with_ai("Select a week to generate a ZIP file containing 7 daily PDFs.", st.session_state['preferred_language'], client_ai))
-
-    selected_date = st.date_input(translate_text_with_ai("Select a date within the desired week", st.session_state['preferred_language'], client_ai), value=date.today(), key="weekly_planner_date_input")
-    week_start_option = st.radio(translate_text_with_ai("Week Starts On:", st.session_state['preferred_language'], client_ai), ["Sunday", "Monday"], key='week_start_radio')
-
-    if week_start_option == "Sunday":
-        # Calculate the most recent Sunday
-        start_of_week = selected_date - timedelta(days=(selected_date.weekday() + 1) % 7)
-    else: # Monday
-        # Calculate the most recent Monday
-        start_of_week = selected_date - timedelta(days=selected_date.weekday())
-
-    st.info(translate_text_with_ai(f"PDFs will be generated for the week of: **{start_of_week.strftime('%B %d, %Y')}** to **{(start_of_week + timedelta(days=6)).strftime('%B %d, %Y')}**", st.session_state['preferred_language'], client_ai))
-
-    if st.button(translate_text_with_ai("Generate Weekly PDF Pack", st.session_state['preferred_language'], client_ai), key='generate_weekly_zip_btn'):
-        pdf_files = {} # Dictionary to store filename and PDF bytes
-        user_info = {'name': st.session_state['logged_in_username']}
-
-        with st.spinner(translate_text_with_ai("Generating 7 daily PDFs and creating ZIP file...", st.session_state['preferred_language'], client_ai)):
-            for i in range(7):
-                current_day = start_of_week + timedelta(days=i)
-                
-                # Fetch daily data (raw, English version)
-                fetched_raw_data = get_this_day_in_history_facts(
-                    current_day.day, current_day.month, user_info, client_ai,
-                    topic=st.session_state.get('preferred_topic_main_app') if st.session_state.get('preferred_topic_main_app') != "None" else None,
-                    preferred_decade=st.session_state.get('preferred_decade_main_app') if st.session_state.get('preferred_decade_main_app') != "None' else None,
-                    difficulty=st.session_state['difficulty'],
-                    local_city=st.session_state['local_city'] if st.session_state['local_city'].strip() else None,
-                    local_state_country=st.session_state['local_state_country'] if st.session_state['local_state_country'].strip() else None
-                )
-
-                pdf_filename = f"This_Day_in_History_{current_day.strftime('%Y%m%d')}_{st.session_state['preferred_language']}.pdf"
-                
-                # Generate PDF using fetched raw data (translation will occur inside generate_full_history_pdf)
-                pdf_bytes_output = generate_full_history_pdf(
-                    fetched_raw_data,
-                    current_day.strftime('%B %d, %Y'),
-                    user_info,
-                    st.session_state['preferred_language'],
-                    st.session_state['custom_masthead_text'],
-                    st.session_state['toggle_large_print_pdf'],
-                    st.session_state['toggle_audio_qr']
-                )
-                pdf_files[pdf_filename] = pdf_bytes_output
-                log_pdf_download(st.session_state['logged_in_username'], pdf_filename, current_day)
-
-            # Create ZIP file in memory
-            zip_buffer = BytesIO()
-            with zipfile.ZipFile(zip_buffer, 'a', zipfile.ZIP_DEFLATED, False) as zip_file:
-                for filename, content in pdf_files.items():
-                    zip_file.writestr(filename, content)
-            zip_buffer.seek(0) # Rewind to beginning
-
-            zip_file_name = f"This_Day_in_History_Weekly_Pack_{start_of_week.strftime('%Y%m%d')}.zip"
-            st.download_button(
-                label=translate_text_with_ai("Download Weekly PDF Pack (ZIP)", st.session_state['preferred_language'], client_ai),
-                data=zip_buffer,
-                file_name=zip_file_name,
-                mime="application/zip",
-                key=f"download_weekly_zip_{start_of_week.strftime('%Y%m%d')}_{st.session_state['preferred_language']}_masthead_{hash(st.session_state['custom_masthead_text'])}" # Dynamic key
-            )
-            st.success(translate_text_with_ai("Weekly PDF pack generated and ready for download!", st.session_state['preferred_language'], client_ai))
-    
-    st.button(translate_text_with_ai("⬅️ Back to Main Page", st.session_state['preferred_language'], client_ai), on_click=set_page, args=('main_app',), key="back_to_main_from_weekly_bottom")
-    show_feedback_form()
-
-
-# NEW: show_group_mode_trivia_page
-def show_group_mode_trivia_page(daily_data, client_ai):
-    st.title(translate_text_with_ai("👥 Group Trivia Challenge!", st.session_state['preferred_language'], client_ai))
-    st.button(translate_text_with_ai("⬅️ Back to Main Page", st.session_state['preferred_language'], client_ai), on_click=set_page, args=('main_app',), key="back_to_main_from_group_top")
-
-    if not daily_data or not daily_data['trivia_section']:
-        st.warning(translate_text_with_ai("No trivia questions available for today. Please fetch daily data from the main page.", st.session_state['preferred_language'], client_ai))
-        return
-
-    trivia_questions = daily_data['trivia_section']
-    num_questions = len(trivia_questions)
-
-    st.subheader(translate_text_with_ai("Group Settings", st.session_state['preferred_language'], client_ai))
-    # Allow setting number of residents
-    num_residents = st.number_input(translate_text_with_ai("Number of Participants (max 10)", st.session_state['preferred_language'], client_ai), min_value=1, max_value=10, value=len(st.session_state['resident_scores']), key='num_residents_group_mode')
-    if len(st.session_state['resident_scores']) != num_residents:
-        st.session_state['resident_scores'] = [{'name': f'Resident {i+1}', 'score': 0} for i in range(num_residents)]
-        # Reinitialize states for existing questions based on new number of residents.
-        # This part might need more sophisticated handling if existing scores need to be preserved.
-        # For simplicity, resetting scores if number of residents changes.
-        st.session_state['current_trivia_slide'] = 0
-        st.session_state['reveal_answer'] = False
-        st.experimental_rerun() # Rerun to apply participant count change
-
-    st.markdown("---")
-
-    current_q_index = st.session_state['current_trivia_slide']
-
-    if current_q_index < num_questions:
-        current_question = trivia_questions[current_q_index]
-
-        st.markdown(f"### {translate_text_with_ai('Question', st.session_state['preferred_language'], client_ai)} {current_q_index + 1} / {num_questions}")
-        st.markdown(f"<h1 style='text-align: center; font-size: 3em;'>{clean_text_for_latin1(current_question['question'])}</h1>", unsafe_allow_html=True)
-        st.write("") # Add some space
-
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button(translate_text_with_ai("💡 Hint", st.session_state['preferred_language'], client_ai), key=f'hint_btn_group_{current_q_index}'):
-                st.info(translate_text_with_ai(f"Hint: {clean_text_for_latin1(current_question['hint'])}", st.session_state['preferred_language'], client_ai))
-        with col2:
-            if st.button(translate_text_with_ai("👁️ Reveal Answer", st.session_state['preferred_language'], client_ai), key=f'reveal_btn_group_{current_q_index}'):
-                st.session_state['reveal_answer'] = True
-
-        if st.session_state['reveal_answer']:
-            st.markdown(f"### {translate_text_with_ai('Answer', st.session_state['preferred_language'], client_ai)}:")
-            st.markdown(f"<h2 style='text-align: center; color: #28a745;'>{clean_text_for_latin1(current_question['answer'])}</h2>", unsafe_allow_html=True)
-            
-            # Generate explanation for the answer (if not already generated and stored in a temporary state)
-            explanation_key = f'explanation_group_{current_q_index}'
-            if explanation_key not in st.session_state:
-                 with st.spinner(translate_text_with_ai("Generating explanation...", st.session_state['preferred_language'], client_ai)):
-                    generated_explanation_en = generate_related_trivia_article(current_question['question'], current_question['answer'], client_ai)
-                    st.session_state[explanation_key] = translate_text_with_ai(generated_explanation_en, st.session_state['preferred_language'], client_ai)
-            st.info(translate_text_with_ai(f"Explanation: {clean_text_for_latin1(st.session_state[explanation_key])}", st.session_state['preferred_language'], client_ai))
-            
-            st.markdown("---")
-            st.markdown(translate_text_with_ai("### Score Participants", st.session_state['preferred_language'], client_ai))
-            
-            # Use columns for score input
-            score_cols = st.columns(num_residents)
-            for i, resident in enumerate(st.session_state['resident_scores']):
-                with score_cols[i]:
-                    if st.button(translate_text_with_ai(f"➕ {resident['name']}", st.session_state['preferred_language'], client_ai), key=f'score_btn_group_{current_q_index}_{i}'):
-                        st.session_state['resident_scores'][i]['score'] += 1
-                        st.success(translate_text_with_ai(f"{resident['name']} scored!", st.session_state['preferred_language'], client_ai))
-                    st.markdown(f"**{resident['name']}: {resident['score']}**")
-
-            st.markdown("---")
-            if st.button(translate_text_with_ai("➡️ Next Question", st.session_state['preferred_language'], client_ai), key=f'next_q_btn_group_{current_q_index}'):
-                st.session_state['current_trivia_slide'] += 1
-                st.session_state['reveal_answer'] = False # Reset for next question
-                st.experimental_rerun() # Rerun to show next question
-    else:
-        st.success(translate_text_with_ai("All trivia questions completed!", st.session_state['preferred_language'], client_ai))
-        st.markdown(translate_text_with_ai("### Final Scores:", st.session_state['preferred_language'], client_ai))
-        
-        # Sort residents by score for final display
-        sorted_scores = sorted(st.session_state['resident_scores'], key=lambda x: x['score'], reverse=True)
-        for i, resident in enumerate(sorted_scores):
-            st.write(f"{i+1}. {resident['name']}: {resident['score']} {translate_text_with_ai('points', st.session_state['preferred_language'], client_ai)}")
-        
-        if st.button(translate_text_with_ai("Restart Trivia", st.session_state['preferred_language'], client_ai), key='restart_trivia_btn_group'):
-            st.session_state['current_trivia_slide'] = 0
-            st.session_state['reveal_answer'] = False
-            for resident in st.session_state['resident_scores']: # Reset scores
-                resident['score'] = 0
-            st.experimental_rerun()
-    
-    st.button(translate_text_with_ai("⬅️ Back to Main Page", st.session_state['preferred_language'], client_ai), on_click=set_page, args=('main_app',), key="back_to_main_from_group_bottom")
-    show_feedback_form()
-
-
-# NEW: show_memory_journal_page
-def show_memory_journal_page():
-    st.title(translate_text_with_ai("✍️ Memory Journal", st.session_state['preferred_language'], client_ai))
-    st.button(translate_text_with_ai("⬅️ Back to Main Page", st.session_state['preferred_language'], client_ai), on_click=set_page, args=('main_app',), key="back_to_main_from_journal_top")
-
-    st.markdown("---")
-    st.markdown(translate_text_with_ai("Use this tool to record resident memories or reactions to daily prompts.", st.session_state['preferred_language'], client_ai))
-
-    st.session_state['current_resident_name_journal'] = st.text_input(
-        translate_text_with_ai("Resident Name:", st.session_state['preferred_language'], client_ai),
-        value=st.session_state['current_resident_name_journal'],
-        key='memory_resident_name_input'
-    )
-    st.session_state['current_memory_entry_text'] = st.text_area(
-        translate_text_with_ai("Memory/Reaction Entry:", st.session_state['preferred_language'], client_ai),
-        value=st.session_state['current_memory_entry_text'],
-        height=200,
-        key='memory_text_area_input'
-    )
-
-    if st.button(translate_text_with_ai("Save Memory Entry", st.session_state['preferred_language'], client_ai), key='save_memory_btn'):
-        if st.session_state['current_resident_name_journal'].strip() and st.session_state['current_memory_entry_text'].strip():
-            if log_memory_entry(st.session_state['logged_in_username'], st.session_state['current_resident_name_journal'].strip(), st.session_state['current_memory_entry_text'].strip(), date.today()):
-                st.success(translate_text_with_ai("Memory saved successfully!", st.session_state['preferred_language'], client_ai))
-                st.session_state['current_memory_entry_text'] = "" # Clear text area
-                # st.session_state['current_resident_name_journal'] = "" # Keep name for consecutive entries
-            else:
-                st.error(translate_text_with_ai("Failed to save memory. Please try again.", st.session_state['preferred_language'], client_ai))
-        else:
-            st.warning(translate_text_with_ai("Please provide both resident name and the memory entry.", st.session_state['preferred_language'], client_ai))
-
-    st.markdown("---")
-    st.subheader(translate_text_with_ai("Download Journal", st.session_state['preferred_language'], client_ai))
-
-    if st.button(translate_text_with_ai("Download Full Memory Journal (PDF)", st.session_state['preferred_language'], client_ai), key='download_journal_pdf_btn'):
-        entries = get_memory_entries(st.session_state['logged_in_username'])
-        if entries:
-            # Generate PDF for journal
-            pdf = FPDF(unit="mm", format="A4")
-            pdf.add_page()
-            pdf.set_auto_page_break(True, margin=15)
-            
-            pdf.set_font("Arial", "B", 18)
-            pdf.cell(0, 10, clean_text_for_latin1(translate_text_with_ai(f"{st.session_state['logged_in_username']}'s Memory Journal", st.session_state['preferred_language'], client_ai)), 0, 1, 'C')
-            pdf.ln(10)
-
-            for entry in entries:
-                pdf.set_font("Arial", "B", 14)
-                pdf.multi_cell(0, 8, clean_text_for_latin1(translate_text_with_ai(f"Resident: {entry.get('ResidentName', 'N/A')}", st.session_state['preferred_language'], client_ai)))
-                pdf.set_font("Arial", "", 10)
-                pdf.multi_cell(0, 6, clean_text_for_latin1(translate_text_with_ai(f"Date: {entry.get('EntryDate', 'N/A')}", st.session_state['preferred_language'], client_ai)))
-                pdf.ln(2)
-                pdf.set_font("Arial", "", 12)
-                pdf.multi_cell(0, 7, clean_text_for_latin1(entry.get('MemoryText', '')))
-                pdf.ln(10) # Space between entries
-            
-            pdf_bytes = BytesIO()
-            pdf.output(pdf_bytes)
-            pdf_bytes.seek(0)
-
-            journal_filename = f"Memory_Journal_{st.session_state['logged_in_username']}_{date.today().strftime('%Y%m%d')}.pdf"
-            st.download_button(
-                label=translate_text_with_ai("Click to Download Journal", st.session_state['preferred_language'], client_ai),
-                data=pdf_bytes,
-                file_name=journal_filename,
-                mime="application/pdf",
-                key=f'final_journal_download_btn_{date.today().strftime("%Y%m%d")}' # Dynamic key
-            )
-        else:
-            st.info(translate_text_with_ai("No memory entries to download yet.", st.session_state['preferred_language'], client_ai))
-    
-    st.button(translate_text_with_ai("⬅️ Back to Main Page", st.session_state['preferred_language'], client_ai), on_click=set_page, args=('main_app',), key="back_to_main_from_journal_bottom")
-    show_feedback_form()
-
-# NEW: show_offline_pack_page
-def show_offline_pack_page():
-    st.title(translate_text_with_ai("📦 Offline Content Pack", st.session_state['preferred_language'], client_ai))
-    st.button(translate_text_with_ai("⬅️ Back to Main Page", st.session_state['preferred_language'], client_ai), on_click=set_page, args=('main_app',), key="back_to_main_from_offline_top")
-
-    st.markdown("---")
-    st.markdown(translate_text_with_ai("Download the next 7 days of 'This Day in History' PDFs in a single ZIP file for offline access.", st.session_state['preferred_language'], client_ai))
-
-    current_date = date.today()
-    st.info(translate_text_with_ai(f"This will download content for the next 7 days, starting from **{current_date.strftime('%B %d, %Y')}**.", st.session_state['preferred_language'], client_ai))
-
-    if st.button(translate_text_with_ai("Pre-download Next 7 Days (ZIP)", st.session_state['preferred_language'], client_ai), key='download_offline_pack_btn'):
-        pdf_files = {}
-        user_info = {'name': st.session_state['logged_in_username']}
-
-        with st.spinner(translate_text_with_ai("Generating next 7 days of PDFs and creating ZIP file...", st.session_state['preferred_language'], client_ai)):
-            for i in range(7):
-                day_to_fetch = current_date + timedelta(days=i)
-                
-                fetched_raw_data = get_this_day_in_history_facts(
-                    day_to_fetch.day, day_to_fetch.month, user_info, client_ai,
-                    topic=st.session_state.get('preferred_topic_main_app') if st.session_state.get('preferred_topic_main_app') != "None" else None,
-                    preferred_decade=st.session_state.get('preferred_decade_main_app') if st.session_state.get('preferred_decade_main_app') != "None" else None,
-                    difficulty=st.session_state['difficulty'],
-                    local_city=st.session_state['local_city'] if st.session_state['local_city'].strip() else None,
-                    local_state_country=st.session_state['local_state_country'] if st.session_state['local_state_country'].strip() else None
-                )
-
-                pdf_filename = f"This_Day_in_History_{day_to_fetch.strftime('%Y%m%d')}_{st.session_state['preferred_language']}.pdf"
-                
-                pdf_bytes_output = generate_full_history_pdf(
-                    fetched_raw_data,
-                    day_to_fetch.strftime('%B %d, %Y'),
-                    user_info,
-                    st.session_state['preferred_language'],
-                    st.session_state['custom_masthead_text'],
-                    st.session_state['toggle_large_print_pdf'],
-                    st.session_state['toggle_audio_qr']
-                )
-                pdf_files[pdf_filename] = pdf_bytes_output
-                log_pdf_download(st.session_state['logged_in_username'], pdf_filename, day_to_fetch)
-
-            zip_buffer = BytesIO()
-            with zipfile.ZipFile(zip_buffer, 'a', zipfile.ZIP_DEFLATED, False) as zip_file:
-                for filename, content in pdf_files.items():
-                    zip_file.writestr(filename, content)
-            zip_buffer.seek(0)
-
-            zip_file_name = f"This_Day_in_History_Offline_Pack_{current_date.strftime('%Y%m%d')}.zip"
-            st.download_button(
-                label=translate_text_with_ai("Download Offline Pack (ZIP)", st.session_state['preferred_language'], client_ai),
-                data=zip_buffer,
-                file_name=zip_file_name,
-                mime="application/zip",
-                key=f"download_offline_zip_{current_date.strftime('%Y%m%d')}_{st.session_state['preferred_language']}_masthead_{hash(st.session_state['custom_masthead_text'])}" # Dynamic key
-            )
-            st.success(translate_text_with_ai("Offline PDF pack generated and ready for download!", st.session_state['preferred_language'], client_ai))
-    
-    st.button(translate_text_with_ai("⬅️ Back to Main Page", st.session_state['preferred_language'], client_ai), on_click=set_page, args=('main_app',), key="back_to_main_from_offline_bottom")
-    show_feedback_form()
-
-# NEW: show_autopilot_email_page
-def show_autopilot_email_page():
-    st.title(translate_text_with_ai("📧 Autopilot Email Feature", st.session_state['preferred_language'], client_ai))
-    st.button(translate_text_with_ai("⬅️ Back to Main Page", st.session_state['preferred_language'], client_ai), on_click=set_page, args=('main_app',), key="back_to_main_from_email_top")
-
-    st.markdown("---")
-    st.warning(
-        translate_text_with_ai(
-            """**Important Note on Autopilot Email:**
-            This feature requires an external email service and a separate backend process to function automatically (e.g., a scheduled cloud function, or integration with a service like Zapier/Make.com).
-            Direct automated email sending is not possible from within this Streamlit application environment for security and technical reasons.
-            
-            Below, you can configure your preferences for how you'd *like* this feature to work,
-            and we will explore ways to integrate with external solutions in the future.
-            """,
-            st.session_state['preferred_language'],
-            client_ai
-        )
-    )
-
-    st.markdown("---")
-    st.subheader(translate_text_with_ai("Email Preferences (Conceptual)", st.session_state['preferred_language'], client_ai))
-    
-    st.session_state['email_recipient'] = st.text_input(
-        translate_text_with_ai("Recipient Email Address:", st.session_state['preferred_language'], client_ai),
-        value=st.session_state['email_recipient'],
-        key='email_recipient_input',
-        help=translate_text_with_ai("Enter the email address where you'd like to receive PDFs.", st.session_state['preferred_language'], client_ai)
-    )
-
-    st.session_state['email_frequency'] = st.selectbox(
-        translate_text_with_ai("Email Frequency:", st.session_state['preferred_language'], client_ai),
-        options=["Daily", "Weekly (Sunday)", "Weekly (Monday)"],
-        index=["Daily", "Weekly (Sunday)", "Weekly (Monday)"].index(st.session_state['email_frequency']),
-        key='email_frequency_select',
-        help=translate_text_with_ai("Choose how often you want to receive the PDF bundles.", st.session_state['preferred_language'], client_ai)
-    )
-
-    st.info(
-        translate_text_with_ai(
-            f"If enabled externally, daily/weekly PDFs would be sent to: **{st.session_state['email_recipient'] if st.session_state['email_recipient'] else 'Not set'}** with a **{st.session_state['email_frequency']}** frequency.",
-            st.session_state['preferred_language'],
-            client_ai
-        )
-    )
-    
-    st.button(translate_text_with_ai("⬅️ Back to Main Page", st.session_state['preferred_language'], client_ai), on_click=set_page, args=('main_app',), key="back_to_main_from_email_bottom")
-    show_feedback_form()
-
-
 def show_trivia_page():
-    # Conditional rendering for Group Mode
-    if st.session_state.get('toggle_group_mode', False):
-        show_group_mode_trivia_page(st.session_state['daily_data'], client_ai)
-        return # Exit to avoid showing the regular trivia below
-
     st.title(translate_text_with_ai("🧠 Daily Trivia Challenge!", st.session_state['preferred_language'], client_ai))
     st.button(translate_text_with_ai("⬅️ Back to Main Page", st.session_state['preferred_language'], client_ai), on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_top")
 
@@ -1958,12 +1333,12 @@ def show_trivia_page():
             st.markdown(f"**{translate_text_with_ai('Question', st.session_state['preferred_language'], client_ai)} {i+1} {translate_text_with_ai('of', st.session_state['preferred_language'], client_ai)} {len(trivia_questions)}:**")
             
             # Display question
-            st.markdown(f"{clean_text_for_latin1(trivia_item.get('question', 'No question available.'))}") # Display question
+            st.markdown(f"{trivia_item.get('question', 'No question available.')}") # Display question
             
             # Display hint ONLY if revealed or out of chances
             if q_state['hint_revealed'] or q_state.get('out_of_chances', False):
                  if trivia_item.get('hint'):
-                    st.info(f"Hint: {clean_text_for_latin1(trivia_item.get('hint', 'No hint available.'))}") # Display hint
+                    st.info(f"Hint: {trivia_item.get('hint', 'No hint available.')}") # Display hint
 
             col_input, col_check, col_hint = st.columns([0.6, 0.2, 0.2])
 
@@ -2017,7 +1392,7 @@ def show_trivia_page():
                                 # Display correct answer here if user is out of chances
                                 translated_correct_answer = translate_text_with_ai(trivia_item.get('answer', ''), st.session_state['preferred_language'], client_ai) # Use .get() here too
                                 q_state['feedback'] = translate_text_with_ai(f"❌ You've used all {q_state['attempts']} attempts. The correct answer was: **{translated_correct_answer}**. You earned 0 points for this question.", st.session_state['preferred_language'], client_ai)
-                                st.info(f"Answer: {clean_text_for_latin1(trivia_item.get('answer', 'No answer available.'))}") # Display answer immediately if out of chances
+                                st.info(f"Answer: {trivia_item.get('answer', 'No answer available.')}") # Display answer immediately if out of chances
                                 # Ensure points_earned is 0 if out of chances and not previously correct
                                 if q_state['points_earned'] == 0:
                                     q_state['points_earned'] = 0 # Explicitly set to 0
@@ -2034,7 +1409,7 @@ def show_trivia_page():
                         # No st.rerun() needed here; button click triggers rerun automatically
                 # Always display hint if it was revealed for this question OR out of chances (for learning) AND hint content exists
                 elif (q_state['hint_revealed'] or q_state.get('out_of_chances', False)) and trivia_item.get('hint'):
-                    st.info(f"{translate_text_with_ai('Hint', st.session_state['preferred_language'], client_ai)}: {clean_text_for_latin1(trivia_item.get('hint', ''))}")
+                    st.info(f"{translate_text_with_ai('Hint', st.session_state['preferred_language'], client_ai)}: {trivia_item.get('hint', '')}")
 
             # Display feedback based on the state
             if q_state['feedback']:
@@ -2220,11 +1595,11 @@ def show_login_register_page():
     trivia_example_questions = fetched_raw_example_data.get('trivia_section', [])
     if trivia_example_questions: # Use fetched_raw_example_data for trivia section
         for i, trivia_item in enumerate(trivia_example_questions[:4]): # Limit to 4 for example PDF
-            st.markdown(f"**Question {i+1}:** {clean_text_for_latin1(trivia_item.get('question', 'No question available.'))}")
-            st.info(f"Answer: {clean_text_for_latin1(trivia_item.get('answer', 'No answer available.'))}") # Display answer for example content
+            st.markdown(f"**Question {i+1}:** {trivia_item.get('question', 'No question available.')}")
+            st.info(f"Answer: {trivia_item.get('answer', 'No answer available.')}") # Display answer for example content
             # Safely display hint for example content
             if trivia_item.get('hint'): # Use .get() here too
-                st.info(f"Hint: {clean_text_for_latin1(trivia_item.get('hint', 'No hint available.'))}")
+                st.info(f"Hint: {trivia_item.get('hint', 'No hint available.')}")
     else: # Added an else block here to explicitly state if no trivia is loaded
         st.info(translate_text_with_ai("No example trivia questions are available. Please try again later.", st.session_state['preferred_language'], client_ai))
 
@@ -2243,15 +1618,6 @@ def show_login_register_page():
     else:
         st.write(translate_text_with_ai("No memory prompts available.", st.session_state['preferred_language'], client_ai))
 
-    # Display Companion Activities if enabled (for example content, if the toggle is on)
-    if st.session_state.get('toggle_companion_activities', False):
-        st.markdown("---")
-        st.subheader(translate_text_with_ai("🎨 Example Companion Activities", st.session_state['preferred_language'], client_ai))
-        if example_data.get('companion_activities') and not example_data.get('companion_activities').startswith("No companion activities available."):
-            st.markdown(example_data.get('companion_activities'))
-        else:
-            st.info(translate_text_with_ai("No example companion activities generated.", st.session_state['preferred_language'], client_ai))
-
 
     # Generate PDF bytes once for example content
     with st.spinner(translate_text_with_ai("Preparing example PDF...", st.session_state['preferred_language'], client_ai)):
@@ -2261,9 +1627,7 @@ def show_login_register_page():
             example_user_info, 
             st.session_state['preferred_language'],
             # No custom masthead for the example PDF, so pass None or empty string
-            "",
-            st.session_state['toggle_large_print_pdf'], # Pass large print toggle
-            st.session_state['toggle_audio_qr'] # Pass audio QR toggle
+            "" 
         )
 
     # Create Base64 encoded link for example content
@@ -2279,8 +1643,7 @@ def show_login_register_page():
             translate_text_with_ai("Download Example PDF", st.session_state['preferred_language'], client_ai),
             pdf_bytes_example,
             file_name=pdf_file_name_example,
-            mime="application/pdf",
-            key=f"download_example_pdf_{january_1st_example_date.strftime('%Y%m%d')}_{st.session_state['preferred_language']}_masthead_example" # Dynamic key for example
+            mime="application/pdf"
         )
     with col2_example:
         st.markdown(pdf_viewer_link_example, unsafe_allow_html=True)
@@ -2296,37 +1659,9 @@ if st.session_state['is_authenticated']:
         set_page('main_app')
     if st.sidebar.button(translate_text_with_ai("🎮 Play Trivia!", st.session_state['preferred_language'], client_ai), key="sidebar_trivia_btn"):
         set_page('trivia_page')
-    
-    st.sidebar.markdown("---") # Separator before feature toggles explanation
-    st.sidebar.info(translate_text_with_ai("💡 Check the boxes below to enable new features, then use the navigation buttons above!", st.session_state['preferred_language'], client_ai))
-    
-    st.sidebar.subheader(translate_text_with_ai("✨ New Feature Toggles", st.session_state['preferred_language'], client_ai))
-    st.session_state['toggle_weekly_planner'] = st.sidebar.checkbox(translate_text_with_ai("📊 Enable Weekly Planner", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_weekly_planner'], key='toggle_weekly_planner')
-    st.session_state['toggle_group_mode'] = st.sidebar.checkbox(translate_text_with_ai("👥 Enable Group Mode (Trivia)", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_group_mode'], key='toggle_group_mode')
-    st.session_state['toggle_audio_qr'] = st.sidebar.checkbox(translate_text_with_ai("🎧 Enable Audio QR Codes (PDF)", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_audio_qr'], key='toggle_audio_qr')
-    st.session_state['toggle_companion_activities'] = st.sidebar.checkbox(translate_text_with_ai("🎨 Enable Companion Activities", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_companion_activities'], key='toggle_companion_activities')
-    st.session_state['toggle_memory_journal'] = st.sidebar.checkbox(translate_text_with_ai("✍️ Enable Memory Journal Tool", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_memory_journal'], key='toggle_memory_journal')
-    st.session_state['toggle_large_print_pdf'] = st.sidebar.checkbox(translate_text_with_ai("🖨️ Enable Large Print PDF", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_large_print_pdf'], key='toggle_large_print_pdf')
-    st.session_state['toggle_offline_pack'] = st.sidebar.checkbox(translate_text_with_ai("📦 Enable Offline Pack", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_offline_pack'], key='toggle_offline_pack')
-    st.session_state['toggle_autopilot_email'] = st.sidebar.checkbox(translate_text_with_ai("📧 Enable Autopilot Email", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_autopilot_email'], key='toggle_autopilot_email')
-
-    # NEW: Navigation for new features (moved below toggles but still in general navigation section)
-    # These buttons will now appear only if the corresponding toggle is checked.
-    if st.session_state['toggle_weekly_planner']:
-        if st.sidebar.button(translate_text_with_ai("📊 Weekly Planner", st.session_state['preferred_language'], client_ai), key="sidebar_weekly_planner_btn_nav"): # Changed key to avoid conflict if any
-            set_page('weekly_planner_page')
-    if st.session_state['toggle_memory_journal']:
-        if st.sidebar.button(translate_text_with_ai("✍️ Memory Journal", st.session_state['preferred_language'], client_ai), key="sidebar_memory_journal_btn_nav"): # Changed key
-            set_page('memory_journal_page')
-    if st.session_state['toggle_offline_pack']:
-        if st.sidebar.button(translate_text_with_ai("📦 Offline Pack", st.session_state['preferred_language'], client_ai), key="sidebar_offline_pack_btn_nav"): # Changed key
-            set_page('offline_pack_page')
-    if st.session_state['toggle_autopilot_email']:
-        if st.sidebar.button(translate_text_with_ai("📧 Autopilot Email", st.session_state['preferred_language'], client_ai), key="sidebar_autopilot_email_btn_nav"): # Changed key
-            set_page('autopilot_email_page')
 
     st.sidebar.markdown("---")
-    st.sidebar.header(translate_text_with_ai("Content Settings", st.session_state['preferred_language'], client_ai))
+    st.sidebar.header(translate_text_with_ai("Settings", st.session_state['preferred_language'], client_ai))
     
     st.sidebar.subheader(translate_text_with_ai("Content Customization", st.session_state['preferred_language'], client_ai))
     st.session_state['preferred_topic_main_app'] = st.sidebar.selectbox(
@@ -2378,16 +1713,7 @@ if st.session_state['is_authenticated']:
         show_main_app_page()
     elif st.session_state['current_page'] == 'trivia_page':
         show_trivia_page()
-    # NEW: Route to new feature pages
-    elif st.session_state['current_page'] == 'weekly_planner_page' and st.session_state['toggle_weekly_planner']:
-        show_weekly_planner_page()
-    elif st.session_state['current_page'] == 'memory_journal_page' and st.session_state['toggle_memory_journal']:
-        show_memory_journal_page()
-    elif st.session_state['current_page'] == 'offline_pack_page' and st.session_state['toggle_offline_pack']:
-        show_offline_pack_page()
-    elif st.session_state['current_page'] == 'autopilot_email_page' and st.session_state['toggle_autopilot_email']:
-        show_autopilot_email_page()
-    # Default to main_app if current_page is somehow not set to a valid page or feature is toggled off
+    # Default to main_app if current_page is somehow not set to a valid page
     else:
         st.session_state['current_page'] = 'main_app'
         show_main_app_page()
