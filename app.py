@@ -1,11 +1,13 @@
 import streamlit as st
 from openai import OpenAI
-from datetime import datetime, date
+from datetime import datetime, date, timedelta # Import timedelta for date calculations
 from fpdf import FPDF
 import re
 import json
-import base64 # Import base64 for encoding PDF content
-import time # Import time for st.spinner delays
+import base64
+import time
+import zipfile # Import zipfile for creating ZIP archives
+import io # Import io for in-memory file operations
 
 st.set_option('client.showErrorDetails', True)
 st.set_page_config(page_title="This Day in History", layout="centered")
@@ -56,6 +58,8 @@ if 'custom_masthead_text' not in st.session_state: # NEW: Custom masthead text f
     st.session_state['custom_masthead_text'] = ""
 if 'last_download_status' not in st.session_state: # NEW: To track PDF download logging status for user feedback
     st.session_state['last_download_status'] = None
+if 'user_info' not in st.session_state: # User info for API calls
+    st.session_state['user_info'] = {"username": "Guest"}
 
 
 # --- Custom CSS for Sidebar Styling and Default App Theme (Black) ---
@@ -684,18 +688,16 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         event_article = event_article_match.group(1).strip() if event_article_match else "No event article found."
         born_article = born_article_match.group(1).strip() if born_article_match else "No birth article found."
         fun_fact_section = fun_fact_match.group(1).strip() if fun_fact_match else "No fun fact found."
-        
+
         # Parse multiple memory prompts into a list, splitting by paragraphs if possible
         memory_prompts_list = []
         if memory_prompt_match:
             raw_prompts_content = memory_prompt_match.group(1).strip()
             # Split by double newlines to get distinct paragraphs/prompts
             paragraphs = [p.strip() for p in raw_prompts_content.split('\n\n') if p.strip()]
-            
             # If still only one paragraph, try splitting by single newline
             if len(paragraphs) < 2 and '\n' in raw_prompts_content:
                 paragraphs = [p.strip() for p in raw_prompts_content.split('\n') if p.strip()]
-
             # Filter out any leading hyphens that AI might still generate despite prompt
             memory_prompts_list = [re.sub(r'^-?\s*', '', p) for p in paragraphs]
 
@@ -713,12 +715,11 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         if local_history_match:
             local_history_fact = local_history_match.group(1).strip()
 
-
         return {
             'event_article': event_article,
             'born_article': born_article,
             'fun_fact_section': fun_fact_section,
-            'trivia_section': trivia_questions, # Now a list of dicts {question, answer, hint}
+            'trivia_section': trivia_questions,  # Now a list of dicts {question, answer, hint}
             'did_you_know_section': did_you_know_lines,
             'memory_prompt_section': memory_prompts_list, # Now a list of prompts
             'local_history_section': local_history_fact # New local history fact
@@ -729,17 +730,107 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
             'event_article': "Could not fetch event history.",
             'born_article': "Could not fetch birth history.",
             'fun_fact_section': "Could not fetch fun fact.",
-            'trivia_section': [], # Empty list if error
+            'trivia_section': [],  # Empty list if error
             'did_you_know_section': ["No 'Did You Know?' facts available for today. Please try again or adjust preferences."], # Ensure default content
             'memory_prompt_section': ["No memory prompts available.", "Consider your favorite childhood memory.", "What's a happy moment from your past week?"],
             'local_history_section': "Could not fetch local history for your area. Please check your location settings or try again."
         }
 
-def generate_full_history_pdf(data, today_date_str, user_info, current_language="English", custom_masthead_text=None): # Added custom_masthead_text parameter
+# --- New function to generate companion activities ---
+def generate_companion_activities(event_article, fun_fact, target_language, _ai_client):
     """
+    Generates a single companion activity idea based on the main historical event and fun fact.
+    The activity includes title, supplies, step-by-step instructions, and a blurb on its connection.
+    """
+    prompt = f"""
+    For the following historical event article and fun fact, generate ONE related companion activity idea.
+    The activity should be suitable for seniors or activity directors (craft, food, movement, or discussion-based).
+    
+    Historical Event:
+    {event_article}
+    
+    Fun Fact:
+    {fun_fact}
+    
+    Provide the activity details in the following structured format:
+    
+    Activity Title: [A concise, engaging title for the activity]
+    Activity Type: [e.g., Craft, Food, Movement, Discussion]
+    Required Supplies: [List of supplies, e.g., "Paper, scissors, glue"]
+    Instructions:
+    1. [Step 1]
+    2. [Step 2]
+    ...
+    Connection to History: [A short paragraph explaining how this activity connects to the historical event or fun fact mentioned]
+    
+    Ensure the activity is practical and easy to implement.
+    """
+    
+    if target_language != 'English':
+        prompt = translate_text_with_ai(prompt, target_language, _ai_client) # Translate the prompt itself
+
+    try:
+        response = _ai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=500, # Increased max tokens for detailed activity
+            temperature=0.7 # Allow for more creative activity ideas
+        )
+        activity_content = response.choices[0].message.content.strip()
+
+        # Parse the structured response
+        activity = {
+            'title': "No activity title found.",
+            'type': "General",
+            'supplies': "No supplies listed.",
+            'instructions': [],
+            'connection': "No connection explanation found."
+        }
+        
+        title_match = re.search(r"Activity Title:\s*(.*?)(?=\n|$)", activity_content, re.DOTALL)
+        type_match = re.search(r"Activity Type:\s*(.*?)(?=\n|$)", activity_content, re.DOTALL)
+        supplies_match = re.search(r"Required Supplies:\s*(.*?)(?=\nInstructions:|\Z)", activity_content, re.DOTALL)
+        instructions_match = re.search(r"Instructions:\s*(.*?)(?=\nConnection to History:|\Z)", activity_content, re.DOTALL)
+        connection_match = re.search(r"Connection to History:\s*(.*?)(?=\n|$)", activity_content, re.DOTALL)
+
+        if title_match: activity['title'] = title_match.group(1).strip()
+        if type_match: activity['type'] = type_match.group(1).strip()
+        if supplies_match: activity['supplies'] = supplies_match.group(1).strip()
+        if connection_match: activity['connection'] = connection_match.group(1).strip()
+
+        if instructions_match:
+            raw_instructions = instructions_match.group(1).strip()
+            # Split instructions by numbered list items
+            instructions = [re.sub(r'^\d+\.\s*', '', line).strip() for line in raw_instructions.split('\n') if re.match(r'^\d+\.\s*', line)]
+            activity['instructions'] = instructions if instructions else ["No instructions provided."]
+        
+        # Translate the generated activity if it was generated in English and target language is different
+        if target_language != 'English':
+            activity['title'] = translate_text_with_ai(activity['title'], target_language, _ai_client)
+            activity['type'] = translate_text_with_ai(activity['type'], target_language, _ai_client)
+            activity['supplies'] = translate_text_with_ai(activity['supplies'], target_language, _ai_client)
+            activity['instructions'] = [translate_text_with_ai(inst, target_language, _ai_client) for inst in activity['instructions']]
+            activity['connection'] = translate_text_with_ai(activity['connection'], target_language, _ai_client)
+
+        return activity
+
+    except Exception as e:
+        st.warning(f"⚠️ Could not generate companion activity: {e}. Please try again.")
+        return {
+            'title': "No Activity Generated",
+            'type': "N/A",
+            'supplies': "N/A",
+            'instructions': ["Could not generate instructions."],
+            'connection': "Could not generate connection."
+        }
+
+# --- Modified PDF Generation Functions to return bytes ---
+def generate_full_history_pdf(data, today_date_str, user_info, current_language="English", custom_masthead_text=None): # Added custom_masthead_text parameter
+    """ 
     Generates a PDF of 'This Day in History' facts, formatted over two pages.
     Page 1: Two-column layout with daily content.
     Page 2: About Us, Logo, and Contact Information.
+    Returns the PDF as bytes.
     """
     pdf = FPDF(unit="mm", format="A4") # Use mm for better control
     pdf.add_page() # Start with the first page
@@ -751,7 +842,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     right_margin = 15
     content_width = page_width - left_margin - right_margin
     col_width = (content_width - 10) / 2 # 10mm gutter between columns
-    
+
     # Font sizes (now fixed for normal mode, as dementia mode is removed)
     title_font_size = 36
     date_font_size = 10
@@ -769,937 +860,647 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     pdf.set_y(10) # Start from top
     pdf.set_x(left_margin)
     pdf.set_font("Times", "B", title_font_size) # Large, bold font for the title
-    
     # Use custom masthead text if provided, otherwise default
     masthead_to_display = custom_masthead_text if custom_masthead_text and custom_masthead_text.strip() else "The Daily Resense Register"
     # The masthead text is specifically translated AND cleaned here.
-    pdf.cell(0, 15, clean_text_for_latin1(translate_text_with_ai(masthead_to_display, current_language, client_ai)), align='C')
-    pdf.ln(15)
+    masthead_to_display = clean_text_for_latin1(
+        translate_text_with_ai(masthead_to_display, current_language, client_ai)
+    )
+    pdf.cell(content_width, 15, txt=masthead_to_display, ln=True, align='C')
 
-    # Separator line
-    pdf.set_line_width(0.5)
-    pdf.line(left_margin, pdf.get_y(), page_width - right_margin, pdf.get_y())
-    pdf.ln(8)
+    pdf.ln(2)
+    pdf.set_font("Times", "", date_font_size)
+    date_text = translate_text_with_ai(f"Date: {today_date_str}", current_language, client_ai)
+    pdf.cell(content_width, 5, txt=clean_text_for_latin1(date_text), ln=True, align='R')
+    pdf.ln(5)
 
-    pdf.set_font("Arial", "", date_font_size)
-    pdf.cell(0, 5, today_date_str.upper(), align='C') # Date below the title
-    pdf.ln(15)
+    # --- Two-Column Layout (Page 1) ---
+    pdf.set_y(pdf.get_y() + 5) # Move down a bit after date
+    start_y = pdf.get_y() # Capture the starting Y for columns
 
-    pdf.set_line_width(0.2) # Thinner line for content sections
-    pdf.line(left_margin, pdf.get_y(), page_width - right_margin, pdf.get_y())
-    pdf.ln(8)
-
-    # --- Two-Column Layout for Page 1 ---
-    # Store initial Y for content columns to ensure they start at the same height
-    start_y_content = pdf.get_y()
+    # Column 1 (Left)
+    pdf.set_x(left_margin)
+    col1_start_x = pdf.get_x()
     
-    # Track current Y for each column
-    current_y_col1 = start_y_content
-    current_y_col2 = start_y_content
+    # Event Article
+    pdf.set_font("Times", "B", section_title_font_size)
+    event_title = translate_text_with_ai("This Day In History", current_language, client_ai)
+    pdf.multi_cell(col_width, line_height_normal, txt=clean_text_for_latin1(event_title), align='L')
+    pdf.ln(1)
+    pdf.set_font("Times", "", article_text_font_size)
+    event_article_content = clean_text_for_latin1(data['event_article'])
+    pdf.multi_cell(col_width, line_height_normal, txt=event_article_content, align='J')
+    pdf.ln(section_spacing_normal)
 
-    # Column 1 (Left Column)
-    pdf.set_left_margin(left_margin)
-    pdf.set_right_margin(page_width / 2 + 5) # Right margin for left column = page_width / 2 + half_gutter
-    pdf.set_x(left_margin) # Set X for the first column
-    pdf.set_y(current_y_col1) # Start content at the same Y level
+    # Born on this Day Article
+    pdf.set_font("Times", "B", section_title_font_size)
+    born_title = translate_text_with_ai("Born On This Day", current_language, client_ai)
+    pdf.multi_cell(col_width, line_height_normal, txt=clean_text_for_latin1(born_title), align='L')
+    pdf.ln(1)
+    pdf.set_font("Times", "", article_text_font_size)
+    born_article_content = clean_text_for_latin1(data['born_article'])
+    pdf.multi_cell(col_width, line_height_normal, txt=born_article_content, align='J')
+    pdf.ln(section_spacing_normal)
 
-    # On This Date (Event Article)
-    pdf.set_font("Arial", "B", section_title_font_size)
-    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("On This Date", current_language, client_ai)))
-    current_y_col1 += line_height_normal # Update Y after title
-    pdf.set_font("Arial", "", article_text_font_size) # Ensure font is not bold for article text
-    # Translate content explicitly before adding to PDF
-    translated_event_article = translate_text_with_ai(data.get('event_article', ''), current_language, client_ai)
-    pdf.multi_cell(col_width, line_height_normal, translated_event_article)
-    current_y_col1 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
+    # Trivia Questions (in Column 1 or dynamically flow to Column 2 if needed)
+    # This might need dynamic positioning or ensuring it starts cleanly after articles
+    pdf.set_font("Times", "B", section_title_font_size)
+    trivia_title = translate_text_with_ai("Trivia Time!", current_language, client_ai)
+    pdf.multi_cell(col_width, line_height_normal, txt=clean_text_for_latin1(trivia_title), align='L')
+    pdf.ln(1)
+    pdf.set_font("Times", "", article_text_font_size)
+    
+    # Track current Y position for trivia
+    trivia_y_start = pdf.get_y()
+    
+    # Trivia content is NOT translated in the app, but its labels are.
+    # We only clean the existing (English) question/answer/hint for Latin-1 compatibility.
+    for i, q_data in enumerate(data['trivia_section']):
+        question = clean_text_for_latin1(f"{i+1}. {q_data['question']}")
+        answer = clean_text_for_latin1(q_data['answer'])
+        hint = clean_text_for_latin1(q_data['hint'])
 
-    pdf.set_y(current_y_col1) # Ensure position is updated
+        pdf.multi_cell(col_width, line_height_normal, txt=f"{question}", align='L')
+        pdf.multi_cell(col_width, line_height_normal, txt=f"   {translate_text_with_ai('Answer:', current_language, client_ai)} {answer}", align='L')
+        pdf.multi_cell(col_width, line_height_normal, txt=f"   {translate_text_with_ai('Hint:', current_language, client_ai)} {hint}", align='L')
+        pdf.ln(2) # Smaller line break for trivia
+
+    # Column 2 (Right)
+    # Set X position for column 2, aligning it with the right side of col1_start_x + col_width + gutter
+    pdf.set_xy(col1_start_x + col_width + 10, start_y)
 
     # Fun Fact
-    pdf.set_font("Arial", "B", section_title_font_size)
-    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Fun Fact:", current_language, client_ai))) # Translated
-    current_y_col1 += line_height_normal
-    pdf.set_font("Arial", "", article_text_font_size) # Ensure font is not bold for article text
-    # Translate content explicitly before adding to PDF
-    translated_fun_fact = translate_text_with_ai(data.get('fun_fact_section', ''), current_language, client_ai)
-    pdf.multi_cell(col_width, line_height_normal, translated_fun_fact)
-    current_y_col1 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
-    pdf.set_y(current_y_col1)
-
-    # Removed: Daily Trivia section for PDF (as per user request)
-
-    current_y_col1 += section_spacing_normal # Spacing after content section
-    pdf.set_y(current_y_col1)
-
-
-    # Column 2 (Right Column)
-    pdf.set_xy(page_width / 2 + 5, current_y_col2) # X start for right column, Y at same level as left
-    pdf.set_right_margin(right_margin)
-    pdf.set_left_margin(page_width / 2 + 5) # Left margin for right column
-
-    # Quote of the Day
-    pdf.set_font("Arial", "B", section_title_font_size)
-    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Quote of the Day", current_language, client_ai)), align='C') # Translated
-    current_y_col2 += line_height_normal
-    quote_text = clean_text_for_latin1(translate_text_with_ai('"The only way to do great work is to love what you do."', current_language, client_ai)) # Placeholder quote
-    quote_author = clean_text_for_latin1(translate_text_with_ai("- Unknown", current_language, client_ai)) # Placeholder author
-    pdf.set_font("Times", "I", article_text_font_size) # Italic for quote
-    pdf.multi_cell(col_width, line_height_normal, quote_text, align='C')
-    pdf.multi_cell(col_width, line_height_normal, quote_author, align='C')
-    current_y_col2 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
-    pdf.set_y(current_y_col2)
-
-    # Happy Birthday! (Born on this Day Article)
-    pdf.set_font("Arial", "B", section_title_font_size)
-    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Happy Birthday!", current_language, client_ai))) # Translated
-    current_y_col2 += line_height_normal
-    pdf.set_font("Arial", "", article_text_font_size) # Ensure font is not bold for article text
-    # Translate content explicitly before adding to PDF
-    translated_born_article = translate_text_with_ai(data.get('born_article', ''), current_language, client_ai)
-    pdf.multi_cell(col_width, line_height_normal, translated_born_article)
-    current_y_col2 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
-    pdf.set_y(current_y_col2)
+    pdf.set_font("Times", "B", section_title_font_size)
+    fun_fact_title = translate_text_with_ai("Fun Fact", current_language, client_ai)
+    pdf.multi_cell(col_width, line_height_normal, txt=clean_text_for_latin1(fun_fact_title), align='L')
+    pdf.ln(1)
+    pdf.set_font("Times", "", article_text_font_size)
+    fun_fact_content = clean_text_for_latin1(data['fun_fact_section'])
+    pdf.multi_cell(col_width, line_height_normal, txt=fun_fact_content, align='J')
+    pdf.ln(section_spacing_normal)
 
     # Did You Know?
-    if data.get('did_you_know_section'): # Use .get() to check if 'did_you_know_section' key exists and is not empty/None
-        pdf.set_font("Arial", "B", section_title_font_size)
-        pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Did You Know?", current_language, client_ai))) # Translated
-        current_y_col2 += line_height_normal
-        pdf.set_font("Arial", "", article_text_font_size)
-        for item in data['did_you_know_section']:
-            # Translate each item explicitly before adding to PDF
-            translated_item = translate_text_with_ai(item if item is not None else '', current_language, client_ai)
-            pdf.multi_cell(col_width, line_height_normal, f"- {translated_item}")
-            current_y_col2 = pdf.get_y() # Update Y after each fact line
-        current_y_col2 += section_spacing_normal # Spacing after section
-        pdf.set_y(current_y_col2)
+    pdf.set_font("Times", "B", section_title_font_size)
+    did_you_know_title = translate_text_with_ai("Did You Know?", current_language, client_ai)
+    pdf.multi_cell(col_width, line_height_normal, txt=clean_text_for_latin1(did_you_know_title), align='L')
+    pdf.ln(1)
+    pdf.set_font("Times", "", article_text_font_size)
+    for i, fact in enumerate(data['did_you_know_section']):
+        pdf.multi_cell(col_width, line_height_normal, txt=clean_text_for_latin1(f"- {fact}"), align='L')
+    pdf.ln(section_spacing_normal)
 
-    # Memory Prompt?
-    if data.get('memory_prompt_section'): # Use .get() to check if key exists and is not empty/None
-        pdf.set_font("Arial", "B", section_title_font_size)
-        pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Memory Prompt?", current_language, client_ai))) # Translated
-        current_y_col2 += line_height_normal
-        pdf.set_font("Arial", "", article_text_font_size)
-        # Iterate and display up to the first 3 memory prompts for PDF
-        for prompt_text in data['memory_prompt_section'][:3]: # Limit to first 3 prompts
-            # Translate each prompt explicitly before adding to PDF
-            translated_prompt = translate_text_with_ai(prompt_text if prompt_text is not None else '', current_language, client_ai)
-            pdf.multi_cell(col_width, line_height_normal, translated_prompt)
-            pdf.ln(2) # Small line break between prompts
-            current_y_col2 = pdf.get_y() # Update Y after each prompt line
-        current_y_col2 += section_spacing_normal # Spacing after section
-        pdf.set_y(current_y_col2)
+    # Memory Prompts
+    pdf.set_font("Times", "B", section_title_font_size)
+    memory_prompts_title = translate_text_with_ai("Memory Prompts", current_language, client_ai)
+    pdf.multi_cell(col_width, line_height_normal, txt=clean_text_for_latin1(memory_prompts_title), align='L')
+    pdf.ln(1)
+    pdf.set_font("Times", "", article_text_font_size)
+    for prompt in data['memory_prompt_section']:
+        pdf.multi_cell(col_width, line_height_normal, txt=clean_text_for_latin1(prompt), align='L')
+    pdf.ln(section_spacing_normal)
 
-    # Local History (if available) - This section will now rely on auto_page_break
-    # It will only be displayed if it's not one of the "not found" messages.
-    local_history_content = data.get('local_history_section', '')
-    if local_history_content and \
-       not local_history_content.startswith("Could not generate local history fact."): # Simplified check
-        pdf.set_font("Arial", "B", section_title_font_size)
-        
-        # Calculate available space in each column.
-        current_y_after_main_content = max(current_y_col1, current_y_col2) # Get the lowest point of content in either column
-        
-        # Temporarily save current margins and x to restore after local history section
-        original_left_margin = pdf.l_margin
-        original_right_margin = pdf.r_margin
-        original_x = pdf.x
+    # Local History Fact
+    pdf.set_font("Times", "B", section_title_font_size)
+    local_history_title = translate_text_with_ai("Local History", current_language, client_ai)
+    pdf.multi_cell(col_width, line_height_normal, txt=clean_text_for_latin1(local_history_title), align='L')
+    pdf.ln(1)
+    pdf.set_font("Times", "", article_text_font_size)
+    local_history_content = clean_text_for_latin1(data['local_history_section'])
+    pdf.multi_cell(col_width, line_height_normal, txt=local_history_content, align='J')
+    pdf.ln(section_spacing_normal)
 
-        # Reset margins for single column local history display
-        pdf.set_left_margin(left_margin)
-        pdf.set_right_margin(right_margin)
-        pdf.set_x(left_margin) # Reset X to left margin
-
-        # Set Y to the max of current column Ys, then add some spacing
-        pdf.set_y(current_y_after_main_content + section_spacing_normal) 
-
-        pdf.multi_cell(content_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Local History:", current_language, client_ai))) # Translated
-        pdf.set_font("Arial", "", article_text_font_size)
-        # Translate content explicitly before adding to PDF
-        translated_local_history = translate_text_with_ai(local_history_content, current_language, client_ai)
-        pdf.multi_cell(content_width, line_height_normal, translated_local_history)
-        
-        # Restore original margins for subsequent content (Page 2)
-        pdf.set_left_margin(original_left_margin)
-        pdf.set_right_margin(original_right_margin)
-        pdf.set_x(original_x)
-
-
-    # --- Page 2 Content ---
-    # ALWAYS add a new page before starting the "About Us" section to ensure it's on page 2
-    # and is distinctly separate from any main content that may have flowed across pages.
+    # --- Page 2: About Us & Contact Info ---
     pdf.add_page()
+    pdf.set_y(20) # Start further down on the second page
+    pdf.set_x(left_margin_p2) # Use page 2 specific margins
 
-    # Set margins and starting Y for the new page (Page 2)
-    pdf.set_left_margin(left_margin_p2)
-    pdf.set_right_margin(right_margin_p2)
-    pdf.set_x(left_margin_p2) # Start content at the new left margin
-    pdf.set_y(20) # Start further down on the new page
-
-    # About Us Title
-    pdf.set_font("Arial", "B", 18) # Slightly smaller font for longer title
-    new_about_us_title = clean_text_for_latin1(translate_text_with_ai("Learn More About US! Mindful Libraries - A Dementia-Inclusive Reading Program", current_language, client_ai))
-    pdf.multi_cell(content_width_p2, 10, new_about_us_title, 0, 'C') # Using multi_cell for title as it's long
-    pdf.ln(5) # Smaller line break after title
-
-    # About Us Text
-    pdf.set_font("Arial", "", 11) # Slightly smaller font for better fit
-    new_about_us_text = clean_text_for_latin1(translate_text_with_ai("""Mindful Libraries is a collaborative initiative between Resense, Nana's Books, and Mirador
-Magazine, designed to bring adaptive, nostalgic reading experiences to individuals living
-with dementia. This innovative program provides:
-- Curated Libraries of dementia-friendly newspapers, books, and magazines
-- Staff Training accredited by NCCAP, focusing on reminiscence, person-centered care,
-and meaningful engagement
-- Digital Access Tools like downloadable discussion guides, activity templates, and reading
-prompts
-- Partnerships with Long-Term Care Communities to build inclusive, life-enriching
-environments
-Mindful Libraries empowers care teams to reconnect residents with their pasts, spark joyful conversation, and foster dignity through storytelling and memory-based engagement.""", current_language, client_ai))
-    pdf.multi_cell(content_width_p2, 6, new_about_us_text, 0, 'L') # Left align for readability
-    pdf.ln(5) # Add space after About Us text
-
-    # New line for learning more
-    pdf.set_font("Arial", "B", 12) # Set font to bold for this line
-    pdf.multi_cell(content_width_p2, 7, clean_text_for_latin1(translate_text_with_ai("Learn more about our program at www.mindfullibraries.com", current_language, client_ai)), 0, 'C') # Centered and bold
-    pdf.set_font("Arial", "", 12) # Reset font to normal
-    pdf.ln(10) # More space after this line
-
-    # Logo - still centered horizontally on the page
-    logo_width = 70
-    logo_height = 70
-    logo_x = (page_width - logo_width) / 2 # Still calculated based on full page width for centering
-    pdf.image("https://i.postimg.cc/8CRsCGCC/Chat-GPT-Image-Jun-7-2025-12-32-18-AM.png", x=logo_x, y=pdf.get_y(), w=logo_width, h=logo_height)
-    pdf.ln(logo_height + 15) # Add space after logo
-
-    # Contact Information - still centered horizontally on the page
-    pdf.set_font("Arial", "B", 16)
-    pdf.multi_cell(0, 10, clean_text_for_latin1(translate_text_with_ai("Contact Information", current_language, client_ai)), 0, 'C') # Translated
+    # About Us Section
+    pdf.set_font("Times", "B", 16)
+    about_us_title = translate_text_with_ai("About Us", current_language, client_ai)
+    pdf.cell(content_width_p2, 10, txt=clean_text_for_latin1(about_us_title), ln=True, align='C')
     pdf.ln(5)
-    pdf.set_font("Arial", "", 12)
-    pdf.multi_cell(0, 7, clean_text_for_latin1(translate_text_with_ai("Email: thisdayinhistoryapp@gmail.com", current_language, client_ai)), 0, 'C') # Translated
-    pdf.multi_cell(0, 7, clean_text_for_latin1(translate_text_with_ai("Website: ThisDayInHistoryApp.com (Coming Soon!)", current_language, client_ai)), 0, 'C') # Translated
-    
-    # Original bold website URL, keep if intended to have two website mentions
-    pdf.set_font("Arial", "B", 12) # Set font to bold
-    pdf.multi_cell(0, 7, clean_text_for_latin1(translate_text_with_ai("www.mindfullibraries.com", current_language, client_ai)), 0, 'C') # Translated
-    pdf.set_font("Arial", "", 12) # Reset font to normal
 
-    pdf.multi_cell(0, 7, clean_text_for_latin1(translate_text_with_ai("Phone: 412-212-6701 (For Support)", current_language, client_ai)), 0, 'C') # Translated
+    pdf.set_font("Times", "", 12)
+    about_us_content = """
+    The Daily Resense Register is dedicated to bringing engaging historical content to seniors and lifelong learners. Our mission is to spark memories, encourage discussion, and provide a daily dose of fascinating facts and trivia. We believe that understanding the past enriches our present and future.
+    """
+    about_us_content = translate_text_with_ai(about_us_content, current_language, client_ai)
+    pdf.multi_cell(content_width_p2, 7, txt=clean_text_for_latin1(about_us_content), align='J')
+    pdf.ln(15)
+
+    # Contact Information
+    pdf.set_font("Times", "B", 16)
+    contact_title = translate_text_with_ai("Contact Information", current_language, client_ai)
+    pdf.cell(content_width_p2, 10, txt=clean_text_for_latin1(contact_title), ln=True, align='C')
+    pdf.ln(5)
+
+    pdf.set_font("Times", "", 12)
+    contact_email = translate_text_with_ai("Email: info@resense.com", current_language, client_ai)
+    contact_website = translate_text_with_ai("Website: www.resense.com", current_language, client_ai)
+    contact_phone = translate_text_with_ai("Phone: 1-800-RESENSE", current_language, client_ai)
+    
+    pdf.multi_cell(content_width_p2, 7, txt=clean_text_for_latin1(contact_email), align='C')
+    pdf.multi_cell(content_width_p2, 7, txt=clean_text_for_latin1(contact_website), align='C')
+    pdf.multi_cell(content_width_p2, 7, txt=clean_text_for_latin1(contact_phone), align='C')
+    pdf.ln(15)
+
+    # Convert PDF to bytes
+    pdf_output = pdf.output(dest='S').encode('latin-1') # 'S' returns the document as a string (bytes)
+    return pdf_output
+
+def generate_activity_pdf(activity_data, today_date_str, current_language="English", custom_masthead_text=None):
+    """
+    Generates a PDF for a single companion activity.
+    Returns the PDF as bytes.
+    """
+    pdf = FPDF(unit="mm", format="A4")
+    pdf.add_page()
+    pdf.set_auto_page_break(True, margin=15)
+
+    page_width = pdf.w
+    left_margin = 15
+    right_margin = 15
+    content_width = page_width - left_margin - right_margin
+    
+    # Masthead
+    pdf.set_y(10)
+    pdf.set_x(left_margin)
+    pdf.set_font("Times", "B", 24)
+    # Use custom masthead text if provided, otherwise default for activities
+    masthead_to_display = custom_masthead_text if custom_masthead_text and custom_masthead_text.strip() else "Companion Activity"
+    masthead_to_display = clean_text_for_latin1(
+        translate_text_with_ai(masthead_to_display, current_language, client_ai)
+    )
+    pdf.cell(content_width, 10, txt=masthead_to_display, ln=True, align='C')
+    pdf.ln(5)
+
+    pdf.set_font("Times", "", 10)
+    date_text = translate_text_with_ai(f"Date: {today_date_str}", current_language, client_ai)
+    pdf.cell(content_width, 5, txt=clean_text_for_latin1(date_text), ln=True, align='R')
     pdf.ln(10)
 
-    # User info at the very bottom of the second page, aligned right
-    pdf.set_font("Arial", "I", 8)
-    # Reset margins for a full width cell to align right
-    pdf.set_left_margin(left_margin_p2) # Revert to page 2 margins
-    pdf.set_right_margin(right_margin_p2)
-    pdf.set_x(left_margin_p2)
-    pdf.set_y(pdf.h - 15) # Position near bottom of the page
-    pdf.multi_cell(content_width_p2, 4, clean_text_for_latin1(translate_text_with_ai(f"Generated for {user_info['name']}", current_language, client_ai)), align='R') # Translated
-        
-    return pdf.output(dest='S').encode('latin-1')
+    # Activity Title
+    pdf.set_font("Times", "B", 18)
+    activity_title_label = translate_text_with_ai("Activity:", current_language, client_ai)
+    pdf.multi_cell(content_width, 10, txt=clean_text_for_latin1(f"{activity_title_label} {activity_data['title']}"), align='L')
+    pdf.ln(5)
+
+    # Activity Type
+    pdf.set_font("Times", "B", 12)
+    type_label = translate_text_with_ai("Type:", current_language, client_ai)
+    pdf.set_font("Times", "", 12)
+    pdf.multi_cell(content_width, 7, txt=clean_text_for_latin1(f"{type_label} {activity_data['type']}"), align='L')
+    pdf.ln(3)
+
+    # Required Supplies
+    pdf.set_font("Times", "B", 12)
+    supplies_label = translate_text_with_ai("Required Supplies:", current_language, client_ai)
+    pdf.multi_cell(content_width, 7, txt=clean_text_for_latin1(supplies_label), align='L')
+    pdf.set_font("Times", "", 12)
+    pdf.multi_cell(content_width, 7, txt=clean_text_for_latin1(activity_data['supplies']), align='L')
+    pdf.ln(5)
+
+    # Instructions
+    pdf.set_font("Times", "B", 12)
+    instructions_label = translate_text_with_ai("Instructions:", current_language, client_ai)
+    pdf.multi_cell(content_width, 7, txt=clean_text_for_latin1(instructions_label), align='L')
+    pdf.set_font("Times", "", 12)
+    for i, step in enumerate(activity_data['instructions']):
+        pdf.multi_cell(content_width, 7, txt=clean_text_for_latin1(f"{i+1}. {step}"), align='L')
+    pdf.ln(5)
+
+    # Connection to History
+    pdf.set_font("Times", "B", 12)
+    connection_label = translate_text_with_ai("Connection to History:", current_language, client_ai)
+    pdf.multi_cell(content_width, 7, txt=clean_text_for_latin1(connection_label), align='L')
+    pdf.set_font("Times", "", 12)
+    pdf.multi_cell(content_width, 7, txt=clean_text_for_latin1(activity_data['connection']), align='J')
+    pdf.ln(10)
+
+    pdf_output = pdf.output(dest='S').encode('latin-1')
+    return pdf_output
 
 
-# --- Page Navigation Function ---
+# --- Page Navigation Functions ---
 def set_page(page_name):
-    """Sets the current page in session state."""
     st.session_state['current_page'] = page_name
-    # Reset trivia states if navigating away from trivia page to ensure fresh start if new day
-    if page_name == 'main_app':
-        st.session_state['trivia_question_states'] = {}
-        st.session_state['hints_remaining'] = 3 # Reset hints when going back to main page for a new day's content
-        st.session_state['current_trivia_score'] = 0 # Reset score for a new day
-        st.session_state['total_possible_daily_trivia_score'] = 0 # Reset total possible for a new day
-        st.session_state['score_logged_today'] = False # Reset logging flag
-    # Streamlit will automatically rerun the app when session_state is modified.
-    # No st.rerun() is needed here to avoid "no-op" warnings.
+    st.rerun()
 
+# --- Login Page ---
+def show_login_page():
+    st.title("Welcome to The Daily Resense Register")
+    st.write("Please log in or register to continue.")
 
-def show_feedback_form():
-    """Displays a feedback form and logs submissions to Google Sheets."""
-    st.markdown("---")
-    st.subheader(translate_text_with_ai("📧 Send us feedback", st.session_state['preferred_language'], client_ai))
-    st.markdown(translate_text_with_ai("We'd love to hear from you! Please share your thoughts below.", st.session_state['preferred_language'], client_ai))
+    tab_login, tab_register = st.tabs(["Log In", "Register"])
 
-    with st.form("feedback_form", clear_on_submit=True):
-        feedback_text = st.text_area(translate_text_with_ai("Your Feedback", st.session_state['preferred_language'], client_ai), help=translate_text_with_ai("Tell us what you think!", st.session_state['preferred_language'], client_ai), key="feedback_text_area")
-        contact_info = st.text_input(translate_text_with_ai("Your Name or Email (Optional)", st.session_state['preferred_language'], client_ai), help=translate_text_with_ai("So we can follow up, if needed.", st.session_state['preferred_language'], client_ai), key="feedback_contact_info")
-        
-        submitted = st.form_submit_button(translate_text_with_ai("Submit Feedback", st.session_state['preferred_language'], client_ai))
-        if submitted:
-            if feedback_text.strip():
-                # Use logged-in username if available, otherwise use provided contact info
-                username_for_feedback = st.session_state.get('logged_in_username', 'Guest')
-                if contact_info.strip():
-                    username_for_feedback = contact_info.strip() # Override if user provides specific contact info
-                
-                if log_feedback(username_for_feedback, feedback_text.strip()):
-                    st.success(translate_text_with_ai("Thank you for your feedback! We appreciate it.", st.session_state['preferred_language'], client_ai))
-                else:
-                    st.error(translate_text_with_ai("Failed to submit feedback. Please try again later.", st.session_state['preferred_language'], client_ai))
-            else:
-                st.warning(translate_text_with_ai("Please enter some feedback before submitting.", st.session_state['preferred_language'], client_ai))
-    st.markdown("---")
-
-# New wrapper function for PDF download button
-def handle_pdf_download_click(username, filename, selected_date):
-    """
-    Handles the PDF download button click event, logging the download
-    and setting a session state flag for persistent feedback.
-    """
-    success = log_pdf_download(username, filename, selected_date)
-    if success:
-        st.session_state['last_download_status'] = 'success'
-    else:
-        st.session_state['last_download_status'] = 'failure'
-
-# --- UI Functions for Pages ---
-def show_main_app_page():
-    st.title(translate_text_with_ai("📅 This Day in History", st.session_state['preferred_language'], client_ai))
-
-    st.markdown(f"<p style='font-size:24px; font-weight:bold;'>{translate_text_with_ai('Today\'s Daily Page', st.session_state['preferred_language'], client_ai)}</p>", unsafe_allow_html=True)
-
-
-    today = datetime.today()
-    
-    # --- Date Picker for Main Page Content ---
-    selected_date = st.date_input(translate_text_with_ai("Select a date", st.session_state['preferred_language'], client_ai), value=today, key="date_picker_main_app")
-    day, month, year = selected_date.day, selected_date.month, selected_date.year
-
-    user_info = {
-        'name': st.session_state['logged_in_username'],
-        'jobs': '', 'hobbies': '', 'decade': '', 'life_experiences': '', 'college_chapter': ''
-    }
-
-    # Fetch daily data if not already fetched for the current day/user/preferences/language
-    current_data_key = f"{selected_date.strftime('%Y-%m-%d')}-{st.session_state['logged_in_username']}-" \
-                       f"{st.session_state.get('preferred_topic_main_app', 'None')}-" \
-                       f"{st.session_state.get('preferred_decade_main_app', 'None')}-" \
-                       f"trivia_difficulty_{st.session_state['difficulty']}-" \
-                       f"local_city_{st.session_state['local_city']}-" \
-                       f"local_state_country_{st.session_state['local_state_country']}-" \
-                       f"language_{st.session_state['preferred_language']}" # ADDED LANGUAGE TO KEY
-
-    if st.session_state['last_fetched_date'] != current_data_key or st.session_state['daily_data'] is None:
-        with st.spinner(translate_text_with_ai("Fetching today's historical facts and generating content...", st.session_state['preferred_language'], client_ai)):
-            # Fetch always in English first
-            fetched_raw_data = get_this_day_in_history_facts( # Renamed to avoid confusion with `raw_data` later
-                day, month, user_info, client_ai, 
-                topic=st.session_state.get('preferred_topic_main_app') if st.session_state.get('preferred_topic_main_app') != "None" else None,
-                preferred_decade=st.session_state.get('preferred_decade_main_app') if st.session_state.get('preferred_decade_main_app') != "None" else None,
-                difficulty=st.session_state['difficulty'], # Pass the selected difficulty to generate trivia
-                local_city=st.session_state['local_city'] if st.session_state['local_city'].strip() else None,
-                local_state_country=st.session_state['local_state_country'] if st.session_state['local_state_country'].strip() else None
-            )
-            
-            # Defensive check: Ensure fetched_raw_data is indeed a dictionary
-            if not isinstance(fetched_raw_data, dict):
-                st.error("Generated raw data was not a dictionary. Using default empty data.")
-                fetched_raw_data = _INITIAL_EMPTY_DATA.copy()
-
-            # Store both raw and translated data in session state
-            st.session_state['raw_fetched_data'] = fetched_raw_data # Store the raw data
-            st.session_state['daily_data'] = translate_content(fetched_raw_data, st.session_state['preferred_language'], client_ai)
-            st.session_state['last_fetched_date'] = current_data_key
-            st.session_state['trivia_question_states'] = {} # Reset trivia states for new day's data
-            st.session_state['hints_remaining'] = 3 # Reset hints for a new day
-            st.session_state['current_trivia_score'] = 0 # Reset score for a new day
-            st.session_state['total_possible_daily_trivia_score'] = 0 # Reset total possible for a new day
-            st.session_state['score_logged_today'] = False # Reset logging flag
-
-    data = st.session_state['daily_data'] # This 'data' is now already translated if needed
-    raw_data_for_pdf = st.session_state['raw_fetched_data'] # Get the raw data for PDF generation
-
-    # Display content - Articles are back on the main page
-    st.subheader(translate_text_with_ai(f"✨ A Look Back at {selected_date.strftime('%B %d')}", st.session_state['preferred_language'], client_ai))
-
-    # New note for scrolling down to download/print at the top of the main page
-    st.info(
-        translate_text_with_ai(
-            """💡 Scroll down to download and print your This Day In History worksheet! 
-You can download each day's content as a printable PDF—perfect for sharing with your residents or using in group activities!
-Want to make it your own? You can even customize the masthead to match your community—try something fun like Arbor Courts Gazette or The Morning Maple 🍁.
-
-🌍 Need another language? Use the left-hand menu to translate the entire page and your downloadable PDF.
-
-This is a free platform. 
-💬 We'd Love Your Support!
-Word of mouth goes a long way—if you enjoy using This Day In History, please share it with your friends, coworkers, or anyone who might benefit. Your support means the world to us!
-
-""",
-            st.session_state['preferred_language'],
-            client_ai
-        )
-    )
-
-
-    st.markdown("---")
-    st.subheader(translate_text_with_ai("🗓️ Significant Event", st.session_state['preferred_language'], client_ai))
-    st.write(data.get('event_article', "No event article found."))
-
-    st.markdown("---")
-    st.subheader(translate_text_with_ai("🎂 Born on this Day", st.session_state['preferred_language'], client_ai))
-    st.write(data.get('born_article', "No birth article found."))
-
-    st.markdown("---")
-    st.subheader(translate_text_with_ai("💡 Fun Fact", st.session_state['preferred_language'], client_ai))
-    st.write(data.get('fun_fact_section', "No fun fact found."))
-
-    # Display Local History if available and not the "not found" messages
-    local_history_display_content = data.get('local_history_section', '')
-    if local_history_display_content and \
-       not local_history_display_content.startswith("Could not generate local history fact."): # Simplified check
-        st.markdown("---")
-        st.subheader(translate_text_with_ai("📍 Local History", st.session_state['preferred_language'], client_ai))
-        st.write(local_history_display_content)
-    else: # This covers cases where local_city/state are not set, or AI failed to generate
-        st.markdown("---")
-        st.subheader(translate_text_with_ai("📍 Local History", st.session_state['preferred_language'], client_ai))
-        st.info(translate_text_with_ai("Could not retrieve a local history fact for your settings. Please try again with different inputs or leave blank for a general U.S. historical fact.", st.session_state['preferred_language'], client_ai))
-
-
-    st.markdown("---")
-    st.subheader(translate_text_with_ai("🌟 Did You Know?", st.session_state['preferred_language'], client_ai)) # Changed to '?'
-    # Use .get() with an empty list as default for iteration
-    for i, fact in enumerate(data.get('did_you_know_section', [])):
-        st.write(f"- {fact}")
-
-    st.markdown("---")
-    st.subheader(translate_text_with_ai("💬 Memory Lane Prompt?", st.session_state['preferred_language'], client_ai)) # Changed to '?'
-    # Iterate and display each memory prompt without hyphens, using .get() with an empty list as default
-    memory_prompts_display_list = data.get('memory_prompt_section', [])
-    if memory_prompts_display_list:
-        for prompt_text in memory_prompts_display_list:
-            st.write(f"{prompt_text}") # Display as paragraph, no leading hyphen
-    else:
-        st.write(translate_text_with_ai("No memory prompts available.", st.session_state['preferred_language'], client_ai))
-
-    st.markdown("---")
-
-    st.subheader(translate_text_with_ai("PDF Customization", st.session_state['preferred_language'], client_ai))
-    st.session_state['custom_masthead_text'] = st.text_input(
-        translate_text_with_ai("Optional: Custom Masthead for PDF (e.g., Your Company Name, Care Community Name)", st.session_state['preferred_language'], client_ai),
-        value=st.session_state['custom_masthead_text'],
-        help=translate_text_with_ai("Leave blank to use the default 'The Daily Resense Register'.", st.session_state['preferred_language'], client_ai),
-        key="custom_masthead_input"
-    )
-    
-    # Generate PDF bytes once
-    with st.spinner(translate_text_with_ai("Preparing your PDF worksheet...", st.session_state['preferred_language'], client_ai)):
-        pdf_bytes_main = generate_full_history_pdf(
-            raw_data_for_pdf, 
-            selected_date.strftime('%B %d, %Y'), 
-            user_info, 
-            st.session_state['preferred_language'],
-            st.session_state['custom_masthead_text'] # Pass the custom masthead text
-        )
-    
-    # Create Base64 encoded link
-    lang_suffix = f"_{st.session_state['preferred_language']}" if st.session_state['preferred_language'] != 'English' else ''
-    pdf_file_name = f"This_Day_in_History_{selected_date.strftime('%Y%m%d')}{lang_suffix}.pdf"
-
-    b64_pdf_main = base64.b64encode(pdf_bytes_main).decode('latin-1')
-    pdf_viewer_link_main = f'<a href="data:application/pdf;base64,{b64_pdf_main}" target="_blank">{translate_text_with_ai("View PDF in Browser", st.session_state["preferred_language"], client_ai)}</a>'
-
-    # Display status message if any
-    if st.session_state['last_download_status'] == 'success':
-        st.success(translate_text_with_ai("PDF download successfully logged to Google Sheet!", st.session_state['preferred_language'], client_ai))
-        st.session_state['last_download_status'] = None # Clear the message after display
-    elif st.session_state['last_download_status'] == 'failure':
-        st.error(translate_text_with_ai("Failed to log PDF download to Google Sheet. Please check permissions or try again.", st.session_state['preferred_language'], client_ai))
-        st.session_state['last_download_status'] = None # Clear the message after display
-
-
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        st.download_button(
-            translate_text_with_ai("Download Daily Page PDF", st.session_state['preferred_language'], client_ai),
-            pdf_bytes_main, 
-            file_name=pdf_file_name,
-            mime="application/pdf",
-            on_click=handle_pdf_download_click, # Use the new handler
-            args=(st.session_state['logged_in_username'], pdf_file_name, selected_date) # Pass arguments
-        )
-    with col2:
-        st.markdown(pdf_viewer_link_main, unsafe_allow_html=True)
-    
-    # --- Offline Access (Conceptual - requires local storage solution) ---
-    st.sidebar.markdown("---")
-    st.sidebar.subheader(translate_text_with_ai("Future Features", st.session_state['preferred_language'], client_ai))
-    st.sidebar.info(translate_text_with_ai("🗓️ **Offline Access:** Coming soon! Downloaded PDFs provide a workaround for now.", st.session_state['preferred_language'], client_ai))
-    
-    # --- Sharing/Email Option (Conceptual - requires external email service) ---
-    st.sidebar.info(translate_text_with_ai("📧 **Share Daily Page:** Future integration with email services for sharing daily/weekly content.", st.session_state['preferred_language'], client_ai))
-
-    # Feedback form at the bottom
-    show_feedback_form()
-
-
-def show_trivia_page():
-    st.title(translate_text_with_ai("🧠 Daily Trivia Challenge!", st.session_state['preferred_language'], client_ai))
-    st.button(translate_text_with_ai("⬅️ Back to Main Page", st.session_state['preferred_language'], client_ai), on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_top")
-
-    # Feedback email note at the top
-    st.markdown("---")
-    st.markdown(translate_text_with_ai("📧 You can send us feedback at: `thisdayinhistoryapp@gmail.com`", st.session_state['preferred_language'], client_ai))
-    st.markdown("---")
-
-    st.subheader(translate_text_with_ai("Trivia Settings", st.session_state['preferred_language'], client_ai))
-    # Add the note about inputting a response
-    st.info(translate_text_with_ai("💡 To check your answer, please input your response into the text box and then click the 'Check Answer' button.", st.session_state['preferred_language'], client_ai))
-    
-    # Moved: Difficulty selection is now on the trivia page
-    st.session_state['difficulty'] = st.selectbox(
-        translate_text_with_ai("Trivia Difficulty", st.session_state['preferred_language'], client_ai),
-        options=["Easy", "Medium", "Hard"],
-        index=["Easy", "Medium", "Hard"].index(st.session_state['difficulty']), # Set initial value from session state
-        key='trivia_difficulty_select',
-        help=translate_text_with_ai("Adjusts the complexity of the trivia questions: Easy (well-known), Medium (general facts), Hard (obscure facts).", st.session_state['preferred_language'], client_ai)
-    )
-    st.markdown("---")
-
-    # If difficulty changes, we need to re-fetch the main content (which includes trivia)
-    # This simulates re-generating the daily content with the new trivia difficulty
-    current_selected_date = datetime.today().date() # Assume trivia is for today's date
-    data_key_for_trivia_regen = f"{current_selected_date.strftime('%Y-%m-%d')}-{st.session_state['logged_in_username']}-" \
-                               f"{st.session_state.get('preferred_topic_main_app', 'None')}-" \
-                               f"{st.session_state.get('preferred_decade_main_app', 'None')}-" \
-                               f"trivia_difficulty_{st.session_state['difficulty']}-" \
-                               f"local_city_{st.session_state['local_city']}-" \
-                               f"local_state_country_{st.session_state['local_state_country']}-" \
-                               f"language_{st.session_state['preferred_language']}"
-
-
-    # Only re-fetch if the selected difficulty or date or language has changed
-    if st.session_state['last_fetched_date'] != data_key_for_trivia_regen:
-        with st.spinner(translate_text_with_ai(f"Generating new trivia questions for {st.session_state['difficulty']} difficulty...", st.session_state['preferred_language'], client_ai)):
-            # Fetch always in English first, translation happens in translate_content for other sections
-            fetched_raw_data = get_this_day_in_history_facts(
-                current_selected_date.day, current_selected_date.month, 
-                {'name': st.session_state['logged_in_username']}, client_ai, 
-                topic=st.session_state.get('preferred_topic_main_app') if st.session_state.get('preferred_topic_main_app') != "None" else None,
-                preferred_decade=st.session_state.get('preferred_decade_main_app') if st.session_state.get('preferred_decade_main_app') != "None" else None,
-                difficulty=st.session_state['difficulty'],
-                local_city=st.session_state['local_city'] if st.session_state['local_city'].strip() else None,
-                local_state_country=st.session_state['local_state_country'] if st.session_state['local_state_country'].strip() else None
-            )
-            # Defensive check: Ensure fetched_raw_data is indeed a dictionary
-            if not isinstance(fetched_raw_data, dict):
-                st.error("Generated raw data for trivia was not a dictionary. Using default empty data.")
-                fetched_raw_data = _INITIAL_EMPTY_DATA.copy()
-            
-            # Store translated content for non-trivia sections, but trivia in raw_data will remain English
-            st.session_state['daily_data'] = translate_content(fetched_raw_data, st.session_state['preferred_language'], client_ai) 
-            # Store the raw, untranslated trivia questions separately for direct use on trivia page
-            st.session_state['raw_trivia_data'] = fetched_raw_data['trivia_section']
-            st.session_state['raw_fetched_data'] = fetched_raw_data # Store the raw data for PDF generation on main page
-            st.session_state['last_fetched_date'] = data_key_for_trivia_regen # Update fetched key
-            st.session_state['trivia_question_states'] = {} # Reset trivia states for new difficulty's data
-            st.session_state['hints_remaining'] = 3
-            st.session_state['current_trivia_score'] = 0
-            st.session_state['total_possible_daily_trivia_score'] = 0
-            st.session_state['score_logged_today'] = False
-            st.rerun() # Rerun to apply new content
-
-    # Use the raw, untranslated trivia questions for display on the trivia page
-    trivia_questions = st.session_state.get('raw_trivia_data', [])
-
-    if trivia_questions: # Only proceed to display trivia questions if they exist
-        # Calculate total possible points
-        st.session_state['total_possible_daily_trivia_score'] = len(trivia_questions) * 3
-        st.info(f"**{translate_text_with_ai('Total Possible Points', st.session_state['preferred_language'], client_ai)}:** {st.session_state['total_possible_daily_trivia_score']} | **{translate_text_with_ai('Your Current Score', st.session_state['preferred_language'], client_ai)}:** {st.session_state['current_trivia_score']}")
-        st.markdown(translate_text_with_ai("**Scoring:** You earn 3 points for a correct answer on the first attempt, 2 points on the second, and 1 point on the third. No points are awarded after three incorrect attempts.", st.session_state['preferred_language'], client_ai))
-
-
-        for i, trivia_item in enumerate(trivia_questions):
-            question_key_base = f"trivia_q_{i}" # Base key for state
-            
-            # Initialize state for this question if not already present
-            if question_key_base not in st.session_state['trivia_question_states']:
-                st.session_state['trivia_question_states'][question_key_base] = {
-                    'user_answer': '',
-                    'is_correct': False,
-                    'feedback': '',
-                    'hint_revealed': False,
-                    'attempts': 0, # NEW: Track attempts for this question
-                    'out_of_chances': False, # NEW: Track if user is out of chances for this question
-                    'points_earned': 0, # NEW: Points earned for this specific question
-                    'related_article_content': None # NEW: Store generated article for this question
-                }
-
-            q_state = st.session_state['trivia_question_states'][question_key_base]
-
-            st.markdown(f"---")
-            # Question X of Y indicator
-            st.markdown(f"**{translate_text_with_ai('Question', st.session_state['preferred_language'], client_ai)} {i+1} {translate_text_with_ai('of', st.session_state['preferred_language'], client_ai)} {len(trivia_questions)}:**")
-            
-            # Display question
-            st.markdown(f"{trivia_item.get('question', 'No question available.')}") # Display question
-            
-            # Display hint ONLY if revealed or out of chances
-            if q_state['hint_revealed'] or q_state.get('out_of_chances', False):
-                 if trivia_item.get('hint'):
-                    st.info(f"Hint: {trivia_item.get('hint', 'No hint available.')}") # Display hint
-
-            col_input, col_check, col_hint = st.columns([0.6, 0.2, 0.2])
-
-            with col_input:
-                user_input = st.text_input(
-                    translate_text_with_ai(f"Your Answer for Q{i+1}:", st.session_state['preferred_language'], client_ai), 
-                    value=q_state['user_answer'], 
-                    key=f"input_{question_key_base}", 
-                    disabled=q_state['is_correct'] or q_state.get('out_of_chances', False) # Disable if correct or out of chances
-                )
-                q_state['user_answer'] = user_input # Update state on input change for persistence
-
-            with col_check:
-                # Disable check button if correct, no input, or out of chances
-                if not q_state['is_correct'] and not q_state.get('out_of_chances', False):
-                    if st.button(translate_text_with_ai("Check Answer", st.session_state['preferred_language'], client_ai), key=f"check_btn_{question_key_base}", disabled=not user_input.strip()):
-                        user_answer_cleaned = user_input.strip().lower()
-                        correct_answer_original = trivia_item.get('answer', '').strip() # Use .get() here too
-                        correct_answer_cleaned = correct_answer_original.lower()
-
-                        is_exact_match = (user_answer_cleaned == correct_answer_cleaned)
-                        is_partial_match = False
-                        if not is_exact_match:
-                            is_partial_match = check_partial_correctness_with_ai(user_input, correct_answer_original, client_ai)
-
-                        if is_exact_match or is_partial_match:
-                            if not q_state['is_correct']: # Only award points if not already correct
-                                q_state['is_correct'] = True
-                                points = 0
-                                if q_state['attempts'] == 0: # First try (0 attempts before this correct one)
-                                    points = 3
-                                elif q_state['attempts'] == 1: # Second try
-                                    points = 2
-                                elif q_state['attempts'] == 2: # Third try
-                                    points = 1
-                                # If points have already been awarded, don't add them again
-                                if q_state['points_earned'] == 0:
-                                    q_state['points_earned'] = points
-                                    st.session_state['current_trivia_score'] += points
-                                
-                                if is_exact_match:
-                                    q_state['feedback'] = translate_text_with_ai(f"✅ Correct! You earned {points} points for this question.", st.session_state['preferred_language'], client_ai)
-                                else: # It's a partial match
-                                    q_state['feedback'] = translate_text_with_ai(f"✅ Partially correct! You earned {points} points for this question.", st.session_state['preferred_language'], client_ai)
-                            else:
-                                q_state['feedback'] = translate_text_with_ai("✅ Already correct!", st.session_state['preferred_language'], client_ai) # Should not happen with disabled button, but as a safeguard
-                        else: # Neither exact nor partial match
-                            q_state['attempts'] += 1 # Increment attempts on incorrect answer
-                            if q_state['attempts'] >= 3:
-                                q_state['out_of_chances'] = True
-                                # Display correct answer here if user is out of chances
-                                translated_correct_answer = translate_text_with_ai(trivia_item.get('answer', ''), st.session_state['preferred_language'], client_ai) # Use .get() here too
-                                q_state['feedback'] = translate_text_with_ai(f"❌ You've used all {q_state['attempts']} attempts. The correct answer was: **{translated_correct_answer}**. You earned 0 points for this question.", st.session_state['preferred_language'], client_ai)
-                                st.info(f"Answer: {trivia_item.get('answer', 'No answer available.')}") # Display answer immediately if out of chances
-                                # Ensure points_earned is 0 if out of chances and not previously correct
-                                if q_state['points_earned'] == 0:
-                                    q_state['points_earned'] = 0 # Explicitly set to 0
-                            else:
-                                q_state['feedback'] = translate_text_with_ai(f"❌ Incorrect. Try again! (Attempts: {q_state['attempts']}/3)", st.session_state['preferred_language'], client_ai)
-                        # No st.rerun() needed here; button click triggers rerun automatically
-
-            with col_hint:
-                # Show hint button only if not correct, not out of chances, hints remaining, not already revealed, and hint content exists
-                if not q_state['is_correct'] and not q_state.get('out_of_chances', False) and st.session_state['hints_remaining'] > 0 and not q_state['hint_revealed'] and trivia_item.get('hint'):
-                    if st.button(translate_text_with_ai(f"Hint ({st.session_state['hints_remaining']})", st.session_state['preferred_language'], client_ai), key=f"hint_btn_{question_key_base}"):
-                        st.session_state['hints_remaining'] -= 1
-                        q_state['hint_revealed'] = True
-                        # No st.rerun() needed here; button click triggers rerun automatically
-                # Always display hint if it was revealed for this question OR out of chances (for learning) AND hint content exists
-                elif (q_state['hint_revealed'] or q_state.get('out_of_chances', False)) and trivia_item.get('hint'):
-                    st.info(f"{translate_text_with_ai('Hint', st.session_state['preferred_language'], client_ai)}: {trivia_item.get('hint', '')}")
-
-            # Display feedback based on the state
-            if q_state['feedback']:
-                if q_state['is_correct']:
-                    st.success(q_state['feedback'])
-                elif q_state.get('out_of_chances', False):
-                    st.error(q_state['feedback'])
-                else: # Incorrect but still has chances
-                    st.error(q_state['feedback'])
-
-            # Add expander for related article - ONLY show if out of chances or correct
-            if q_state.get('out_of_chances', False) or q_state['is_correct']: # Show explanation if correct OR out of chances
-                with st.expander(translate_text_with_ai(f"Show Explanation for Q{i+1}", st.session_state['preferred_language'], client_ai)):
-                    if q_state['related_article_content'] is None:
-                        # Generate article in English first
-                        generated_article_en = generate_related_trivia_article(
-                            trivia_item.get('question', ''), trivia_item.get('answer', ''), client_ai # Use .get() here too
-                        )
-                        # Translate to preferred language for display
-                        translated_article = translate_text_with_ai(generated_article_en, st.session_state['preferred_language'], client_ai)
-                        q_state['related_article_content'] = clean_text_for_latin1(translated_article)
-                    st.write(q_state['related_article_content'])
-            
-        st.markdown("---")
-        # Check if all questions are answered correctly or out of chances
-        all_completed = all(st.session_state['trivia_question_states'][f"trivia_q_{i}"]['is_correct'] or \
-                            st.session_state['trivia_question_states'][f"trivia_q_{i}"].get('out_of_chances', False) \
-                            for i in range(len(trivia_questions)))
-        
-        if all_completed:
-            st.success(translate_text_with_ai("You've completed the trivia challenge for today!", st.session_state['preferred_language'], client_ai))
-            if not st.session_state['score_logged_today']:
-                if log_trivia_score(st.session_state['logged_in_username'], st.session_state['current_trivia_score']):
-                    st.session_state['score_logged_today'] = True
-                    st.success(translate_text_with_ai("Your score has been logged!", st.session_state['preferred_language'], client_ai))
-                else:
-                    st.error(translate_text_with_ai("Failed to log your score.", st.session_state['preferred_language'], client_ai))
-        else:
-            st.info(translate_text_with_ai(f"You have {st.session_state['hints_remaining']} hints remaining.", st.session_state['preferred_language'], client_ai))
-        
-        st.markdown("---")
-        st.subheader(translate_text_with_ai("🏆 Leaderboard", st.session_state['preferred_language'], client_ai))
-        leaderboard = get_leaderboard_data()
-        if leaderboard:
-            for rank, (username, score) in enumerate(leaderboard):
-                st.write(f"{rank+1}. {username}: {score} {translate_text_with_ai('points', st.session_state['preferred_language'], client_ai)}")
-        else:
-            st.info(translate_text_with_ai("No scores logged yet for the leaderboard. Be the first!", st.session_state['preferred_language'], client_ai))
-
-        st.button(translate_text_with_ai("⬅️ Back to Main Page", st.session_state['preferred_language'], client_ai), on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_bottom")
-    else: # Added an else block here to explicitly state if no trivia is loaded
-        st.info(translate_text_with_ai("No trivia questions are available for today. Please check your content preferences or try again later.", st.session_state['preferred_language'], client_ai))
-
-
-def show_login_register_page():
-    # Centering the logo using columns
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.image("https://i.postimg.cc/8CRsCGCC/Chat-GPT-Image-Jun-7-2025-12-32-18-AM.png", use_container_width=False, width=200)
-
-    st.markdown(
-        translate_text_with_ai(
-        """
-        Welcome to **This Day in History**!
-        Discover fascinating historical events, learn about notable birthdays, and test your knowledge with daily trivia.
-        Sign in or register to personalize your daily historical journey and track your trivia scores!
-        """, st.session_state['preferred_language'], client_ai)
-    )
-    st.title(translate_text_with_ai("Login to Access", st.session_state['preferred_language'], client_ai))
-
-    st.markdown("---")
-
-    # Feedback email note at the top
-    st.markdown(translate_text_with_ai("📧 You can send us feedback at: `thisdayinhistoryapp@gmail.com`", st.session_state['preferred_language'], client_ai))
-    st.markdown("---")
-
-    login_tab, register_tab = st.tabs([translate_text_with_ai("Log In", st.session_state['preferred_language'], client_ai), translate_text_with_ai("Register", st.session_state['preferred_language'], client_ai)])
-    with login_tab:
+    with tab_login:
         with st.form("login_form"):
-            username = st.text_input(translate_text_with_ai("Username", st.session_state['preferred_language'], client_ai), key="login_username_input")
-            password = st.text_input(translate_text_with_ai("Password", st.session_state['preferred_language'], client_ai), type="password", key="login_password_input")
-            if st.form_submit_button(translate_text_with_ai("Log In", st.session_state['preferred_language'], client_ai)):
-                print(f"Login attempt for username: '{username}'") # Debugging print
-                USERS = get_users_from_sheet() # Get users from Google Sheet
-                print(f"Users retrieved for login: {USERS}") # Debugging print
-                if username in USERS and USERS[username] == password:
+            st.subheader("Log In")
+            username = st.text_input("Username", key="login_username_input")
+            password = st.text_input("Password", type="password", key="login_password_input")
+            submitted = st.form_submit_button("Log In")
+
+            if submitted:
+                users = get_users_from_sheet()
+                if username in users and users[username] == password:
                     st.session_state['is_authenticated'] = True
                     st.session_state['logged_in_username'] = username
-                    st.success(translate_text_with_ai(f"Welcome {username}! Please wait for main screen to load. If it does not load within 10 seconds, please click log-in again.", st.session_state['preferred_language'], client_ai))
+                    st.session_state['user_info'] = {"username": username} # Set user_info here
                     log_event("login", username)
-                    set_page('main_app') # Go to main app page (this handles the rerun)
+                    st.success("Logged in successfully!")
+                    set_page('main_app')
                 else:
-                    st.error(translate_text_with_ai("Invalid credentials.", st.session_state['preferred_language'], client_ai))
+                    st.error("Invalid username or password.")
 
-    with register_tab:
+    with tab_register:
         with st.form("register_form"):
-            new_username = st.text_input(translate_text_with_ai("New Username", st.session_state['preferred_language'], client_ai), key="register_username_input")
-            new_email = st.text_input(translate_text_with_ai("Email", st.session_state['preferred_language'], client_ai), key="register_email_input")
-            st.markdown(
-                f"""
-                <p style='font-size:0.8em; color:#AAAAAA; margin-top:-1em;'>
-                {translate_text_with_ai("*No spam or marketing emails. Used only for account support like lost passwords.*", st.session_state['preferred_language'], client_ai)}
-                </p>
-                """,
-                unsafe_allow_html=True
-            )
-            new_password = st.text_input(translate_text_with_ai("New Password", st.session_state['preferred_language'], client_ai), type="password", key="register_password_input")
-            confirm_password = st.text_input(translate_text_with_ai("Confirm Password", st.session_state['preferred_language'], client_ai), type="password", key="register_confirm_password_input")
-            if st.form_submit_button(translate_text_with_ai("Register", st.session_state['preferred_language'], client_ai)):
-                if new_password == confirm_password:
-                    USERS_EXISTING = get_users_from_sheet() # Get users from Google Sheet right before check
-                    print(f"Register attempt for username: '{new_username}'") # Debugging print
-                    print(f"Existing users during registration: {USERS_EXISTING}") # Debugging print
-                    
-                    if new_username in USERS_EXISTING:
-                        st.error(translate_text_with_ai("Username already exists. Please choose a different username.", st.session_state['preferred_language'], client_ai))
-                    else:
-                        if save_new_user_to_sheet(new_username, new_password, new_email):
-                            st.session_state['is_authenticated'] = True
-                            st.session_state['logged_in_username'] = new_username
-                            st.success(translate_text_with_ai(f"Account created successfully! You are now logged in as {new_username}. Please wait for the main screen to load. If it does not load within 5 seconds, please click register again. ", st.session_state['preferred_language'], client_ai)) # Updated success message
-                            log_event("register", new_username)
-                            set_page('main_app') # Go to main app page (this handles the rerun)
-                        else:
-                            st.error(translate_text_with_ai("Failed to register user. Please try again.", st.session_state['preferred_language'], client_ai))
+            st.subheader("Register")
+            new_username = st.text_input("New Username", key="register_username_input")
+            new_password = st.text_input("New Password", type="password", key="register_password_input")
+            confirm_password = st.text_input("Confirm Password", type="password", key="register_confirm_password_input")
+            new_email = st.text_input("Email (Optional)", key="register_email_input")
+            register_submitted = st.form_submit_button("Register")
+
+            if register_submitted:
+                users = get_users_from_sheet()
+                if new_username in users:
+                    st.error("Username already exists. Please choose a different one.")
+                elif new_password != confirm_password:
+                    st.error("Passwords do not match.")
+                elif not new_username or not new_password:
+                    st.error("Username and password cannot be empty.")
                 else:
-                    st.error(translate_text_with_ai("Passwords do not match.", st.session_state['preferred_language'], client_ai))
+                    if save_new_user_to_sheet(new_username, new_password, new_email):
+                        log_event("register", new_username)
+                        st.success("Registration successful! You can now log in.")
+                        # Optionally auto-log in the user after registration
+                        st.session_state['is_authenticated'] = True
+                        st.session_state['logged_in_username'] = new_username
+                        st.session_state['user_info'] = {"username": new_username} # Set user_info here
+                        set_page('main_app')
 
-    # --- Example: This Day in History (on login page) ---
-    st.markdown("---")
-    st.subheader(translate_text_with_ai("📋 Example: This Day in History", st.session_state['preferred_language'], client_ai))
-    st.info(translate_text_with_ai("This is a preview of the content format. Log in or register to get today's personalized content!", st.session_state['preferred_language'], client_ai))
 
-    # Display content based off of January 1st for the example content on the login page
-    january_1st_example_date = date(datetime.today().year, 1, 1) # Use current year's Jan 1st for the example
-    example_user_info = {'name': 'Example User', 'jobs': '', 'hobbies': '', 'decade': '', 'life_experiences': '', 'college_chapter': ''}
+# --- Main Application Page ---
+def show_main_app_page():
+    st.header(translate_text_with_ai("Today's Historical Highlights", st.session_state['preferred_language'], client_ai))
+    st.markdown(
+        f"*{translate_text_with_ai('Logged in as:', st.session_state['preferred_language'], client_ai)} **{st.session_state['logged_in_username']}***"
+    )
+
+    today = date.today()
+    if st.session_state['last_fetched_date'] != today:
+        st.session_state['raw_fetched_data'] = _INITIAL_EMPTY_DATA.copy() # Reset data
+        st.session_state['daily_data'] = None # Clear translated data
+        st.session_state['last_fetched_date'] = today
+        st.session_state['trivia_question_states'] = {} # Reset trivia state
+        st.session_state['hints_remaining'] = 3
+        st.session_state['current_trivia_score'] = 0
+        st.session_state['total_possible_daily_trivia_score'] = 0
+        st.session_state['score_logged_today'] = False # Allow score logging for new day
+
+    # --- Content Generation ---
+    with st.spinner(translate_text_with_ai("Fetching today's history...", st.session_state['preferred_language'], client_ai)):
+        if st.session_state['raw_fetched_data'] == _INITIAL_EMPTY_DATA and st.session_state['last_fetched_date'] == today:
+            st.session_state['raw_fetched_data'] = get_this_day_in_history_facts(
+                today.day, today.month, st.session_state['user_info'], client_ai,
+                difficulty=st.session_state['difficulty'],
+                local_city=st.session_state['local_city'],
+                local_state_country=st.session_state['local_state_country']
+            )
+            # After fetching, translate the raw data once
+            st.session_state['daily_data'] = translate_content(st.session_state['raw_fetched_data'], st.session_state['preferred_language'], client_ai)
+        elif st.session_state['daily_data'] is None or st.session_state['daily_data']['event_article'] == _INITIAL_EMPTY_DATA['event_article'] or st.session_state['preferred_language'] != st.session_state.get('last_display_language', 'English'):
+            # If language changed or data is still default, re-translate raw data
+            st.session_state['daily_data'] = translate_content(st.session_state['raw_fetched_data'], st.session_state['preferred_language'], client_ai)
+            st.session_state['last_display_language'] = st.session_state['preferred_language'] # Update last_display_language
     
-    with st.spinner(translate_text_with_ai("Loading example content...", st.session_state['preferred_language'], client_ai)):
-        # Always fetch example content in English first
-        fetched_raw_example_data = get_this_day_in_history_facts(
-            january_1st_example_date.day, 
-            january_1st_example_date.month, 
-            example_user_info, 
-            client_ai, 
-            difficulty='Medium',
-            local_city=st.session_state['local_city'] if st.session_state['local_city'].strip() else None,
-            local_state_country=st.session_state['local_state_country'] if st.session_state['local_state_country'].strip() else None
-        )
+    daily_data = st.session_state['daily_data']
+    
+    # --- Display Content ---
+    st.subheader(translate_text_with_ai("Historical Event", st.session_state['preferred_language'], client_ai))
+    st.write(daily_data['event_article'])
+
+    st.subheader(translate_text_with_ai("Born On This Day", st.session_state['preferred_language'], client_ai))
+    st.write(daily_data['born_article'])
+
+    st.subheader(translate_text_with_ai("Fun Fact", st.session_state['preferred_language'], client_ai))
+    st.write(daily_data['fun_fact_section'])
+
+    st.subheader(translate_text_with_ai("Did You Know?", st.session_state['preferred_language'], client_ai))
+    for fact in daily_data['did_you_know_section']:
+        st.write(f"- {fact}")
+
+    st.subheader(translate_text_with_ai("Memory Prompts", st.session_state['preferred_language'], client_ai))
+    for prompt in daily_data['memory_prompt_section']:
+        st.write(f"- {prompt}")
+
+    st.subheader(translate_text_with_ai("Local History", st.session_state['preferred_language'], client_ai))
+    st.write(daily_data['local_history_section'])
+
+    # --- PDF Download ---
+    pdf_bytes = generate_full_history_pdf(
+        daily_data,
+        today.strftime("%B %d, %Y"),
+        st.session_state['user_info'],
+        st.session_state['preferred_language'],
+        st.session_state['custom_masthead_text']
+    )
+    pdf_filename = f"This_Day_in_History_{today.strftime('%Y-%m-%d')}.pdf"
+
+    st.download_button(
+        label=translate_text_with_ai("Download Today's PDF", st.session_state['preferred_language'], client_ai),
+        data=pdf_bytes,
+        file_name=pdf_filename,
+        mime="application/pdf",
+        on_click=lambda: log_pdf_download(st.session_state['logged_in_username'], pdf_filename, today)
+    )
+    if st.session_state['last_download_status'] == 'success':
+        st.success(translate_text_with_ai("PDF download logged!", st.session_state['preferred_language'], client_ai))
+        st.session_state['last_download_status'] = None # Clear status after display
+    elif st.session_state['last_download_status'] == 'failure':
+        st.error(translate_text_with_ai("Failed to log PDF download.", st.session_state['preferred_language'], client_ai))
+        st.session_state['last_download_status'] = None # Clear status after display
+
+
+    st.markdown("---") # Separator
+
+    # --- Trivia Button ---
+    st.button(translate_text_with_ai("🧠 Play Trivia!", st.session_state['preferred_language'], client_ai), on_click=lambda: set_page('trivia_page'))
+
+
+# --- Trivia Page ---
+def show_trivia_page():
+    st.header(translate_text_with_ai("Daily Trivia Challenge!", st.session_state['preferred_language'], client_ai))
+    st.markdown(
+        f"*{translate_text_with_ai('Logged in as:', st.session_state['preferred_language'], client_ai)} **{st.session_state['logged_in_username']}***"
+    )
+
+    daily_data = st.session_state.get('daily_data', _INITIAL_EMPTY_DATA)
+    trivia_questions = daily_data['trivia_section']
+
+    if not trivia_questions:
+        st.warning(translate_text_with_ai("No trivia questions available for today. Please go back to the main app and ensure content is fetched.", st.session_state['preferred_language'], client_ai))
+        if st.button(translate_text_with_ai("⬅️ Back to Main App", st.session_state['preferred_language'], client_ai)):
+            set_page('main_app')
+        return
+
+    st.subheader(translate_text_with_ai("Your Current Score:", st.session_state['preferred_language'], client_ai) + f" {st.session_state['current_trivia_score']}/{st.session_state['total_possible_daily_trivia_score']}")
+    st.write(translate_text_with_ai(f"Hints Remaining: {st.session_state['hints_remaining']}", st.session_state['preferred_language'], client_ai))
+
+    for i, q_data in enumerate(trivia_questions):
+        q_key = f"q_{i}"
         
-        # Defensive check for example data as well
-        if not isinstance(fetched_raw_example_data, dict):
-            st.error("Generated raw example data was not a dictionary. Using default empty data for example.")
-            fetched_raw_example_data = _INITIAL_EMPTY_DATA.copy()
+        # Initialize state for this question if it doesn't exist
+        if q_key not in st.session_state['trivia_question_states']:
+            st.session_state['trivia_question_states'][q_key] = {
+                'user_answer': '',
+                'is_correct': False,
+                'feedback': '',
+                'hint_revealed': False,
+                'attempts': 0,
+                'out_of_chances': False,
+                'points_earned': 0,
+                'related_article_content': None
+            }
+
+        question_state = st.session_state['trivia_question_states'][q_key]
+        
+        st.markdown(f"**{translate_text_with_ai(f'Question {i+1}:', st.session_state['preferred_language'], client_ai)}** {q_data['question']}")
+        
+        # Only allow input if not already correct or out of chances
+        if not question_state['is_correct'] and not question_state['out_of_chances']:
+            user_answer = st.text_input(translate_text_with_ai("Your Answer:", st.session_state['preferred_language'], client_ai), 
+                                         value=question_state['user_answer'], 
+                                         key=f"answer_input_{q_key}")
             
-        example_data = translate_content(fetched_raw_example_data, st.session_state['preferred_language'], client_ai)
+            col_check, col_hint = st.columns([1, 1])
+            with col_check:
+                if st.button(translate_text_with_ai("Check Answer", st.session_state['preferred_language'], client_ai), key=f"check_btn_{q_key}"):
+                    question_state['user_answer'] = user_answer # Update session state with the latest answer
+                    question_state['attempts'] += 1
 
+                    if user_answer.strip().lower() == q_data['answer'].strip().lower():
+                        question_state['is_correct'] = True
+                        question_state['feedback'] = translate_text_with_ai("🎉 Correct!", st.session_state['preferred_language'], client_ai)
+                        if question_state['points_earned'] == 0: # Only add points once
+                            st.session_state['current_trivia_score'] += 1
+                            st.session_state['total_possible_daily_trivia_score'] += 1 # Every question is potentially 1 point
+                            question_state['points_earned'] = 1
+                    else:
+                        is_partially_correct = check_partial_correctness_with_ai(user_answer, q_data['answer'], client_ai)
+                        if is_partially_correct:
+                            question_state['feedback'] = translate_text_with_ai("👍 Partially correct! Consider the full answer.", st.session_state['preferred_language'], client_ai)
+                        else:
+                            question_state['feedback'] = translate_text_with_ai("❌ Incorrect. Try again!", st.session_state['preferred_language'], client_ai)
+                            if question_state['attempts'] >= 2: # Allow 2 attempts
+                                question_state['out_of_chances'] = True
+                                question_state['feedback'] += " " + translate_text_with_ai(f"The correct answer was: {q_data['answer']}", st.session_state['preferred_language'], client_ai)
+                                st.session_state['total_possible_daily_trivia_score'] += 1 # Mark as a question attempted, even if wrong
+                    st.rerun() # Rerun to update feedback/state immediately
 
-    st.markdown(translate_text_with_ai(f"### ✨ A Look Back at {january_1st_example_date.strftime('%B %d')}", st.session_state['preferred_language'], client_ai))
-    st.markdown(translate_text_with_ai("### 🗓️ Significant Event", st.session_state['preferred_language'], client_ai))
-    st.write(example_data.get('event_article', "No event article found."))
+            with col_hint:
+                if st.session_state['hints_remaining'] > 0 and not question_state['hint_revealed'] and not question_state['is_correct'] and not question_state['out_of_chances']:
+                    if st.button(translate_text_with_ai("Show Hint", st.session_state['preferred_language'], client_ai), key=f"hint_btn_{q_key}"):
+                        question_state['hint_revealed'] = True
+                        st.session_state['hints_remaining'] -= 1
+                        st.info(clean_text_for_latin1(translate_text_with_ai(f"Hint: {q_data['hint']}", st.session_state['preferred_language'], client_ai)))
+                        st.rerun() # Rerun to update hint display
 
-    st.markdown(translate_text_with_ai("### 🎂 Born on this Day", st.session_state['preferred_language'], client_ai))
-    st.write(example_data.get('born_article', "No birth article found."))
+        # Display feedback and hint if revealed
+        if question_state['feedback']:
+            st.write(question_state['feedback'])
+        if question_state['hint_revealed'] and not question_state['is_correct']:
+            st.info(clean_text_for_latin1(translate_text_with_ai(f"Hint: {q_data['hint']}", st.session_state['preferred_language'], client_ai)))
+        
+        # Show related article after answer attempts are exhausted or correct
+        if question_state['is_correct'] or question_state['out_of_chances']:
+            if question_state['related_article_content'] is None:
+                with st.spinner(translate_text_with_ai("Generating explanation...", st.session_state['preferred_language'], client_ai)):
+                    question_state['related_article_content'] = generate_related_trivia_article(q_data['question'], q_data['answer'], client_ai)
+            st.markdown(translate_text_with_ai("**Explanation:**", st.session_state['preferred_language'], client_ai))
+            st.write(clean_text_for_latin1(question_state['related_article_content']))
+        
+        st.markdown("---") # Separator between questions
 
-    st.markdown(translate_text_with_ai("### 💡 Fun Fact", st.session_state['preferred_language'], client_ai))
-    st.write(example_data.get('fun_fact_section', "No fun fact found."))
+    # Log score once all questions are answered or user navigates away
+    if all(s['is_correct'] or s['out_of_chances'] for s in st.session_state['trivia_question_states'].values()) and not st.session_state['score_logged_today']:
+        log_trivia_score(st.session_state['logged_in_username'], st.session_state['current_trivia_score'])
+        st.session_state['score_logged_today'] = True
+        st.success(translate_text_with_ai("Your final score has been logged!", st.session_state['preferred_language'], client_ai))
+        st.balloons()
+    
+    st.button(translate_text_with_ai("⬅️ Back to Main App", st.session_state['preferred_language'], client_ai), on_click=lambda: set_page('main_app'))
+    st.button(translate_text_with_ai("🏆 View Leaderboard", st.session_state['preferred_language'], client_ai), on_click=lambda: set_page('leaderboard_page'))
 
-    # Display Local History if available and not the "not found" messages
-    local_history_example_content = example_data.get('local_history_section', '')
-    if local_history_example_content and \
-       not local_history_example_content.startswith("Could not generate local history fact."):
-        st.markdown("---")
-        st.subheader(translate_text_with_ai("📍 Local History", st.session_state['preferred_language'], client_ai))
-        st.write(local_history_example_content)
+# --- Leaderboard Page ---
+def show_leaderboard_page():
+    st.header(translate_text_with_ai("Leaderboard", st.session_state['preferred_language'], client_ai))
+    st.markdown(
+        f"*{translate_text_with_ai('Logged in as:', st.session_state['preferred_language'], client_ai)} **{st.session_state['logged_in_username']}***"
+    )
+
+    leaderboard_data = get_leaderboard_data()
+
+    if leaderboard_data:
+        st.subheader(translate_text_with_ai("Top Scores:", st.session_state['preferred_language'], client_ai))
+        for i, (username, score) in enumerate(leaderboard_data):
+            st.write(f"{i+1}. {username}: {score} {translate_text_with_ai('points', st.session_state['preferred_language'], client_ai)}")
     else:
-        st.markdown("---")
-        st.subheader(translate_text_with_ai("📍 Local History", st.session_state['preferred_language'], client_ai))
-        st.info(translate_text_with_ai("Could not retrieve a local history fact for your settings. Please try again with different inputs or leave blank for a general U.S. historical fact.", st.session_state['preferred_language'], client_ai))
+        st.info(translate_text_with_ai("No scores logged yet. Be the first to play trivia!", st.session_state['preferred_language'], client_ai))
 
-
-    st.markdown(translate_text_with_ai("### 🧠 Test Your Knowledge!", st.session_state['preferred_language'], client_ai))
-    # Loop through the first 4 trivia questions for the example PDF
-    trivia_example_questions = fetched_raw_example_data.get('trivia_section', [])
-    if trivia_example_questions: # Use fetched_raw_example_data for trivia section
-        for i, trivia_item in enumerate(trivia_example_questions[:4]): # Limit to 4 for example PDF
-            st.markdown(f"**Question {i+1}:** {trivia_item.get('question', 'No question available.')}")
-            st.info(f"Answer: {trivia_item.get('answer', 'No answer available.')}") # Display answer for example content
-            # Safely display hint for example content
-            if trivia_item.get('hint'): # Use .get() here too
-                st.info(f"Hint: {trivia_item.get('hint', 'No hint available.')}")
-    else: # Added an else block here to explicitly state if no trivia is loaded
-        st.info(translate_text_with_ai("No example trivia questions are available. Please try again later.", st.session_state['preferred_language'], client_ai))
-
-
-    st.markdown(translate_text_with_ai("### 🌟 Did You Know?", st.session_state['preferred_language'], client_ai))
-    # Use .get() with an empty list as default for iteration
-    for fact in example_data.get('did_you_know_section', []):
-        st.markdown(f"- {fact}")
-
-    st.markdown(translate_text_with_ai("### 💬 Memory Lane Prompt?", st.session_state['preferred_language'], client_ai))
-    # Iterate and display each memory prompt for example data without hyphens, using .get() with an empty list as default
-    memory_prompts_example_list = example_data.get('memory_prompt_section', [])
-    if memory_prompts_example_list:
-        for prompt_text in memory_prompts_example_list:
-            st.write(f"{prompt_text}") # Display as paragraph, no leading hyphen
-    else:
-        st.write(translate_text_with_ai("No memory prompts available.", st.session_state['preferred_language'], client_ai))
-
-
-    # Generate PDF bytes once for example content
-    with st.spinner(translate_text_with_ai("Preparing example PDF...", st.session_state['preferred_language'], client_ai)):
-        pdf_bytes_example = generate_full_history_pdf(
-            fetched_raw_example_data, 
-            january_1st_example_date.strftime('%B %d, %Y'), 
-            example_user_info, 
-            st.session_state['preferred_language'],
-            # No custom masthead for the example PDF, so pass None or empty string
-            "" 
-        )
-
-    # Create Base64 encoded link for example content
-    lang_suffix = f"_{st.session_state['preferred_language']}" if st.session_state['preferred_language'] != 'English' else ''
-    pdf_file_name_example = f"example_this_day_history_{january_1st_example_date.strftime('%Y%m%d')}{lang_suffix}.pdf"
-
-    b64_pdf_example = base64.b64encode(pdf_bytes_example).decode('latin-1')
-    pdf_viewer_link_example = f'<a href="data:application/pdf;base64,{b64_pdf_example}" target="_blank">{translate_text_with_ai("View Example PDF in Browser", st.session_state["preferred_language"], client_ai)}</a>'
-
-    col1_example, col2_example = st.columns([1, 1])
-    with col1_example:
-        st.download_button(
-            translate_text_with_ai("Download Example PDF", st.session_state['preferred_language'], client_ai),
-            pdf_bytes_example,
-            file_name=pdf_file_name_example,
-            mime="application/pdf"
-        )
-    with col2_example:
-        st.markdown(pdf_viewer_link_example, unsafe_allow_html=True)
-
-
-# --- Main App Logic (Router) ---
-if st.session_state['is_authenticated']:
-    # --- Sidebar content (always visible when authenticated) ---
-    st.sidebar.image("https://i.postimg.cc/8CRsCGCC/Chat-GPT-Image-Jun-7-2025-12-32-18-AM.png", use_container_width=True)
-    st.sidebar.markdown("---")
-    st.sidebar.header(translate_text_with_ai("Navigation", st.session_state['preferred_language'], client_ai))
-    if st.sidebar.button(translate_text_with_ai("🏠 Home", st.session_state['preferred_language'], client_ai), key="sidebar_home_btn"):
-        set_page('main_app')
-    if st.sidebar.button(translate_text_with_ai("🎮 Play Trivia!", st.session_state['preferred_language'], client_ai), key="sidebar_trivia_btn"):
+    if st.button(translate_text_with_ai("⬅️ Back to Trivia", st.session_state['preferred_language'], client_ai)):
         set_page('trivia_page')
+    if st.button(translate_text_with_ai("🏡 Back to Main App", st.session_state['preferred_language'], client_ai)):
+        set_page('main_app')
 
-    st.sidebar.markdown("---")
-    st.sidebar.header(translate_text_with_ai("Settings", st.session_state['preferred_language'], client_ai))
-    
-    st.sidebar.subheader(translate_text_with_ai("Content Customization", st.session_state['preferred_language'], client_ai))
-    st.session_state['preferred_topic_main_app'] = st.sidebar.selectbox(
-        translate_text_with_ai("Preferred Topic for Events (Optional)", st.session_state['preferred_language'], client_ai),
-        options=["None", "Sports", "Music", "Inventions", "Politics", "Science", "Arts"],
-        index=0,
-        key='sidebar_topic_select'
-    )
-    st.session_state['preferred_decade_main_app'] = st.sidebar.selectbox(
-        translate_text_with_ai("Preferred Decade for Articles (Optional)", st.session_state['preferred_language'], client_ai),
-        options=["None", "1800s", "1900s", "1910s", "1920s", "1930s", "1940s", "1950s", "1960s", "1970s", "1980s"],
-        index=0,
-        key='sidebar_decade_select'
+# --- Weekly Planner Page ---
+def show_weekly_planner_page():
+    st.header(translate_text_with_ai("Weekly Content Planner", st.session_state['preferred_language'], client_ai))
+    st.markdown(
+        f"*{translate_text_with_ai('Logged in as:', st.session_state['preferred_language'], client_ai)} **{st.session_state['logged_in_username']}***"
     )
 
-    st.sidebar.markdown("---")
-    st.sidebar.subheader(translate_text_with_ai("📍 Local History Settings", st.session_state['preferred_language'], client_ai))
-    st.session_state['local_city'] = st.sidebar.text_input(
-        translate_text_with_ai("Your City (Optional)", st.session_state['preferred_language'], client_ai),
-        value=st.session_state['local_city'],
-        key='sidebar_local_city'
+    st.write(translate_text_with_ai("Select a start date to generate 'This Day in History' content and companion activities for a full week.", st.session_state['preferred_language'], client_ai))
+
+    start_date = st.date_input(
+        translate_text_with_ai("Select Start Date", st.session_state['preferred_language'], client_ai),
+        value=date.today(),
+        min_value=date(1900, 1, 1), # Arbitrary minimum date
+        max_value=date(2099, 12, 31), # Arbitrary maximum date
+        key='weekly_planner_start_date'
     )
-    st.session_state['local_state_country'] = st.sidebar.text_input(
-        translate_text_with_ai("Your State/Country (Optional)", st.session_state['preferred_language'], client_ai),
-        value=st.session_state['local_state_country'],
-        key='sidebar_local_state_country'
-    )
-    st.sidebar.info(translate_text_with_ai("Integrating local historical facts specific to your area. Please fill in both fields for best results. If left blank, a general U.S. historical fact will be provided.", st.session_state['preferred_language'], client_ai))
+
+    if st.button(translate_text_with_ai("Generate Weekly Content", st.session_state['preferred_language'], client_ai), key='generate_weekly_btn'):
+        generated_pdfs = []
+        zip_file_name = f"Weekly_History_and_Activities_{start_date.strftime('%Y-%m-%d')}.zip"
+        
+        with st.spinner(translate_text_with_ai("Generating weekly content and PDFs (this may take a few minutes)...", st.session_state['preferred_language'], client_ai)):
+            current_date = start_date
+            for i in range(7):
+                day_data_raw = get_this_day_in_history_facts(
+                    current_date.day, 
+                    current_date.month, 
+                    st.session_state['user_info'], 
+                    client_ai,
+                    difficulty=st.session_state['difficulty'],
+                    local_city=st.session_state['local_city'],
+                    local_state_country=st.session_state['local_state_country']
+                )
+                
+                # Translate the raw data to the preferred language
+                day_data_translated = translate_content(day_data_raw, st.session_state['preferred_language'], client_ai)
+
+                # Generate main history PDF
+                history_pdf_bytes = generate_full_history_pdf(
+                    day_data_translated,
+                    current_date.strftime("%B %d, %Y"),
+                    st.session_state['user_info'],
+                    st.session_state['preferred_language'],
+                    st.session_state['custom_masthead_text']
+                )
+                generated_pdfs.append({
+                    'name': f"History_Content_{current_date.strftime('%Y-%m-%d')}.pdf",
+                    'data': history_pdf_bytes
+                })
+
+                # Generate companion activity
+                activity_data = generate_companion_activities(
+                    day_data_raw['event_article'], # Use raw event article for activity generation prompt
+                    day_data_raw['fun_fact_section'], # Use raw fun fact for activity generation prompt
+                    st.session_state['preferred_language'], # Pass preferred language for activity response translation
+                    client_ai
+                )
+
+                activity_pdf_bytes = generate_activity_pdf(
+                    activity_data,
+                    current_date.strftime("%B %d, %Y"),
+                    st.session_state['preferred_language'],
+                    st.session_state['custom_masthead_text']
+                )
+                generated_pdfs.append({
+                    'name': f"Activity_Sheet_{current_date.strftime('%Y-%m-%d')}.pdf",
+                    'data': activity_pdf_bytes
+                })
+                
+                current_date += timedelta(days=1)
+
+        # Create ZIP file in-memory
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for pdf_item in generated_pdfs:
+                zf.writestr(pdf_item['name'], pdf_item['data'])
+        zip_buffer.seek(0) # Rewind the buffer to the beginning
+
+        st.success(translate_text_with_ai("Weekly content generated successfully!", st.session_state['preferred_language'], client_ai))
+        
+        st.download_button(
+            label=translate_text_with_ai("Download Weekly PDFs (ZIP)", st.session_state['preferred_language'], client_ai),
+            data=zip_buffer,
+            file_name=zip_file_name,
+            mime="application/zip",
+            on_click=lambda: log_pdf_download(st.session_state['logged_in_username'], zip_file_name, start_date) # Log the ZIP download
+        )
     
-    st.sidebar.markdown("---")
-    st.sidebar.subheader(translate_text_with_ai("🌐 Language Settings", st.session_state['preferred_language'], client_ai))
-    st.session_state['preferred_language'] = st.sidebar.selectbox(
-        translate_text_with_ai("Display Language", st.session_state['preferred_language'], client_ai),
-        options=["English", "Spanish", "French", "German", "Italian", "Portuguese"],
-        index=["English", "Spanish", "French", "German", "Italian", "Portuguese"].index(st.session_state['preferred_language']),
-        key='sidebar_language_select',
-        help=translate_text_with_ai("Select the language for the daily content and PDF.", st.session_state['preferred_language'], client_ai)
-    )
+    st.markdown("---")
+    st.button(translate_text_with_ai("🏡 Back to Main App", st.session_state['preferred_language'], client_ai), on_click=lambda: set_page('main_app'))
+
+
+# --- Sidebar Navigation ---
+with st.sidebar:
+    st.image("https://resense.com/wp-content/uploads/2023/12/Resense-Logo-White.png", width=200) # Assuming logo URL is static
+    st.title("Navigation")
+    
+    if st.session_state['is_authenticated']:
+        st.button(translate_text_with_ai("📰 Daily History", st.session_state['preferred_language'], client_ai), on_click=lambda: set_page('main_app'), key="sidebar_main_app_btn")
+        st.button(translate_text_with_ai("🧠 Daily Trivia", st.session_state['preferred_language'], client_ai), on_click=lambda: set_page('trivia_page'), key="sidebar_trivia_btn")
+        st.button(translate_text_with_ai("🏆 Leaderboard", st.session_state['preferred_language'], client_ai), on_click=lambda: set_page('leaderboard_page'), key="sidebar_leaderboard_btn")
+        
+        # New Weekly Planner navigation button
+        st.button(translate_text_with_ai("📅 Weekly Planner", st.session_state['preferred_language'], client_ai), on_click=lambda: set_page('weekly_planner_page'), key="sidebar_weekly_planner_btn")
+
+        st.markdown("---")
+        st.subheader(translate_text_with_ai("Settings", st.session_state['preferred_language'], client_ai))
+        
+        # Difficulty Setting
+        st.session_state['difficulty'] = st.sidebar.selectbox(
+            translate_text_with_ai("Difficulty", st.session_state['preferred_language'], client_ai),
+            options=['Easy', 'Medium', 'Hard'],
+            index=['Easy', 'Medium', 'Hard'].index(st.session_state['difficulty']),
+            key='sidebar_difficulty_select',
+            help=translate_text_with_ai("Adjust the difficulty of trivia questions.", st.session_state['preferred_language'], client_ai)
+        )
+
+        # Local History Input
+        with st.expander(translate_text_with_ai("Local History Settings", st.session_state['preferred_language'], client_ai)):
+            st.session_state['local_city'] = st.text_input(
+                translate_text_with_ai("Your City", st.session_state['preferred_language'], client_ai),
+                value=st.session_state['local_city'],
+                key='sidebar_local_city'
+            )
+            st.session_state['local_state_country'] = st.text_input(
+                translate_text_with_ai("Your State/Country", st.session_state['preferred_language'], client_ai),
+                value=st.session_state['local_state_country'],
+                key='sidebar_local_state_country'
+            )
+            st.info(translate_text_with_ai("Provide city and state/country for personalized local history facts.", st.session_state['preferred_language'], client_ai))
+
+        # Custom Masthead Text Input for PDF
+        st.session_state['custom_masthead_text'] = st.text_input(
+            translate_text_with_ai("Custom PDF Masthead", st.session_state['preferred_language'], client_ai),
+            value=st.session_state['custom_masthead_text'],
+            placeholder=translate_text_with_ai("e.g., 'Maplewood Activity Center News'", st.session_state['preferred_language'], client_ai),
+            key='sidebar_masthead_text',
+            help=translate_text_with_ai("Enter text to appear at the top of the generated PDFs.", st.session_state['preferred_language'], client_ai)
+        )
+
+        # Language Selection
+        st.session_state['preferred_language'] = st.sidebar.selectbox(
+            translate_text_with_ai("Display Language", st.session_state['preferred_language'], client_ai),
+            options=["English", "Spanish", "French", "German", "Italian", "Portuguese"],
+            index=["English", "Spanish", "French", "German", "Italian", "Portuguese"].index(st.session_state['preferred_language']),
+            key='sidebar_language_select',
+            help=translate_text_with_ai("Select the language for the daily content and PDF.", st.session_state['preferred_language'], client_ai)
+        )
 
     st.sidebar.markdown("---")
     if st.sidebar.button(translate_text_with_ai("🚪 Log Out", st.session_state['preferred_language'], client_ai), key="sidebar_logout_btn"):
@@ -1708,14 +1509,31 @@ if st.session_state['is_authenticated']:
         st.session_state['logged_in_username'] = ""
         set_page('login_page') # Go back to the login page (or main app if unauthenticated)
 
-    # --- Page Rendering based on current_page ---
-    if st.session_state['current_page'] == 'main_app':
+# --- Page Rendering based on current_page ---
+if st.session_state['current_page'] == 'main_app':
+    if st.session_state['is_authenticated']:
         show_main_app_page()
-    elif st.session_state['current_page'] == 'trivia_page':
-        show_trivia_page()
-    # Default to main_app if current_page is somehow not set to a valid page
     else:
-        st.session_state['current_page'] = 'main_app'
+        show_login_page()
+elif st.session_state['current_page'] == 'trivia_page':
+    if st.session_state['is_authenticated']:
+        show_trivia_page()
+    else:
+        show_login_page()
+elif st.session_state['current_page'] == 'leaderboard_page':
+    if st.session_state['is_authenticated']:
+        show_leaderboard_page()
+    else:
+        show_login_page()
+elif st.session_state['current_page'] == 'weekly_planner_page': # New page
+    if st.session_state['is_authenticated']:
+        show_weekly_planner_page()
+    else:
+        show_login_page()
+# Default to main_app if current_page is somehow not set to a valid page
+else:
+    st.session_state['current_page'] = 'main_app'
+    if st.session_state['is_authenticated']:
         show_main_app_page()
-else: # Not authenticated, show login/register and January 1st example
-    show_login_register_page()
+    else:
+        show_login_page()
