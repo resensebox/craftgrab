@@ -4,8 +4,6 @@ from datetime import datetime, date
 from fpdf import FPDF
 import re
 import json
-from gtts import gTTS
-import io
 
 st.set_option('client.showErrorDetails', True)
 st.set_page_config(page_title="This Day in History", layout="centered")
@@ -81,20 +79,9 @@ if 'logged_in_username' not in st.session_state:
     st.session_state['logged_in_username'] = ""
 if 'dementia_mode' not in st.session_state:
     st.session_state['dementia_mode'] = False
-if 'audio_enabled' not in st.session_state:
-    st.session_state['audio_enabled'] = False
-
-# --- Text-to-Speech Function ---
-def text_to_speech(text):
-    """Converts text to speech audio bytes."""
-    try:
-        tts = gTTS(text=text, lang='en', slow=False)
-        fp = io.BytesIO()
-        tts.write_to_fp(fp)
-        return fp.getvalue()
-    except Exception as e:
-        st.error(f"Error generating audio: {e}")
-        return None
+# Removed 'audio_enabled' from session state and related audio functions
+# if 'audio_enabled' not in st.session_state:
+#     st.session_state['audio_enabled'] = False
 
 # --- This Day in History Logic ---
 def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_client, preferred_decade=None, topic=None):
@@ -245,8 +232,8 @@ if st.session_state['is_authenticated']:
     st.sidebar.header("Settings")
     # Dementia-friendly mode toggle
     st.session_state['dementia_mode'] = st.sidebar.checkbox("Dementia-Friendly Mode", value=st.session_state['dementia_mode'])
-    # Text-to-speech toggle
-    st.session_state['audio_enabled'] = st.sidebar.checkbox("Enable Audio (Text-to-Speech)", value=st.session_state['audio_enabled'])
+    # Removed text-to-speech toggle
+    # st.session_state['audio_enabled'] = st.sidebar.checkbox("Enable Audio (Text-to-Speech)", value=st.session_state['audio_enabled'])
 
     # Customization Options
     st.sidebar.subheader("Content Customization")
@@ -296,60 +283,67 @@ if st.session_state['is_authenticated']:
 
     # Display content
     st.subheader(f"✨ A Look Back at {today.strftime('%B %d')}")
-    if st.session_state['audio_enabled']:
-        audio_bytes = text_to_speech(f"A look back at {today.strftime('%B %d')}")
-        if audio_bytes:
-            st.audio(audio_bytes, format='audio/mp3')
+    # Removed audio playback for this section
+    # if st.session_state['audio_enabled']:
+    #     audio_bytes = text_to_speech(f"A look back at {today.strftime('%B %d')}")
+    #     if audio_bytes:
+    #         st.audio(audio_bytes, format='audio/mp3')
 
     st.markdown("---")
     st.subheader("🗓️ Significant Event")
     st.write(data['event_article'])
-    if st.session_state['audio_enabled']:
-        audio_bytes = text_to_speech(data['event_article'])
-        if audio_bytes:
-            st.audio(audio_bytes, format='audio/mp3')
+    # Removed audio playback for this section
+    # if st.session_state['audio_enabled']:
+    #     audio_bytes = text_to_speech(data['event_article'])
+    #     if audio_bytes:
+    #         st.audio(audio_bytes, format='audio/mp3')
 
     st.markdown("---")
     st.subheader("🎂 Born on this Day")
     st.write(data['born_article'])
-    if st.session_state['audio_enabled']:
-        audio_bytes = text_to_speech(data['born_article'])
-        if audio_bytes:
-            st.audio(audio_bytes, format='audio/mp3')
+    # Removed audio playback for this section
+    # if st.session_state['audio_enabled']:
+    #     audio_bytes = text_to_speech(data['born_article'])
+    #     if audio_bytes:
+    #         st.audio(audio_bytes, format='audio/mp3')
 
     st.markdown("---")
     st.subheader("💡 Fun Fact")
     st.write(data['fun_fact_section'])
-    if st.session_state['audio_enabled']:
-        audio_bytes = text_to_speech(data['fun_fact_section'])
-        if audio_bytes:
-            st.audio(audio_bytes, format='audio/mp3')
+    # Removed audio playback for this section
+    # if st.session_state['audio_enabled']:
+    #     audio_bytes = text_to_speech(data['fun_fact_section'])
+    #     if audio_bytes:
+    #         st.audio(audio_bytes, format='audio/mp3')
 
     st.markdown("---")
     st.subheader("🧠 Test Your Knowledge!")
     for i, q in enumerate(data['trivia_section']):
         st.write(f"{q}")
-        if st.session_state['audio_enabled']:
-            audio_bytes = text_to_speech(q)
-            if audio_bytes:
-                st.audio(audio_bytes, format='audio/mp3', key=f"trivia_audio_{i}")
+        # Removed audio playback for this section
+        # if st.session_state['audio_enabled']:
+        #     audio_bytes = text_to_speech(q)
+        #     if audio_bytes:
+        #         st.audio(audio_bytes, format='audio/mp3', key=f"trivia_audio_{i}")
 
     st.markdown("---")
     st.subheader("🌟 Did You Know?")
     for i, fact in enumerate(data['did_you_know_section']):
         st.write(f"- {fact}")
-        if st.session_state['audio_enabled']:
-            audio_bytes = text_to_speech(fact)
-            if audio_bytes:
-                st.audio(audio_bytes, format='audio/mp3', key=f"dyk_audio_{i}")
+        # Removed audio playback for this section
+        # if st.session_state['audio_enabled']:
+        #     audio_bytes = text_to_speech(fact)
+        #     if audio_bytes:
+        #         st.audio(audio_bytes, format='audio/mp3', key=f"dyk_audio_{i}")
 
     st.markdown("---")
     st.subheader("💬 Memory Lane Prompt")
     st.write(data['memory_prompt_section'])
-    if st.session_state['audio_enabled']:
-        audio_bytes = text_to_speech(data['memory_prompt_section'])
-        if audio_bytes:
-            st.audio(audio_bytes, format='audio/mp3')
+    # Removed audio playback for this section
+    # if st.session_state['audio_enabled']:
+    #     audio_bytes = text_to_speech(data['memory_prompt_section'])
+    #     if audio_bytes:
+    #         st.audio(audio_bytes, format='audio/mp3')
 
     st.markdown("---")
     if st.button("📄 Download Daily Page PDF"):
