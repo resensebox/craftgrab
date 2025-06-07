@@ -214,7 +214,7 @@ else:
                     st.rerun()
                 else:
                     st.error("Invalid credentials.")
-    
+
 # --- Demo Preview on Login Page ---
 st.markdown("---")
 st.subheader("📋 Example: This Day in History")
@@ -259,4 +259,3 @@ if st.button("📄 Download Demo PDF"):
                     st.rerun()
                 else:
                     st.error("Passwords do not match.")
-
