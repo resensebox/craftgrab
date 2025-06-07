@@ -1515,7 +1515,7 @@ def show_login_register_page():
                 if username in USERS and USERS[username] == password:
                     st.session_state['is_authenticated'] = True
                     st.session_state['logged_in_username'] = username
-                    st.success(translate_text_with_ai(f"Welcome {username}!", st.session_state['preferred_language'], client_ai))
+                    st.success(translate_text_with_ai(f"Welcome {username}! Please wait for main screen to load. If it doesn't load within 10 seconds, hit the log-in button again.", st.session_state['preferred_language'], client_ai))
                     log_event("login", username)
                     set_page('main_app') # Go to main app page (this handles the rerun)
                 else:
@@ -1547,7 +1547,7 @@ def show_login_register_page():
                         if save_new_user_to_sheet(new_username, new_password, new_email):
                             st.session_state['is_authenticated'] = True
                             st.session_state['logged_in_username'] = new_username
-                            st.success(translate_text_with_ai(f"Account created successfully! You are now logged in as {new_username}.", st.session_state['preferred_language'], client_ai)) # Updated success message
+                            st.success(translate_text_with_ai(f"Account created successfully! You are now logged in as {new_username}. Please wait for the app to load... if it takes more than 5 seconds, please hit Register again.", st.session_state['preferred_language'], client_ai)) # Updated success message
                             log_event("register", new_username)
                             set_page('main_app') # Go to main app page (this handles the rerun)
                         else:
