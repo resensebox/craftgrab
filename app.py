@@ -4,10 +4,10 @@ from datetime import datetime, date, timedelta
 from fpdf import FPDF
 import re
 import json
-import base64 # Import base64 for encoding PDF content
-import time # Import time for st.spinner delays
-import zipfile # NEW: Import zipfile for creating zip archives
-import io # NEW: Import io for in-memory file operations
+import base64
+import time
+import zipfile
+import io
 
 st.set_option('client.showErrorDetails', True)
 st.set_page_config(page_title="This Day in History", layout="centered")
@@ -1197,7 +1197,7 @@ def show_trivia_page():
                             q_state['points_earned'] = 5 # Half points for subsequent correct try
                         st.session_state['current_trivia_score'] += q_state['points_earned']
                         # Generate related article only on correct answer
-                        with st.spinner(translate_text_with_ai("Generating explanation...", st.session_state['preferred_language'], client_ai)):
+                        with st.spinner(translate_text_for_ai("Generating explanation...", st.session_state['preferred_language'], client_ai)):
                             q_state['related_article_content'] = generate_related_trivia_article(q_data['question'], q_data['answer'], client_ai)
                             q_state['related_article_content'] = translate_text_with_ai(q_state['related_article_content'], st.session_state['preferred_language'], client_ai)
                         st.rerun()
