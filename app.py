@@ -167,37 +167,37 @@ def generate_full_history_pdf(event_title, event_article, born_section, fun_fact
 
 # --- App UI ---
 if st.session_state['is_authenticated']:
-    st.sidebar.title("This Day in History")
+        st.sidebar.title("This Day in History")
 
-    st.sidebar.markdown("---")
-    if st.sidebar.button("🚪 Log Out"):
-        st.session_state['is_authenticated'] = False
-        st.session_state['logged_in_username'] = ""
-        st.rerun()
+        st.sidebar.markdown("---")
+        if st.sidebar.button("🚪 Log Out"):
+            st.session_state['is_authenticated'] = False
+            st.session_state['logged_in_username'] = ""
+            st.rerun()
 
-st.title("📅 This Day in History")
-    today = datetime.today()
-    day, month = today.day, today.month
-    user_info = {
-        'name': st.session_state['logged_in_username'],
-        'jobs': '', 'hobbies': '', 'decade': '', 'life_experiences': '', 'college_chapter': ''
-    }
-    data = get_this_day_in_history_facts(day, month, user_info, client_ai)
-    st.subheader(f"⭐ {data['event_title']}")
-    st.write(data['event_article'])
-    st.subheader("🎉 Born on this Day")
-    st.write(data['born_section'])
-    st.subheader("💡 Fun Fact")
-    st.write(data['fun_fact_section'])
-    st.subheader("🧠 Trivia")
-    for q in data['trivia_section']:
-        st.markdown(f"- {q}")
-    if st.button("📄 Download PDF"):
-        pdf_bytes = generate_full_history_pdf(
-            data['event_title'], data['event_article'], data['born_section'],
-            data['fun_fact_section'], data['trivia_section'], today.strftime('%B %d'), user_info
-        )
-        st.download_button("Download History PDF", pdf_bytes, file_name="this_day_in_history.pdf")
+    st.title("📅 This Day in History")
+        today = datetime.today()
+        day, month = today.day, today.month
+        user_info = {
+            'name': st.session_state['logged_in_username'],
+            'jobs': '', 'hobbies': '', 'decade': '', 'life_experiences': '', 'college_chapter': ''
+        }
+        data = get_this_day_in_history_facts(day, month, user_info, client_ai)
+        st.subheader(f"⭐ {data['event_title']}")
+        st.write(data['event_article'])
+        st.subheader("🎉 Born on this Day")
+        st.write(data['born_section'])
+        st.subheader("💡 Fun Fact")
+        st.write(data['fun_fact_section'])
+        st.subheader("🧠 Trivia")
+        for q in data['trivia_section']:
+    st.write(q)
+        if st.button("📄 Download PDF"):
+            pdf_bytes = generate_full_history_pdf(
+                data['event_title'], data['event_article'], data['born_section'],
+                data['fun_fact_section'], data['trivia_section'], today.strftime('%B %d'), user_info
+            )
+            st.download_button("Download History PDF", pdf_bytes, file_name="this_day_in_history.pdf")
 else:
     st.title("Login to Access")
     login_tab, register_tab = st.tabs(["Log In", "Register"])
@@ -259,3 +259,4 @@ if st.button("📄 Download Demo PDF"):
                     st.rerun()
                 else:
                     st.error("Passwords do not match.")
+
