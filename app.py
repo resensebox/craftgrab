@@ -1488,7 +1488,7 @@ def show_login_register_page():
                         if save_new_user_to_sheet(new_username, new_password, new_email):
                             st.session_state['is_authenticated'] = True
                             st.session_state['logged_in_username'] = new_username
-                            st.success(translate_text_with_ai("Account created!", st.session_state['preferred_language'], client_ai))
+                            st.success(translate_text_with_ai("Account created! Go to log-in screen to log in.", st.session_state['preferred_language'], client_ai))
                             log_event("register", new_username)
                             set_page('main_app') # Go to main app page (this handles the rerun)
                         else:
