@@ -68,19 +68,19 @@ h1, h2, h3, h4, h5, h6, label {
     border-radius: 12px;
     padding: 20px;
     margin: 20px 0;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+    box_shadow: 0 4px 8px rgba(0,0,0,0.05);
     border: 1px solid #e0e0e0;
 }
 .card h3 {
     font-size: 1.4em;
-    margin-bottom: 0.5em;
+    margin_bottom: 0.5em;
     color: #000;
 }
 .card p {
     font-size: 1.1em;
     color: #333;
-    line-height: 1.6em;
-    margin-bottom: 1em;
+    line_height: 1.6em;
+    margin_bottom: 1em;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -92,8 +92,12 @@ GSHEET_USERS_ID = '15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4'
 def get_gsheet_client():
     try:
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        creds_dict = st.secrets["GOOGLE_SERVICE_JSON"]
-        # Replace escaped newlines if they are present in the secret
+        
+        # Load the JSON string from st.secrets and parse it into a dictionary
+        creds_json_string = st.secrets["GOOGLE_SERVICE_JSON"]
+        creds_dict = json.loads(creds_json_string) # <--- CRITICAL CHANGE HERE
+        
+        # Replace escaped newlines if they are present in the private_key (after parsing)
         if "private_key" in creds_dict and "\\n" in creds_dict["private_key"]:
             creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
         
