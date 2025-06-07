@@ -746,6 +746,9 @@ def show_main_app_page():
     st.sidebar.subheader("Share Daily Page")
     st.sidebar.info("Daily/weekly sharing via email is a planned feature. This would integrate with an email service.")
 
+    # Feedback form at the bottom
+    show_feedback_form()
+
 
 def show_trivia_page():
     st.title("🧠 Daily Trivia Challenge!")
