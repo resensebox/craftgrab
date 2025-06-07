@@ -691,19 +691,19 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
 
     # About Us Title
     pdf.set_font("Arial", "B", 18) # Slightly smaller font for longer title
-    new_about_us_title = "Learn More About US! 🧠📚 Mindful Libraries – A Dementia-Inclusive Reading Program"
+    new_about_us_title = clean_text_for_latin1("Learn More About US! 🧠📚 Mindful Libraries – A Dementia-Inclusive Reading Program")
     pdf.multi_cell(content_width_p2, 10, new_about_us_title, 0, 'C') # Using multi_cell for title as it's long
     pdf.ln(5) # Smaller line break after title
 
     # About Us Text
     pdf.set_font("Arial", "", 11) # Slightly smaller font for better fit
-    new_about_us_text = """Mindful Libraries is a collaborative initiative between Resense, Nana’s Books, and Mirador Magazine, designed to bring adaptive, nostalgic reading experiences to individuals living with dementia. This innovative program provides:
+    new_about_us_text = clean_text_for_latin1("""Mindful Libraries is a collaborative initiative between Resense, Nana’s Books, and Mirador Magazine, designed to bring adaptive, nostalgic reading experiences to individuals living with dementia. This innovative program provides:
 
 📦 Curated Libraries of dementia-friendly newspapers, books, and magazines
 🎓 Staff Training accredited by NCCAP, focusing on reminiscence, person-centered care, and meaningful engagement
 💻 Digital Access Tools like downloadable discussion guides, activity templates, and reading prompts
 🤝 Partnerships with Long-Term Care Communities to build inclusive, life-enriching environments
-Mindful Libraries empowers care teams to reconnect residents with their pasts, spark joyful conversation, and foster dignity through storytelling and memory-based engagement."""
+Mindful Libraries empowers care teams to reconnect residents with their pasts, spark joyful conversation, and foster dignity through storytelling and memory-based engagement.""")
     pdf.multi_cell(content_width_p2, 6, new_about_us_text, 0, 'L') # Left align for readability
     pdf.ln(15) # More space after About Us text
 
@@ -716,12 +716,12 @@ Mindful Libraries empowers care teams to reconnect residents with their pasts, s
 
     # Contact Information - still centered horizontally on the page
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "Contact Information", 0, 1, 'C')
+    pdf.multi_cell(0, 10, clean_text_for_latin1("Contact Information"), 0, 'C') # Use multi_cell for consistency and cleaning
     pdf.ln(5)
     pdf.set_font("Arial", "", 12)
-    pdf.multi_cell(0, 7, "Email: thisdayinhistoryapp@gmail.com", 0, 'C')
-    pdf.multi_cell(0, 7, "Website: ThisDayInHistoryApp.com (Coming Soon!)", 0, 'C')
-    pdf.multi_cell(0, 7, "Phone: 412-212-6701 (For Support)", 0, 'C')
+    pdf.multi_cell(0, 7, clean_text_for_latin1("Email: thisdayinhistoryapp@gmail.com"), 0, 'C')
+    pdf.multi_cell(0, 7, clean_text_for_latin1("Website: ThisDayInHistoryApp.com (Coming Soon!)"), 0, 'C')
+    pdf.multi_cell(0, 7, clean_text_for_latin1("Phone: 412-212-6701 (For Support)"), 0, 'C')
     pdf.ln(10)
 
     # Optional: User info at the very bottom of the second page, aligned right
