@@ -19,6 +19,8 @@ if 'current_page' not in st.session_state:
     st.session_state['current_page'] = 'main_app' # Default page for authenticated users
 if 'daily_data' not in st.session_state: # Store daily data to avoid re-fetching on page switch
     st.session_state['daily_data'] = None
+if 'raw_fetched_data' not in st.session_state: # NEW: To store the raw, untranslated data
+    st.session_state['raw_fetched_data'] = None
 if 'last_fetched_date' not in st.session_state:
     st.session_state['last_fetched_date'] = None # To track when data was last fetched
 if 'trivia_question_states' not in st.session_state:
@@ -758,17 +760,15 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     # Daily Trivia
     if data['trivia_section']: # Only display if there are trivia questions
         pdf.set_font("Arial", "B", section_title_font_size)
-        pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Daily Trivia", current_language, client_ai))) # Translated
+        pdf.multi_cell(col_width, line_height_normal, "Daily Trivia") # NOT translated
         current_y_col1 += line_height_normal
         pdf.set_font("Arial", "", trivia_q_font_size) # Reset font to regular for trivia text if needed
 
         # Loop through the first 4 trivia questions for the PDF
         for i, item in enumerate(data['trivia_section'][:4]): # Limit to 4 questions for PDF
             question_text_clean = clean_text_for_latin1(f"{chr(97+i)}. - {item['question']}") # Added hyphen
-            answer_text_prefix = translate_text_with_ai("Answer:", current_language, client_ai) # Translated prefix
-            answer_text_clean = clean_text_for_latin1(f"{answer_text_prefix} {item['answer']}")
-            hint_text_prefix = translate_text_with_ai("Hint:", current_language, client_ai) # Translated prefix
-            hint_text_clean = clean_text_for_latin1(f"{hint_text_prefix} {item['hint']}")
+            answer_text_clean = clean_text_for_latin1(f"Answer: {item['answer']}") # NOT translated
+            hint_text_clean = clean_text_for_latin1(f"Hint: {item['hint']}") # NOT translated
 
             pdf.set_font("Arial", "B", trivia_q_font_size) # Bold for question
             pdf.multi_cell(col_width, line_height_trivia_ans_hint, question_text_clean)
@@ -1016,7 +1016,7 @@ def show_main_app_page():
     if st.session_state['last_fetched_date'] != current_data_key or st.session_state['daily_data'] is None:
         with st.spinner(translate_text_with_ai("Fetching today's historical facts and generating content...", st.session_state['preferred_language'], client_ai)):
             # Fetch always in English first
-            raw_data = get_this_day_in_history_facts(
+            fetched_raw_data = get_this_day_in_history_facts( # Renamed to avoid confusion with `raw_data` later
                 day, month, user_info, client_ai, 
                 topic=st.session_state.get('preferred_topic_main_app') if st.session_state.get('preferred_topic_main_app') != "None" else None,
                 preferred_decade=st.session_state.get('preferred_decade_main_app') if st.session_state.get('preferred_decade_main_app') != "None" else None,
@@ -1024,8 +1024,9 @@ def show_main_app_page():
                 local_city=st.session_state['local_city'] if st.session_state['local_city'].strip() else None,
                 local_state_country=st.session_state['local_state_country'] if st.session_state['local_state_country'].strip() else None
             )
-            # Translate if necessary before storing in session state
-            st.session_state['daily_data'] = translate_content(raw_data, st.session_state['preferred_language'], client_ai)
+            # Store both raw and translated data in session state
+            st.session_state['raw_fetched_data'] = fetched_raw_data # Store the raw data
+            st.session_state['daily_data'] = translate_content(fetched_raw_data, st.session_state['preferred_language'], client_ai)
             st.session_state['last_fetched_date'] = current_data_key
             st.session_state['trivia_question_states'] = {} # Reset trivia states for new day's data
             st.session_state['hints_remaining'] = 3 # Reset hints for a new day
@@ -1034,6 +1035,7 @@ def show_main_app_page():
             st.session_state['score_logged_today'] = False # Reset logging flag
 
     data = st.session_state['daily_data'] # This 'data' is now already translated if needed
+    raw_data_for_pdf = st.session_state['raw_fetched_data'] # Get the raw data for PDF generation
 
     # Display content - Articles are back on the main page
     st.subheader(translate_text_with_ai(f"✨ A Look Back at {selected_date.strftime('%B %d')}", st.session_state['preferred_language'], client_ai))
@@ -1084,7 +1086,7 @@ def show_main_app_page():
     # Generate PDF bytes once
     with st.spinner(translate_text_with_ai("Preparing your PDF worksheet...", st.session_state['preferred_language'], client_ai)):
         pdf_bytes_main = generate_full_history_pdf(
-            raw_data, selected_date.strftime('%B %d, %Y'), user_info, st.session_state['preferred_language'] # Pass raw_data and language
+            raw_data_for_pdf, selected_date.strftime('%B %d, %Y'), user_info, st.session_state['preferred_language'] # Pass raw_data_for_pdf and language
         )
     
     # Create Base64 encoded link
@@ -1156,7 +1158,7 @@ def show_trivia_page():
     if st.session_state['last_fetched_date'] != data_key_for_trivia_regen:
         with st.spinner(translate_text_with_ai(f"Generating new trivia questions for {st.session_state['difficulty']} difficulty...", st.session_state['preferred_language'], client_ai)):
             # Fetch always in English first, translation happens in translate_content for other sections
-            raw_data = get_this_day_in_history_facts(
+            fetched_raw_data = get_this_day_in_history_facts(
                 current_selected_date.day, current_selected_date.month, 
                 {'name': st.session_state['logged_in_username']}, client_ai, 
                 topic=st.session_state.get('preferred_topic_main_app') if st.session_state.get('preferred_topic_main_app') != "None" else None,
@@ -1166,9 +1168,10 @@ def show_trivia_page():
                 local_state_country=st.session_state['local_state_country'] if st.session_state['local_state_country'].strip() else None
             )
             # Store translated content for non-trivia sections, but trivia in raw_data will remain English
-            st.session_state['daily_data'] = translate_content(raw_data, st.session_state['preferred_language'], client_ai) 
+            st.session_state['daily_data'] = translate_content(fetched_raw_data, st.session_state['preferred_language'], client_ai) 
             # Store the raw, untranslated trivia questions separately for direct use on trivia page
-            st.session_state['raw_trivia_data'] = raw_data['trivia_section']
+            st.session_state['raw_trivia_data'] = fetched_raw_data['trivia_section']
+            st.session_state['raw_fetched_data'] = fetched_raw_data # Store the raw data for PDF generation on main page
             st.session_state['last_fetched_date'] = data_key_for_trivia_regen # Update fetched key
             st.session_state['trivia_question_states'] = {} # Reset trivia states for new difficulty's data
             st.session_state['hints_remaining'] = 3
@@ -1419,7 +1422,7 @@ def show_login_register_page():
     
     with st.spinner(translate_text_with_ai("Loading example content...", st.session_state['preferred_language'], client_ai)):
         # Always fetch example content in English first
-        raw_example_data = get_this_day_in_history_facts(
+        fetched_raw_example_data = get_this_day_in_history_facts(
             january_1st_example_date.day, 
             january_1st_example_date.month, 
             example_user_info, 
@@ -1428,7 +1431,7 @@ def show_login_register_page():
             local_city=st.session_state['local_city'] if st.session_state['local_city'].strip() else None,
             local_state_country=st.session_state['local_state_country'] if st.session_state['local_state_country'].strip() else None
         )
-        example_data = translate_content(raw_example_data, st.session_state['preferred_language'], client_ai)
+        example_data = translate_content(fetched_raw_example_data, st.session_state['preferred_language'], client_ai)
 
 
     st.markdown(translate_text_with_ai(f"### ✨ A Look Back at {january_1st_example_date.strftime('%B %d')}", st.session_state['preferred_language'], client_ai))
@@ -1455,8 +1458,8 @@ def show_login_register_page():
 
     st.markdown(translate_text_with_ai("### 🧠 Test Your Knowledge!", st.session_state['preferred_language'], client_ai))
     # Loop through the first 4 trivia questions for the example PDF
-    if raw_example_data['trivia_section']: # Use raw_example_data for trivia section
-        for i, trivia_item in enumerate(raw_example_data['trivia_section'][:4]): # Limit to 4 for example PDF
+    if fetched_raw_example_data['trivia_section']: # Use fetched_raw_example_data for trivia section
+        for i, trivia_item in enumerate(fetched_raw_example_data['trivia_section'][:4]): # Limit to 4 for example PDF
             st.markdown(f"**Question {i+1}:** {trivia_item['question']}")
             st.info(f"Answer: {trivia_item['answer']}") # Display answer for example content
             # Safely display hint for example content
@@ -1481,7 +1484,7 @@ def show_login_register_page():
     # Generate PDF bytes once for example content
     with st.spinner(translate_text_with_ai("Preparing example PDF...", st.session_state['preferred_language'], client_ai)):
         pdf_bytes_example = generate_full_history_pdf(
-            raw_example_data, january_1st_example_date.strftime('%B %d, %Y'), example_user_info, st.session_state['preferred_language'] # Pass raw data and language
+            fetched_raw_example_data, january_1st_example_date.strftime('%B %d, %Y'), example_user_info, st.session_state['preferred_language'] # Pass raw data and language
         )
 
     # Create Base64 encoded link for example content
