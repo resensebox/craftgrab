@@ -9,6 +9,32 @@ st.set_option('client.showErrorDetails', True)
 st.set_page_config(page_title="This Day in History", layout="centered")
 
 # --- API Keys and Client Setup ---
+
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+
+# --- Google Sheets Logging Setup ---
+scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+if "GOOGLE_SERVICE_JSON" not in st.secrets:
+    st.error("❌ GOOGLE_SERVICE_JSON is missing from Streamlit secrets.")
+    st.stop()
+
+service_account_info = dict(st.secrets["GOOGLE_SERVICE_JSON"])
+creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
+gs_client = gspread.authorize(creds)
+
+def log_event(event_type, username):
+    try:
+        sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
+        ws = sheet.worksheet("LoginLogs")
+        ws.append_row([
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            event_type,
+            username
+        ])
+    except Exception as e:
+        st.warning(f"⚠️ Could not log event '{event_type}' for '{username}': {e}")
+
 if "OPENAI_API_KEY" not in st.secrets:
     st.error("❌ OPENAI_API_KEY is missing from Streamlit secrets.")
     st.stop()
@@ -142,6 +168,7 @@ else:
                     st.session_state['is_authenticated'] = True
                     st.session_state['logged_in_username'] = username
                     st.success(f"Welcome {username}!")
+                    log_event('login', username)
                     st.rerun()
                 else:
                     st.error("Invalid credentials.")
@@ -156,7 +183,7 @@ else:
                     st.session_state['is_authenticated'] = True
                     st.session_state['logged_in_username'] = new_username
                     st.success("Account created!")
+                    log_event('register', new_username)
                     st.rerun()
                 else:
                     st.error("Passwords do not match.")
-
