@@ -1093,7 +1093,7 @@ Want to make it your own? You can even customize the masthead to match your comm
 
 🌍 Need another language? Use the left-hand menu to translate the entire page and your downloadable PDF.
 👉 Click here to choose your language.
-"""), st.session_state['preferred_language'], client_ai))
+""")), st.session_state['preferred_language'], client_ai))
 
     st.markdown("---")
     st.subheader(translate_text_with_ai("🗓️ Significant Event", st.session_state['preferred_language'], client_ai))
