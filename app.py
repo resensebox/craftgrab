@@ -394,52 +394,53 @@ else: # Login/Registration UI
                 else:
                     st.error("Passwords do not match.")
 
-# --- Demo Preview on Login Page ---
-st.markdown("---")
-st.subheader("📋 Example: This Day in History")
-st.info("This is a preview of the content format. Log in or register to get today's personalized content!")
+    # --- Example: This Day in History (on login page) ---
+    st.markdown("---")
+    st.subheader("📋 Example: This Day in History")
+    st.info("This is a preview of the content format. Log in or register to get today's personalized content!")
 
-demo_user_info = {'name': 'Demo User', 'jobs': '', 'hobbies': '', 'decade': '', 'life_experiences': '', 'college_chapter': ''}
-today_demo = datetime.today()
-demo_data = get_this_day_in_history_facts(today_demo.day, today_demo.month, demo_user_info, client_ai)
+    # Display content based off of January 1st for the example content on the login page
+    january_1st_example_date = date(datetime.today().year, 1, 1) # Use current year's Jan 1st for the example
+    example_user_info = {'name': 'Example User', 'jobs': '', 'hobbies': '', 'decade': '', 'life_experiences': '', 'college_chapter': ''}
+    example_data = get_this_day_in_history_facts(january_1st_example_date.day, january_1st_example_date.month, example_user_info, client_ai)
 
-st.markdown(f"### ✨ A Look Back at {today_demo.strftime('%B %d')}")
-st.markdown("### 🗓️ Significant Event")
-st.write(demo_data['event_article'])
+    st.markdown(f"### ✨ A Look Back at {january_1st_example_date.strftime('%B %d')}")
+    st.markdown("### 🗓️ Significant Event")
+    st.write(example_data['event_article'])
 
-st.markdown("### 🎂 Born on this Day")
-st.write(demo_data['born_article'])
+    st.markdown("### 🎂 Born on this Day")
+    st.write(example_data['born_article'])
 
-st.markdown("### 💡 Fun Fact")
-st.write(demo_data['fun_fact_section'])
+    st.markdown("### 💡 Fun Fact")
+    st.write(example_data['fun_fact_section'])
 
-st.markdown("### 🧠 Test Your Knowledge!")
-for q in demo_data['trivia_section']:
-    st.markdown(f"- {q}")
+    st.markdown("### 🧠 Test Your Knowledge!")
+    for q in example_data['trivia_section']:
+        st.markdown(f"- {q}")
 
-st.markdown("### 🌟 Did You Know?")
-for fact in demo_data['did_you_know_section']:
-    st.markdown(f"- {fact}")
+    st.markdown("### 🌟 Did You Know?")
+    for fact in example_data['did_you_know_section']:
+        st.markdown(f"- {fact}")
 
-st.markdown("### 💬 Memory Lane Prompt")
-st.write(demo_data['memory_prompt_section'])
+    st.markdown("### 💬 Memory Lane Prompt")
+    st.write(example_data['memory_prompt_section'])
 
-# Generate PDF bytes once for demo
-pdf_bytes_demo = generate_full_history_pdf(
-    demo_data, today_demo.strftime('%B %d, %Y'), demo_user_info
-)
-
-# Create Base64 encoded link for demo
-b64_pdf_demo = base64.b64encode(pdf_bytes_demo).decode('latin-1')
-pdf_viewer_link_demo = f'<a href="data:application/pdf;base64,{b64_pdf_demo}" target="_blank">View Example PDF in Browser</a>'
-
-col1_demo, col2_demo = st.columns([1, 1])
-with col1_demo:
-    st.download_button(
-        "Download Demo PDF", 
-        pdf_bytes_demo, 
-        file_name=f"example_this_day_history_{today_demo.strftime('%Y%m%d')}.pdf",
-        mime="application/pdf"
+    # Generate PDF bytes once for example content
+    pdf_bytes_example = generate_full_history_pdf(
+        example_data, january_1st_example_date.strftime('%B %d, %Y'), example_user_info
     )
-with col2_demo:
-    st.markdown(pdf_viewer_link_demo, unsafe_allow_html=True)
+
+    # Create Base64 encoded link for example content
+    b64_pdf_example = base64.b64encode(pdf_bytes_example).decode('latin-1')
+    pdf_viewer_link_example = f'<a href="data:application/pdf;base64,{b64_pdf_example}" target="_blank">View Example PDF in Browser</a>'
+
+    col1_example, col2_example = st.columns([1, 1])
+    with col1_example:
+        st.download_button(
+            "Download Example PDF",
+            pdf_bytes_example,
+            file_name=f"example_this_day_history_{january_1st_example_date.strftime('%Y%m%d')}.pdf",
+            mime="application/pdf"
+        )
+    with col2_example:
+        st.markdown(pdf_viewer_link_example, unsafe_allow_html=True)
