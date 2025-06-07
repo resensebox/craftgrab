@@ -247,8 +247,11 @@ def init_db():
 init_db()
 
 # --- User Authentication Flow ---
-if 'logged_in' not in st.session_state:
+# Ensure 'logged_in' is initialized to False for new sessions or if it's in an inconsistent state.
+# This makes sure the login/register screen is shown on a fresh load.
+if 'logged_in' not in st.session_state or st.session_state.get('username') is None:
     st.session_state['logged_in'] = False
+    st.session_state['username'] = None # Clear username if not logged in
 
 if not st.session_state['logged_in']:
     st.title("Welcome to This Day in History!")
