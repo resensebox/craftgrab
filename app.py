@@ -5,6 +5,8 @@ from fpdf import FPDF
 import re
 import json
 import base64 # Import base64 for encoding PDF content
+import qrcode # Import qrcode for QR code generation
+from io import BytesIO # To handle image in memory
 
 st.set_option('client.showErrorDetails', True)
 st.set_page_config(page_title="This Day in History", layout="centered")
@@ -33,6 +35,8 @@ if 'score_logged_today' not in st.session_state:
     st.session_state['score_logged_today'] = False
 if 'difficulty' not in st.session_state: # New session state for difficulty
     st.session_state['difficulty'] = 'Medium' # Default difficulty
+if 'youtube_music_link' not in st.session_state:
+    st.session_state['youtube_music_link'] = None
 
 
 # --- Custom CSS for Sidebar Styling and Default App Theme (Black) ---
@@ -402,6 +406,29 @@ def generate_related_trivia_article(question, answer, _ai_client):
         return "An explanation could not be generated at this time."
 
 
+# --- Google Search for YouTube Music Links ---
+def get_youtube_music_link(decade):
+    """
+    Uses Google Search to find a YouTube music playlist link for a given decade.
+    """
+    search_query = f"top hits {decade} YouTube playlist"
+    if decade == "None" or not decade:
+        search_query = "relaxing classical music YouTube" # Default for no specific decade
+
+    try:
+        # Use the Google Search tool to find a YouTube link
+        search_results = Google Search(queries=[search_query])
+        
+        # Parse the search results to find a YouTube link
+        for result in search_results.get('results', []):
+            if 'youtube.com/watch' in result['link'] or 'youtube.com/playlist' in result['link']:
+                return result['link']
+        return "https://www.youtube.com/watch?v=dQw4w9WgXcQ" # Default to a safe fallback (Rick Astley)
+    except Exception as e:
+        st.error(f"Error fetching YouTube link: {e}. Defaulting to a placeholder.")
+        return "https://www.youtube.com/watch?v=dQw4w9WgXcQ" # Fallback if search fails
+
+
 # --- This Day in History Logic ---
 def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_client, preferred_decade=None, topic=None, difficulty='Medium'):
     """
@@ -556,11 +583,11 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
             'memory_prompt_section': ["No memory prompts available.", "Consider your favorite childhood memory.", "What's a happy moment from your past week?"]
         }
 
-def generate_full_history_pdf(data, today_date_str, user_info): # Removed dementia_mode parameter
+def generate_full_history_pdf(data, today_date_str, user_info, youtube_link=None): # Added youtube_link parameter
     """
     Generates a PDF of 'This Day in History' facts, formatted over two pages.
     Page 1: Two-column layout with daily content.
-    Page 2: About Us, Logo, and Contact Information.
+    Page 2: About Us, Logo, and Contact Information, and now a QR code.
     """
     pdf = FPDF(unit="mm", format="A4") # Use mm for better control
     pdf.add_page()
@@ -759,6 +786,43 @@ Mindful Libraries empowers care teams to reconnect residents with their pasts, s
     pdf.set_font("Arial", "", 12) # Reset font to normal
     pdf.ln(10) # More space after this line
 
+    # Music of the Decades - QR Code
+    if youtube_link:
+        try:
+            # Generate QR code
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=5,
+                border=4,
+            )
+            qr.add_data(youtube_link)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            
+            # Save QR code to a BytesIO object
+            img_byte_arr = BytesIO()
+            img.save(img_byte_arr, format='PNG')
+            img_byte_arr.seek(0) # Rewind to the beginning of the stream
+
+            # Add QR code to PDF
+            qr_code_size = 40 # Size of the QR code image in mm
+            qr_code_x = (page_width - qr_code_size) / 2 # Center horizontally
+            pdf.image(img_byte_arr, x=qr_code_x, y=pdf.get_y(), w=qr_code_size, h=qr_code_size, type='PNG')
+            pdf.ln(qr_code_size + 2) # Move down after QR code, with a small buffer
+
+            pdf.set_font("Arial", "B", 12)
+            pdf.multi_cell(0, 7, clean_text_for_latin1("🎵 Music of the Decades – Scan to Listen"), 0, 'C')
+            pdf.ln(10)
+
+        except Exception as e:
+            st.warning(f"⚠️ Could not generate QR code for YouTube link: {e}")
+            pdf.set_font("Arial", "", 10)
+            pdf.multi_cell(0, 7, clean_text_for_latin1("Music Link (Copy & Paste):"), 0, 'C')
+            pdf.multi_cell(0, 7, clean_text_for_latin1(youtube_link), 0, 'C')
+            pdf.ln(10)
+
+
     # Logo - still centered horizontally on the page
     logo_width = 70
     logo_height = 70
@@ -875,7 +939,12 @@ def show_main_app_page():
         st.session_state['current_trivia_score'] = 0 # Reset score for a new day
         st.session_state['total_possible_daily_trivia_score'] = 0 # Reset total possible for a new day
         st.session_state['score_logged_today'] = False # Reset logging flag
-
+        # Fetch YouTube link when new daily data is fetched
+        st.session_state['youtube_music_link'] = get_youtube_music_link(
+            st.session_state.get('preferred_decade_main_app', 'None')
+        )
+        st.rerun() # Rerun to display updated content and link
+    
     data = st.session_state['daily_data']
 
     # Display content - Articles are back on the main page
@@ -914,7 +983,8 @@ def show_main_app_page():
     
     # Generate PDF bytes once
     pdf_bytes_main = generate_full_history_pdf(
-        data, selected_date.strftime('%B %d, %Y'), user_info
+        data, selected_date.strftime('%B %d, %Y'), user_info, 
+        youtube_link=st.session_state['youtube_music_link'] # Pass the fetched YouTube link
     )
     
     # Create Base64 encoded link
@@ -1228,6 +1298,7 @@ def show_login_register_page():
     example_user_info = {'name': 'Example User', 'jobs': '', 'hobbies': '', 'decade': '', 'life_experiences': '', 'college_chapter': ''}
     # For the example, use a default difficulty (e.g., 'Medium') as it's not user-selectable here
     example_data = get_this_day_in_history_facts(january_1st_example_date.day, january_1st_example_date.month, example_user_info, client_ai, difficulty='Medium')
+    example_youtube_link = get_youtube_music_link("1950s") # Example decade for music link
 
     st.markdown(f"### ✨ A Look Back at {january_1st_example_date.strftime('%B %d')}")
     st.markdown("### 🗓️ Significant Event")
@@ -1267,7 +1338,8 @@ def show_login_register_page():
 
     # Generate PDF bytes once for example content
     pdf_bytes_example = generate_full_history_pdf(
-        example_data, january_1st_example_date.strftime('%B %d, %Y'), example_user_info
+        example_data, january_1st_example_date.strftime('%B %d, %Y'), example_user_info,
+        youtube_link=example_youtube_link # Pass example YouTube link
     )
 
     # Create Base64 encoded link for example content
@@ -1301,18 +1373,33 @@ if st.session_state['is_authenticated']:
     st.sidebar.header("Settings")
     
     st.sidebar.subheader("Content Customization")
-    st.session_state['preferred_topic_main_app'] = st.sidebar.selectbox(
+    
+    # Store selected topic and decade in session state
+    selected_topic = st.sidebar.selectbox(
         "Preferred Topic for Events (Optional)",
         options=["None", "Sports", "Music", "Inventions", "Politics", "Science", "Arts"],
         index=0,
         key='sidebar_topic_select'
     )
-    st.session_state['preferred_decade_main_app'] = st.sidebar.selectbox(
+    selected_decade = st.sidebar.selectbox(
         "Preferred Decade for Articles (Optional)",
         options=["None", "1800s", "1900s", "1910s", "1920s", "1930s", "1940s", "1950s", "1960s", "1970s", "1980s"],
         index=0,
         key='sidebar_decade_select'
     )
+
+    # Update session state only if values actually changed to avoid unnecessary reruns
+    if st.session_state.get('preferred_topic_main_app') != selected_topic:
+        st.session_state['preferred_topic_main_app'] = selected_topic
+        st.session_state['last_fetched_date'] = None # Invalidate cache to re-fetch with new topic
+        st.rerun()
+    
+    if st.session_state.get('preferred_decade_main_app') != selected_decade:
+        st.session_state['preferred_decade_main_app'] = selected_decade
+        st.session_state['last_fetched_date'] = None # Invalidate cache to re-fetch with new decade
+        st.session_state['youtube_music_link'] = None # Invalidate music link cache
+        st.rerun()
+
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Local History (Planned)")
@@ -1336,4 +1423,3 @@ if st.session_state['is_authenticated']:
         show_main_app_page()
 else: # Not authenticated, show login/register and January 1st example
     show_login_register_page()
-
