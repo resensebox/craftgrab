@@ -189,7 +189,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 # Corrected scope for Google Sheets API v4
-scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'] 
 if "GOOGLE_SERVICE_JSON" not in st.secrets:
     st.error("❌ GOOGLE_SERVICE_JSON is missing from Streamlit secrets.")
     st.stop()
@@ -207,7 +207,7 @@ def log_event(event_type, username):
         except gspread.exceptions.WorksheetNotFound:
             ws = sheet.add_worksheet(title="LoginLogs", rows="100", cols="3")
             ws.append_row(["Timestamp", "EventType", "Username"])  # Add headers if new sheet
-
+        
         ws.append_row([
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             event_type,
@@ -257,7 +257,7 @@ def log_trivia_score(username, score):
         except gspread.exceptions.WorksheetNotFound:
             ws = sheet.add_worksheet(title="History", rows="100", cols="3")
             ws.append_row(["Username", "Score", "Timestamp"]) # Add headers if new sheet
-
+        
         ws.append_row([
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             score,
@@ -276,14 +276,14 @@ def get_leaderboard_data():
             ws = sheet.worksheet("History")
         except gspread.exceptions.WorksheetNotFound:
             return {} # No history sheet, no leaderboard
-
+        
         scores_data = ws.get_all_records(head=1)
-
+        
         user_highest_scores = {}
         for entry in scores_data:
             username = entry.get('Username')
             score = entry.get('Score')
-
+            
             # Ensure score is a number and update highest score for this user
             if username and score is not None:
                 try:
@@ -292,8 +292,8 @@ def get_leaderboard_data():
                         user_highest_scores[username] = score
                 except ValueError:
                     # Handle cases where score might not be a valid integer
-                    continue
-
+                    continue 
+        
         # Sort users by highest score in descending order
         return sorted(user_highest_scores.items(), key=lambda item: item[1], reverse=True)[:3]
     except Exception as e:
@@ -309,7 +309,7 @@ def log_feedback(username, feedback_message):
         except gspread.exceptions.WorksheetNotFound:
             ws = sheet.add_worksheet(title="Feedback", rows="100", cols="3")
             ws.append_row(["Timestamp", "Username/Contact", "Feedback"]) # Add headers if new sheet
-
+        
         ws.append_row([
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             username,
@@ -352,45 +352,12 @@ if "OPENAI_API_KEY" not in st.secrets:
 client_ai = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 
-
-import qrcode
-from io import BytesIO
-from PIL import Image
-
-# --- QR Code Generator for Decade Music ---
-def generate_decade_music_qr(decade):
-    """
-    Returns a BytesIO PNG image of a QR code linking to a YouTube playlist
-    based on the selected decade. Defaults to a generic nostalgic playlist if no match.
-    """
-    music_links = {
-        "1920s": "https://www.youtube.com/watch?v=EVanewTIYZs",
-        "1930s": "https://www.youtube.com/watch?v=l8fPvODASOc",
-        "1940s": "https://www.youtube.com/watch?v=dMnPFzGLRYc",
-        "1950s": "https://www.youtube.com/watch?v=EQmRgFzg0jI",
-        "1960s": "https://www.youtube.com/watch?v=k9IfHDi-2EA",
-        "1970s": "https://www.youtube.com/watch?v=6J9I4k5SZWw",
-        "1980s": "https://www.youtube.com/watch?v=OMOGaugKpzs"
-    }
-
-    url = music_links.get(decade, "https://www.youtube.com/watch?v=8ybW48rKBME")  # Default link
-    qr = qrcode.QRCode(version=1, box_size=10, border=5)
-    qr.add_data(url)
-    qr.make(fit=True)
-    img = qr.make_image(fill="black", back_color="white")
-
-    buffer = BytesIO()
-    img.save(buffer, format="PNG")
-    buffer.seek(0)
-    return buffer
-
-
 # --- Helper function to clean text for Latin-1 compatibility ---
 def clean_text_for_latin1(text):
     """Replaces common problematic Unicode characters with Latin-1 safe equivalents."""
     if not isinstance(text, str):
         return text # Return as is if not a string (e.g., list or None)
-
+    
     # Common smart quotes and other non-latin1 characters
     text = text.replace('\u2019', "'")  # Right single quotation mark
     text = text.replace('\u2018', "'")  # Left single quotation mark
@@ -404,7 +371,7 @@ def clean_text_for_latin1(text):
     text = text.replace('\u00e2', 'a')  # â (a circumflex)
     text = text.replace('\u00e7', 'c')  # ç (c cedilla)
     # Add more replacements as needed for other common problematic characters
-
+    
     # Fallback for any remaining non-latin-1 characters (replace with '?')
     # This aggressive replacement should be a last resort but ensures no encoding errors
     return text.encode('latin-1', errors='replace').decode('latin-1')
@@ -416,10 +383,10 @@ def generate_related_trivia_article(question, answer, _ai_client):
     """
     prompt = f"""
     Write a concise, educational article (around 50-100 words) that explains the answer to the following trivia question and provides relevant context.
-
+    
     Trivia Question: "{question}"
     Correct Answer: "{answer}"
-
+    
     Focus on educating the reader about the topic related to the question and answer.
     """
     try:
@@ -460,7 +427,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
 
     # Add topic customization to prompt if selected
     topic_clause = f" focusing on {topic}" if topic else ""
-
+    
     # Add decade customization to prompt if selected (AI may need more fine-tuning to adhere perfectly)
     decade_clause = f" specifically from the {preferred_decade}" if preferred_decade and preferred_decade != "None" else ""
 
@@ -489,7 +456,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         event_article_match = re.search(r"1\. Event Article:\s*(.*?)(?=\n2\. Born on this Day Article:|\Z)", content, re.DOTALL)
         born_article_match = re.search(r"2\. Born on this Day Article:\s*(.*?)(?=\n3\. Fun Fact:|\Z)", content, re.DOTALL)
         fun_fact_match = re.search(r"3\. Fun Fact:\s*(.*?)(?=\n4\. Trivia Questions:|\Z)", content, re.DOTALL)
-
+        
         # Updated regex for Memory Prompt to capture multiple lines, allowing for paragraph form
         memory_prompt_match = re.search(r"6\. Memory Prompts:\s*(.*?)(?=\n\Z|$)", content, re.DOTALL)
 
@@ -498,7 +465,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         trivia_text_match = re.search(r"4\. Trivia Questions:\s*(.*?)(?=\n5\. Did You Know?:|\Z)", content, re.DOTALL)
         if trivia_text_match:
             raw_trivia = trivia_text_match.group(1).strip()
-
+            
             # Use a more specific regex to find lines that look like trivia questions
             # This regex looks for:
             # - Starts with optional number (e.g., "1.", "a.")
@@ -518,9 +485,9 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
                     question_text = match.group(1).strip()
                     answer = match.group(2).strip()
                     hint = match.group(3).strip()
-
+                    
                     trivia_questions.append({'question': question_text, 'answer': answer, 'hint': hint})
-
+                
                 # IMPORTANT: Limit to 5 questions explicitly after successful parsing
                 if len(trivia_questions) >= 5:
                     break
@@ -536,7 +503,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
                 cleaned_line = re.sub(r'\s*\(Answer:\)\s*', '', cleaned_line).strip() # Remove (Answer:)
                 if cleaned_line: # Only add if not empty after cleaning
                     did_you_know_lines.append(cleaned_line)
-
+        
         # Ensure 'Did You Know?' always has at least one item, even if AI fails to generate
         if not did_you_know_lines:
             did_you_know_lines = ["No 'Did You Know?' facts available for today. Please try again or adjust preferences."]
@@ -546,14 +513,14 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         event_article = event_article_match.group(1).strip() if event_article_match else "No event article found."
         born_article = born_article_match.group(1).strip() if born_article_match else "No birth article found."
         fun_fact_section = fun_fact_match.group(1).strip() if fun_fact_match else "No fun fact found."
-
+        
         # Parse multiple memory prompts into a list, splitting by paragraphs if possible
         memory_prompts_list = []
         if memory_prompt_match:
             raw_prompts_content = memory_prompt_match.group(1).strip()
             # Split by double newlines to get distinct paragraphs/prompts
             paragraphs = [p.strip() for p in raw_prompts_content.split('\n\n') if p.strip()]
-
+            
             # If still only one paragraph, try splitting by single newline
             if len(paragraphs) < 2 and '\n' in raw_prompts_content:
                 paragraphs = [p.strip() for p in raw_prompts_content.split('\n') if p.strip()]
@@ -605,7 +572,7 @@ def generate_full_history_pdf(data, today_date_str, user_info): # Removed dement
     right_margin = 15
     content_width = page_width - left_margin - right_margin
     col_width = (content_width - 10) / 2 # 10mm gutter between columns
-
+    
     # Font sizes (now fixed for normal mode, as dementia mode is removed)
     title_font_size = 36
     date_font_size = 10
@@ -640,7 +607,7 @@ def generate_full_history_pdf(data, today_date_str, user_info): # Removed dement
     # --- Two-Column Layout for Page 1 ---
     # Store initial Y for content columns to ensure they start at the same height
     start_y_content = pdf.get_y()
-
+    
     # Track current Y for each column
     current_y_col1 = start_y_content
     current_y_col2 = start_y_content
@@ -685,7 +652,7 @@ def generate_full_history_pdf(data, today_date_str, user_info): # Removed dement
 
         pdf.set_font("Arial", "B", trivia_q_font_size) # Bold for question
         pdf.multi_cell(col_width, line_height_trivia_ans_hint, question_text_clean)
-
+        
         pdf.set_font("Arial", "", trivia_ans_hint_font_size) # Smaller, regular for answer
         pdf.multi_cell(col_width, line_height_trivia_ans_hint, answer_text_clean)
         pdf.multi_cell(col_width, line_height_trivia_ans_hint, hint_text_clean) # Display hint
@@ -806,7 +773,7 @@ Mindful Libraries empowers care teams to reconnect residents with their pasts, s
     pdf.set_font("Arial", "", 12)
     pdf.multi_cell(0, 7, clean_text_for_latin1("Email: thisdayinhistoryapp@gmail.com"), 0, 'C')
     pdf.multi_cell(0, 7, clean_text_for_latin1("Website: ThisDayInHistoryApp.com (Coming Soon!)"), 0, 'C')
-
+    
     # Original bold website URL, keep if intended to have two website mentions
     pdf.set_font("Arial", "B", 12) # Set font to bold
     pdf.multi_cell(0, 7, clean_text_for_latin1("www.mindfullibraries.com"), 0, 'C')
@@ -823,21 +790,7 @@ Mindful Libraries empowers care teams to reconnect residents with their pasts, s
     pdf.set_x(left_margin_p2)
     pdf.set_y(pdf.h - 15) # Position near bottom of the page
     pdf.multi_cell(content_width_p2, 4, clean_text_for_latin1(f"Generated for {user_info['name']}"), align='R')
-
-
-    # --- Insert Music of the Decades QR Code (if decade selected) ---
-    decade = st.session_state.get('preferred_decade_main_app', 'None')
-    if decade and decade != 'None':
-        qr_buffer = generate_decade_music_qr(decade)
-        qr_image_path = "/tmp/qr_temp.png"
-        with open(qr_image_path, "wb") as f:
-            f.write(qr_buffer.getvalue())
-        pdf.image(qr_image_path, x=left_margin_p2, y=pdf.get_y(), w=40)
-        pdf.set_x(left_margin_p2 + 45)
-        pdf.set_font("Arial", "B", 12)
-        pdf.multi_cell(0, 10, clean_text_for_latin1("🎵 Music of the Decades – Scan to Listen"), 0, 'L')
-
-
+        
     return pdf.output(dest='S').encode('latin-1')
 
 
@@ -865,7 +818,7 @@ def show_feedback_form():
     with st.form("feedback_form", clear_on_submit=True):
         feedback_text = st.text_area("Your Feedback", help="Tell us what you think!", key="feedback_text_area")
         contact_info = st.text_input("Your Name or Email (Optional)", help="So we can follow up, if needed.", key="feedback_contact_info")
-
+        
         submitted = st.form_submit_button("Submit Feedback")
         if submitted:
             if feedback_text.strip():
@@ -873,7 +826,7 @@ def show_feedback_form():
                 username_for_feedback = st.session_state.get('logged_in_username', 'Guest')
                 if contact_info.strip():
                     username_for_feedback = contact_info.strip() # Override if user provides specific contact info
-
+                
                 if log_feedback(username_for_feedback, feedback_text.strip()):
                     st.success("Thank you for your feedback! We appreciate it.")
                 else:
@@ -891,7 +844,7 @@ def show_main_app_page():
 
 
     today = datetime.today()
-
+    
     # --- Date Picker for Main Page Content ---
     selected_date = st.date_input("Select a date", value=today, key="date_picker_main_app")
     day, month, year = selected_date.day, selected_date.month, selected_date.year
@@ -911,7 +864,7 @@ def show_main_app_page():
 
     if st.session_state['last_fetched_date'] != current_data_key or st.session_state['daily_data'] is None:
         st.session_state['daily_data'] = get_this_day_in_history_facts(
-            day, month, user_info, client_ai,
+            day, month, user_info, client_ai, 
             topic=st.session_state.get('preferred_topic_main_app') if st.session_state.get('preferred_topic_main_app') != "None" else None,
             preferred_decade=st.session_state.get('preferred_decade_main_app') if st.session_state.get('preferred_decade_main_app') != "None" else None,
             difficulty=st.session_state['difficulty'] # Pass the selected difficulty to generate trivia
@@ -958,12 +911,12 @@ def show_main_app_page():
         st.write("No memory prompts available.")
 
     st.markdown("---")
-
+    
     # Generate PDF bytes once
     pdf_bytes_main = generate_full_history_pdf(
         data, selected_date.strftime('%B %d, %Y'), user_info
     )
-
+    
     # Create Base64 encoded link
     b64_pdf_main = base64.b64encode(pdf_bytes_main).decode('latin-1')
     pdf_viewer_link_main = f'<a href="data:application/pdf;base64,{b64_pdf_main}" target="_blank">View PDF in Browser</a>'
@@ -971,19 +924,19 @@ def show_main_app_page():
     col1, col2 = st.columns([1, 1])
     with col1:
         st.download_button(
-            "Download Daily Page PDF",
-            pdf_bytes_main,
+            "Download Daily Page PDF", 
+            pdf_bytes_main, 
             file_name=f"This_Day_in_History_{selected_date.strftime('%Y%m%d')}.pdf",
             mime="application/pdf"
         )
     with col2:
         st.markdown(pdf_viewer_link_main, unsafe_allow_html=True)
-
+    
     # --- Offline Access (Conceptual - requires local storage solution) ---
     st.sidebar.markdown("---")
     st.sidebar.subheader("Offline Access")
     st.sidebar.info("Offline access for the past 7 days is a planned feature. For now, you can download PDFs to save content.")
-
+    
     # --- Sharing/Email Option (Conceptual - requires external email service) ---
     st.sidebar.subheader("Share Daily Page")
     st.sidebar.info("Daily/weekly sharing via email is a planned feature. This would integrate with an email service.")
@@ -1004,7 +957,7 @@ def show_trivia_page():
     st.subheader("Trivia Settings")
     # Add the note about inputting a response
     st.info("💡 To check your answer, please input your response into the text box and then click the 'Check Answer' button.")
-
+    
     # Moved: Difficulty selection is now on the trivia page
     st.session_state['difficulty'] = st.selectbox(
         "Trivia Difficulty",
@@ -1026,8 +979,8 @@ def show_trivia_page():
     # Only re-fetch if the selected difficulty or date has changed
     if st.session_state['last_fetched_date'] != data_key_for_trivia_regen:
         st.session_state['daily_data'] = get_this_day_in_history_facts(
-            current_selected_date.day, current_selected_date.month,
-            {'name': st.session_state['logged_in_username']}, client_ai,
+            current_selected_date.day, current_selected_date.month, 
+            {'name': st.session_state['logged_in_username']}, client_ai, 
             topic=st.session_state.get('preferred_topic_main_app') if st.session_state.get('preferred_topic_main_app') != "None" else None,
             preferred_decade=st.session_state.get('preferred_decade_main_app') if st.session_state.get('preferred_decade_main_app') != "None" else None,
             difficulty=st.session_state['difficulty']
@@ -1049,7 +1002,7 @@ def show_trivia_page():
 
         for i, trivia_item in enumerate(trivia_questions):
             question_key_base = f"trivia_q_{i}" # Base key for state
-
+            
             # Initialize state for this question if not already present
             if question_key_base not in st.session_state['trivia_question_states']:
                 st.session_state['trivia_question_states'][question_key_base] = {
@@ -1073,9 +1026,9 @@ def show_trivia_page():
 
             with col_input:
                 user_input = st.text_input(
-                    f"Your Answer for Q{i+1}:",
-                    value=q_state['user_answer'],
-                    key=f"input_{question_key_base}",
+                    f"Your Answer for Q{i+1}:", 
+                    value=q_state['user_answer'], 
+                    key=f"input_{question_key_base}", 
                     disabled=q_state['is_correct'] or q_state.get('out_of_chances', False) # Disable if correct or out of chances
                 )
                 q_state['user_answer'] = user_input # Update state on input change for persistence
@@ -1106,7 +1059,7 @@ def show_trivia_page():
                                 if q_state['points_earned'] == 0:
                                     q_state['points_earned'] = points
                                     st.session_state['current_trivia_score'] += points
-
+                                
                                 if is_exact_match:
                                     q_state['feedback'] = f"✅ Correct! You earned {points} points for this question."
                                 else: # It's a partial match
@@ -1161,13 +1114,13 @@ def show_trivia_page():
                         st.write(q_state['related_article_content'])
                     else:
                         st.write(q_state['related_article_content'])
-
+            
         st.markdown("---")
         # Check if all questions are answered correctly or out of chances
         all_completed = all(st.session_state['trivia_question_states'][f"trivia_q_{i}"]['is_correct'] or \
                             st.session_state['trivia_question_states'][f"trivia_q_{i}"].get('out_of_chances', False) \
                             for i in range(len(trivia_questions)))
-
+        
         if all_completed:
             st.success("You've completed the trivia challenge for today!")
             if not st.session_state['score_logged_today']:
@@ -1178,7 +1131,7 @@ def show_trivia_page():
                     st.error("Failed to log your score.")
         else:
             st.info(f"You have {st.session_state['hints_remaining']} hints remaining.")
-
+        
         st.markdown("---")
         st.subheader("🏆 Leaderboard")
         leaderboard = get_leaderboard_data()
@@ -1346,7 +1299,7 @@ if st.session_state['is_authenticated']:
 
     st.sidebar.markdown("---")
     st.sidebar.header("Settings")
-
+    
     st.sidebar.subheader("Content Customization")
     st.session_state['preferred_topic_main_app'] = st.sidebar.selectbox(
         "Preferred Topic for Events (Optional)",
@@ -1364,7 +1317,7 @@ if st.session_state['is_authenticated']:
     st.sidebar.markdown("---")
     st.sidebar.subheader("Local History (Planned)")
     st.sidebar.info("Integrating local historical facts specific to your area is a planned feature. This would require a separate local history database.")
-
+    
     st.sidebar.markdown("---")
     if st.sidebar.button("🚪 Log Out", key="sidebar_logout_btn"):
         log_event("logout", st.session_state['logged_in_username'])
@@ -1383,3 +1336,4 @@ if st.session_state['is_authenticated']:
         show_main_app_page()
 else: # Not authenticated, show login/register and January 1st example
     show_login_register_page()
+
