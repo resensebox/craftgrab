@@ -1087,24 +1087,7 @@ def show_main_app_page():
     st.subheader(translate_text_with_ai(f"✨ A Look Back at {selected_date.strftime('%B %d')}", st.session_state['preferred_language'], client_ai))
 
     # New note for scrolling down to download/print at the top of the main page
-    st.info(
-        translate_text_with_ai(
-            """💡 Scroll down to download and print your This Day In History worksheet! 
-You can download each day's content as a printable PDF—perfect for sharing with your residents or using in group activities!
-Want to make it your own? You can even customize the masthead to match your community—try something fun like Arbor Courts Gazette or The Morning Maple 🍁.
-
-🌍 Need another language? Use the left-hand menu to translate the entire page and your downloadable PDF.
-
-This is a free platform. 
-💬 We'd Love Your Support!
-Word of mouth goes a long way—if you enjoy using This Day In History, please share it with your friends, coworkers, or anyone who might benefit. Your support means the world to us!
-
-""",
-            st.session_state['preferred_language'],
-            client_ai
-        )
-    )
-
+    st.info(translate_text_with_ai("💡 Scroll down to download and print your 'This Day In History' worksheet!", st.session_state['preferred_language'], client_ai))
 
     st.markdown("---")
     st.subheader(translate_text_with_ai("🗓️ Significant Event", st.session_state['preferred_language'], client_ai))
@@ -1488,7 +1471,7 @@ def show_login_register_page():
                         if save_new_user_to_sheet(new_username, new_password, new_email):
                             st.session_state['is_authenticated'] = True
                             st.session_state['logged_in_username'] = new_username
-                            st.success(translate_text_with_ai("Account created! Go to log-in screen to log in.", st.session_state['preferred_language'], client_ai))
+                            st.success(translate_text_with_ai("Account created!", st.session_state['preferred_language'], client_ai))
                             log_event("register", new_username)
                             set_page('main_app') # Go to main app page (this handles the rerun)
                         else:
