@@ -93,15 +93,21 @@ def get_gsheet_client():
     try:
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         creds_dict = st.secrets["GOOGLE_SERVICE_JSON"]
-        if "private_key" in creds_dict and "\n" in creds_dict["private_key"]:
-            creds_dict["private_key"] = creds_dict["private_key"].replace("\n", "\n")
+        # Replace escaped newlines if they are present in the secret
+        if "private_key" in creds_dict and "\\n" in creds_dict["private_key"]:
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+        
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
         logging.debug("Google Sheets client successfully authorized.")
+        
+        # Display the service account email for debugging permissions
+        st.info(f"Google Sheets Service Account Email: {creds.service_account_email}. Please ensure this email has edit access to your Google Sheet.")
+        
         return client
     except Exception as e:
         logging.error(f"Google Sheets auth failed: {e}")
-        st.error(f"Google Sheets error: {e}")
+        st.warning(f"Failed to authorize Google Sheets: {e}. Please check your GOOGLE_SERVICE_JSON secret and ensure the service account has access to the sheet.")
         return None
 
 # --- Updated add_user to log to specific Sheet ---
@@ -117,8 +123,10 @@ def add_user(username, password):
                 sheet = client.open_by_key(GSHEET_USERS_ID).worksheet("Users")
                 sheet.append_row([username, str(datetime.now())])
                 logging.info(f"User {username} registered and logged to Google Sheets.")
+                st.success(f"User '{username}' registered and logged to Google Sheet!")
             except Exception as sheet_error:
                 logging.error(f"Failed to log user to Google Sheet: {sheet_error}")
+                st.error(f"Error logging user registration to Google Sheet: {sheet_error}")
         return True
     except sqlite3.IntegrityError:
         return False
@@ -133,8 +141,10 @@ def log_login(username):
             sheet = client.open_by_key(GSHEET_USERS_ID).worksheet("Users")
             sheet.append_row([f"LOGIN: {username}", str(datetime.now())])
             logging.info(f"Login by {username} logged to Google Sheets.")
+            st.success(f"Login by '{username}' logged to Google Sheet!")
         except Exception as sheet_error:
             logging.error(f"Failed to log login to Google Sheet: {sheet_error}")
+            st.error(f"Error logging user login to Google Sheet: {sheet_error}")
 
 # --- Verify user login ---
 def verify_user(username, password):
