@@ -896,17 +896,16 @@ def show_trivia_page():
             st.info("No scores logged yet for the leaderboard. Be the first!")
 
         st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_bottom")
+    else: # This else now correctly corresponds to the 'if' above it for trivia questions
+        st.write("No trivia questions available for today. Please go back to the main page.")
+        st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_no_questions")
 
-    # Feedback section
+    # Feedback section should always be visible, outside the if/else for trivia content
     st.markdown("---")
     st.subheader("📧 Send us feedback")
     st.markdown("We'd love to hear from you! If you have any suggestions, questions, or just want to say hello, feel free to reach out to us at:")
     st.markdown("### `thisdayinhistoryapp@gmail.com`")
     st.markdown("---")
-    
-    else:
-        st.write("No trivia questions available for today. Please go back to the main page.")
-        st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_no_questions")
 
 
 def show_login_register_page():
@@ -1095,7 +1094,5 @@ if st.session_state['is_authenticated']:
     else:
         st.session_state['current_page'] = 'main_app'
         show_main_app_page()
-
 else: # Not authenticated, show login/register and January 1st example
     show_login_register_page()
-
