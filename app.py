@@ -1,6 +1,6 @@
 import streamlit as st
 from openai import OpenAI
-from datetime import datetime, date, timedelta # Import timedelta for date calculations
+from datetime import datetime, date, timedelta
 from fpdf import FPDF
 import re
 import json
@@ -35,7 +35,7 @@ if 'daily_data' not in st.session_state: # Store daily data to avoid re-fetching
 if 'raw_fetched_data' not in st.session_state: # NEW: To store the raw, untranslated data
     st.session_state['raw_fetched_data'] = _INITIAL_EMPTY_DATA.copy() # Initialize with a default structure
 if 'last_fetched_date' not in st.session_state:
-    st.session_state['last_fetched_date'] = None # To track when data was last fetched
+    st.session_state['last_fetched_date'] = date.today() # Initialize to today's date
 if 'trivia_question_states' not in st.session_state:
     st.session_state['trivia_question_states'] = {} # Stores per-question state: {'q_index': {'user_answer': '', 'is_correct': False, 'feedback': '', 'hint_revealed': False, 'attempts': 0, 'out_of_chances': False, 'points_earned': 0, 'related_article_content': None}}
 if 'hints_remaining' not in st.session_state:
@@ -941,7 +941,7 @@ def set_page(page_name):
     st.session_state['current_page'] = page_name
     st.session_state['daily_data'] = None # Clear data when changing page
     st.session_state['raw_fetched_data'] = _INITIAL_EMPTY_DATA.copy()
-    st.session_state['last_fetched_date'] = None
+    st.session_state['last_fetched_date'] = date.today() # Ensure it's always a date object
     st.session_state['trivia_question_states'] = {}
     st.session_state['hints_remaining'] = 3
     st.session_state['current_trivia_score'] = 0
@@ -1032,7 +1032,7 @@ def show_main_app_page():
     today = date.today()
     selected_date = st.date_input(
         translate_text_with_ai("Select a Date for 'This Day in History'", st.session_state['preferred_language'], client_ai),
-        value=st.session_state['last_fetched_date'] if st.session_state['last_fetched_date'] else today,
+        value=st.session_state['last_fetched_date'], # Directly use session state value, which is always a date
         max_value=today, # Cannot select a future date
         key='date_selector'
     )
