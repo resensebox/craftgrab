@@ -21,14 +21,14 @@ st.set_page_config(page_title="This Day in History", layout="centered")
 # --- Theme Styling ---
 st.markdown("""
 <style>
-/* Overall App Styling */
+/* Base App Styling */
 body, .stApp {
-    background-color: #f8f4fa !important;  /* Soft lavender background */
-    color: #2d2d2d !important;  /* Text color */
+    background-color: #f8f4fa !important;  /* Soft lavender */
+    color: #2d2d2d !important;  /* Main text color */
     font-family: 'Inter', sans-serif;
 }
 
-/* Header & Label Styling */
+/* Headers & Labels */
 h1, h2, h3, h4, h5, h6, label {
     color: #3b2f5e !important;  /* Deep purple */
     text-align: center;
@@ -37,36 +37,36 @@ h1, h2, h3, h4, h5, h6, label {
 
 /* Buttons */
 .stButton > button {
-    background-color: #f49d37;  /* Warm orange */
-    color: white;
+    background-color: #f49d37 !important;  /* Orange */
+    color: white !important;
     padding: 0.75em 1.5em;
     font-size: 1em;
     font-weight: 600;
     border: none;
     border-radius: 10px;
     box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.1);
-    transition: background 0.3s ease;
+    transition: all 0.2s ease;
 }
 .stButton > button:hover {
-    background-color: #d87f1f;
+    background-color: #d87f1f !important;
     transform: translateY(-2px);
 }
 
-/* Text Inputs */
-.stTextInput > div > div > input {
-    background-color: #fff;
-    color: #2d2d2d;
+/* Inputs */
+.stTextInput input {
+    background-color: #ffffff !important;
+    color: #2d2d2d !important;
     border-radius: 10px;
-    padding: 10px;
     border: 1px solid #cfc3dd;
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+    padding: 10px;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
 }
-.stTextInput > div > div > input:focus {
-    border-color: #9e7ac2;
+.stTextInput input:focus {
+    border-color: #9e7ac2 !important;
     outline: none;
 }
 
-/* Card Containers */
+/* Cards and Containers */
 .card {
     background-color: #ffffff;
     border-radius: 14px;
@@ -91,15 +91,45 @@ h1, h2, h3, h4, h5, h6, label {
 section[data-testid="stSidebar"] {
     background-color: #ede2f3 !important;
 }
-section[data-testid="stSidebar"] .css-1d391kg {  /* For newer Streamlit sidebar headers */
+section[data-testid="stSidebar"] .css-1d391kg,
+section[data-testid="stSidebar"] h1, 
+section[data-testid="stSidebar"] h2 {
     color: #3b2f5e !important;
 }
-section[data-testid="stSidebar"] .stButton > button {
-    background-color: #f49d37 !important;
-    color: white;
+
+/* Streamlit Feedback Boxes */
+.stAlert, .stNotification, .st-cq, .st-da {
+    background-color: #ffffff !important;
+    border-left: 6px solid #9e7ac2 !important;
+    color: #2d2d2d !important;
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+/* Success / Info / Error text colors */
+div[data-testid="stAlertSuccess"] {
+    background-color: #e6f4ea !important;
+    color: #276749 !important;
+    border-left: 6px solid #38a169 !important;
+}
+div[data-testid="stAlertInfo"] {
+    background-color: #ebf8ff !important;
+    color: #2b6cb0 !important;
+    border-left: 6px solid #4299e1 !important;
+}
+div[data-testid="stAlertWarning"] {
+    background-color: #fffaf0 !important;
+    color: #b7791f !important;
+    border-left: 6px solid #ed8936 !important;
+}
+div[data-testid="stAlertError"] {
+    background-color: #fff5f5 !important;
+    color: #c53030 !important;
+    border-left: 6px solid #f56565 !important;
 }
 </style>
 """, unsafe_allow_html=True)
+
 
 
 # --- Google Sheets Configuration ---
