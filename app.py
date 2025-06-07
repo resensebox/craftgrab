@@ -23,13 +23,13 @@ st.markdown("""
 <style>
 body, .stApp {
     background-color: #ffffff !important;
-    color: #000000 !important;
+    color: #000000 !important; /* Main text color set to black */
     font-family: 'Inter', sans-serif;
     padding: 1rem;
 }
 
 h1, h2, h3, h4, h5, h6, label {
-    color: #000000 !important;
+    color: #000000 !important; /* Headings and labels set to black */
     text-align: center;
     font-weight: 700;
     margin: 2rem auto 1.5rem;
@@ -52,7 +52,7 @@ h1, h2, h3, h4, h5, h6, label {
 
 .stTextInput>div>div>input {
     background-color: #ffffff;
-    color: #000000;
+    color: #000000; /* Input text color set to black */
     border-radius: 8px;
     padding: 10px;
     border: 1px solid #ccc;
@@ -68,19 +68,19 @@ h1, h2, h3, h4, h5, h6, label {
     border-radius: 12px;
     padding: 20px;
     margin: 20px 0;
-    box_shadow: 0 4px 8px rgba(0,0,0,0.05);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.05); /* Corrected box-shadow syntax */
     border: 1px solid #e0e0e0;
 }
 .card h3 {
     font-size: 1.4em;
-    margin_bottom: 0.5em;
-    color: #000;
+    margin-bottom: 0.5em; /* Corrected margin-bottom syntax */
+    color: #000; /* Card headings set to black */
 }
 .card p {
     font-size: 1.1em;
-    color: #333;
-    line_height: 1.6em;
-    margin_bottom: 1em;
+    color: #000; /* Changed from #333 to #000 for better contrast on cards */
+    line-height: 1.6em; /* Corrected line-height syntax */
+    margin-bottom: 1em;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -95,9 +95,10 @@ def get_gsheet_client():
         
         # Load the JSON string from st.secrets and parse it into a dictionary
         creds_json_string = st.secrets["GOOGLE_SERVICE_JSON"]
-        creds_dict = json.loads(creds_json_string) # <--- CRITICAL CHANGE HERE
+        creds_dict = json.loads(creds_json_string) 
         
         # Replace escaped newlines if they are present in the private_key (after parsing)
+        # This handles cases where secrets.toml might have \\n for literal newlines in the JSON string
         if "private_key" in creds_dict and "\\n" in creds_dict["private_key"]:
             creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
         
@@ -363,4 +364,3 @@ else:
         st.session_state['logged_in'] = False
         st.session_state['username'] = None
         st.rerun()
-
