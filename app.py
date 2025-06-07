@@ -119,10 +119,7 @@ def get_leaderboard_data():
                     continue 
         
         # Sort users by highest score in descending order
-        sorted_leaderboard = sorted(user_highest_scores.items(), key=lambda item: item[1], reverse=True)
-        
-        # Take top 3
-        return sorted_leaderboard[:3]
+        return sorted(user_highest_scores.items(), key=lambda item: item[1], reverse=True)[:3]
     except Exception as e:
         st.error(f"❌ Error retrieving leaderboard data: {e}")
         return {}
@@ -182,18 +179,6 @@ if 'score_logged_today' not in st.session_state:
     st.session_state['score_logged_today'] = False
 if 'difficulty' not in st.session_state: # New session state for difficulty
     st.session_state['difficulty'] = 'Medium' # Default difficulty
-
-# New session states for Director's Dashboard
-if 'memory_prompts' not in st.session_state:
-    st.session_state['memory_prompts'] = []
-if 'resident_name_dashboard' not in st.session_state:
-    st.session_state['resident_name_dashboard'] = ''
-if 'resident_age_dashboard' not in st.session_state:
-    st.session_state['resident_age_dashboard'] = ''
-if 'resident_response_dashboard' not in st.session_state:
-    st.session_state['resident_response_dashboard'] = ''
-if 'dashboard_generated_content' not in st.session_state:
-    st.session_state['dashboard_generated_content'] = None
 
 
 # --- Helper function to clean text for Latin-1 compatibility ---
@@ -860,275 +845,6 @@ def show_login_register_page():
         st.markdown(pdf_viewer_link_example, unsafe_allow_html=True)
 
 
-# --- Director's Dashboard Functions ---
-def generate_memory_prompts(_ai_client):
-    """Generates 3-5 engaging, dementia-friendly memory prompts."""
-    prompt = """
-    Generate 5 engaging, dementia-friendly questions for activity directors to ask residents to evoke memories. 
-    Examples: "What was your first job?", "Do you remember a favorite vacation?", "What music did you love growing up?".
-    Format each question as a new line, starting with a number.
-    """
-    try:
-        response = _ai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=200,
-            temperature=0.7 # Allow some creativity
-        )
-        # Split by newline and filter out empty strings, then clean up numbering
-        prompts = [re.sub(r'^\d+\.\s*', '', line).strip() for line in response.choices[0].message.content.strip().split('\n') if line.strip()]
-        return prompts[:5] # Ensure max 5 prompts
-    except Exception as e:
-        st.error(f"❌ Error generating memory prompts: {e}")
-        return ["Could not generate prompts. Please try again.", "What was your favorite food growing up?", "Tell me about a special pet.", "What was your favorite holiday memory?", "What was a memorable song from your youth?"]
-
-def generate_dashboard_content(resident_memory, _ai_client, resident_name=None, resident_age=None):
-    """
-    Generates a short article, 5 trivia questions, and an optional fun fact/memory prompt
-    based on a resident's memory.
-    """
-    if not resident_memory:
-        return {
-            'article': "Please enter a resident memory to generate content.",
-            'trivia': [],
-            'fun_fact_or_memory_prompt': "No content generated."
-        }
-
-    article_word_count = 200
-    resident_info_clause = ""
-    if resident_name and resident_age:
-        resident_info_clause = f" for {resident_name}, who is {resident_age} years old"
-    elif resident_name:
-        resident_info_clause = f" for {resident_name}"
-
-    prompt = f"""
-    Based on the following resident memory{resident_info_clause}:
-    "{resident_memory}"
-
-    Please provide:
-
-    1. Article: Write a short, positive, and engaging article (around {article_word_count} words) that elaborates on this memory and its theme. Make it uplifting and reflective.
-    2. Trivia Questions: Generate five concise, factual trivia questions related to the theme, era, or specific details mentioned in the resident's memory. For each question, provide the correct answer in parentheses and a short, distinct hint in square brackets (e.g., "What year did the Berlin Wall fall? (1989) [Hint: Cold War era]").
-    3. Fun Fact or Memory Prompt: Provide one interesting fun fact OR an additional memory prompt related to the theme of the resident's memory.
-
-    Format your response clearly with these headings.
-    """
-    try:
-        response = _ai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=800, # Increased max_tokens to accommodate all sections
-            temperature=0.7 # A bit more creativity for engaging content
-        )
-        content = response.choices[0].message.content.strip()
-
-        article_match = re.search(r"1\. Article:\s*(.*?)(?=\n2\. Trivia Questions:|\Z)", content, re.DOTALL)
-        trivia_text_match = re.search(r"2\. Trivia Questions:\s*(.*?)(?=\n3\. Fun Fact or Memory Prompt:|\Z)", content, re.DOTALL)
-        fun_fact_or_memory_prompt_match = re.search(r"3\. Fun Fact or Memory Prompt:\s*(.*)", content, re.DOTALL)
-
-        article_content = article_match.group(1).strip() if article_match else "Could not generate article."
-        fun_fact_or_memory_prompt_content = fun_fact_or_memory_prompt_match.group(1).strip() if fun_fact_or_memory_prompt_match else "No additional fun fact or memory prompt generated."
-
-        trivia_questions = []
-        if trivia_text_match:
-            raw_trivia = trivia_text_match.group(1).strip()
-            trivia_line_pattern = re.compile(r'^\s*\d*\.?\s*(.*?)\s*\((.*?)\)\s*\[(.*?)\]\s*$')
-            for line in raw_trivia.split('\n'):
-                line = line.strip()
-                if not line:
-                    continue
-                match = trivia_line_pattern.match(line)
-                if match:
-                    question_text = match.group(1).strip()
-                    answer = match.group(2).strip()
-                    hint = match.group(3).strip()
-                    trivia_questions.append({'question': question_text, 'answer': answer, 'hint': hint})
-                if len(trivia_questions) >= 5: # Limit to 5 questions
-                    break
-        
-        return {
-            'article': article_content,
-            'trivia': trivia_questions,
-            'fun_fact_or_memory_prompt': fun_fact_or_memory_prompt_content
-        }
-
-    except Exception as e:
-        st.error(f"❌ Error generating content from memory: {e}")
-        return {
-            'article': "Could not generate article based on memory.",
-            'trivia': [],
-            'fun_fact_or_memory_prompt': "Could not generate additional content."
-        }
-
-
-def generate_dashboard_pdf(data, resident_name, resident_age, dementia_mode=False):
-    """
-    Generates a PDF for the Director's Dashboard content.
-    """
-    pdf = FPDF()
-    pdf.add_page()
-
-    if dementia_mode:
-        pdf.set_font("Arial", "", 24) # Larger font, simple
-        line_height = 15
-        spacing = 10
-    else:
-        pdf.set_font("Arial", "B", 20)
-        line_height = 10
-        spacing = 5
-
-    title_text = "Resident Memory & Activities"
-    if resident_name:
-        title_text = f"Memories & Activities for {resident_name}"
-        if resident_age:
-            title_text += f" (Age {resident_age})"
-
-    pdf.multi_cell(0, line_height, clean_text_for_latin1(title_text), align='C')
-    pdf.ln(spacing)
-
-    # Article
-    if not dementia_mode: pdf.set_font("Arial", "B", 14)
-    pdf.multi_cell(0, line_height, "Memory Article:")
-    if not dementia_mode: pdf.set_font("Arial", "", 12)
-    pdf.multi_cell(0, line_height, clean_text_for_latin1(data['article']))
-    pdf.ln(spacing)
-
-    # Trivia
-    if data['trivia']:
-        if not dementia_mode: pdf.set_font("Arial", "B", 14)
-        pdf.multi_cell(0, line_height, "Trivia Questions:")
-        if not dementia_mode: pdf.set_font("Arial", "", 12)
-        for item in data['trivia']:
-            hint_text = f" (Hint: {clean_text_for_latin1(item['hint'])})" if item.get('hint') else ""
-            pdf.multi_cell(0, line_height, clean_text_for_latin1(f"- {item['question']} (Answer: {item['answer']}){hint_text}"))
-        pdf.ln(spacing)
-
-    # Fun Fact or Memory Prompt
-    if data['fun_fact_or_memory_prompt']:
-        if not dementia_mode: pdf.set_font("Arial", "B", 14)
-        pdf.multi_cell(0, line_height, "Additional Insight:")
-        if not dementia_mode: pdf.set_font("Arial", "", 12)
-        pdf.multi_cell(0, line_height, clean_text_for_latin1(data['fun_fact_or_memory_prompt']))
-        pdf.ln(spacing)
-
-    if not dementia_mode:
-        pdf.set_font("Arial", "I", 10)
-        pdf.multi_cell(0, 5, clean_text_for_latin1(f"Generated by {st.session_state['logged_in_username']}"), align='C')
-        
-    return pdf.output(dest='S').encode('latin-1')
-
-
-def show_director_dashboard_page():
-    st.title("🧓 Director's Dashboard: Resident Engagement")
-    st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',), key="back_to_main_from_dashboard_top")
-
-    st.markdown("---")
-    st.subheader("Step 1: AI Memory Prompt Tool")
-
-    # Generate prompts if not already generated or if regenerate button is clicked
-    if not st.session_state['memory_prompts'] or st.button("Regenerate Prompts", key="regenerate_prompts_btn"):
-        with st.spinner("Generating new memory prompts..."):
-            st.session_state['memory_prompts'] = generate_memory_prompts(client_ai)
-            st.session_state['resident_response_dashboard'] = '' # Clear resident response on prompt regeneration
-            st.session_state['dashboard_generated_content'] = None # Clear generated content
-
-    if st.session_state['memory_prompts']:
-        st.markdown("Ask residents these questions to spark their memories:")
-        for i, prompt in enumerate(st.session_state['memory_prompts']):
-            st.write(f"- {clean_text_for_latin1(prompt)}")
-    else:
-        st.info("Click 'Regenerate Prompts' to get started with memory questions.")
-    
-    st.markdown("---")
-    st.subheader("Step 2: Resident Response Input")
-
-    st.session_state['resident_name_dashboard'] = st.text_input(
-        "Resident's Name (Optional)",
-        value=st.session_state['resident_name_dashboard'],
-        key="resident_name_input"
-    )
-    st.session_state['resident_age_dashboard'] = st.text_input(
-        "Resident's Age (Optional)",
-        value=st.session_state['resident_age_dashboard'],
-        key="resident_age_input"
-    )
-    st.session_state['resident_response_dashboard'] = st.text_area(
-        "Enter Resident's Memory/Story/Quote here:",
-        value=st.session_state['resident_response_dashboard'],
-        height=150,
-        placeholder="E.g., 'I remember my first car, a bright red Ford Model T. It was so exciting to drive down Main Street in 1925!'",
-        key="resident_memory_input"
-    )
-
-    st.markdown("---")
-    st.subheader("Step 3: AI Content Generation")
-
-    if st.button("Generate Content from Memory", key="generate_dashboard_content_btn", disabled=not st.session_state['resident_response_dashboard'].strip()):
-        with st.spinner("Generating article and trivia from resident's memory..."):
-            st.session_state['dashboard_generated_content'] = generate_dashboard_content(
-                st.session_state['resident_response_dashboard'],
-                client_ai,
-                st.session_state['resident_name_dashboard'],
-                st.session_state['resident_age_dashboard']
-            )
-        st.success("Content generated!")
-        # Rerun to display content immediately after generation
-        st.rerun()
-
-    # Display Generated Content
-    if st.session_state['dashboard_generated_content']:
-        generated_data = st.session_state['dashboard_generated_content']
-
-        st.markdown("---")
-        st.subheader("📝 Generated Memory Article")
-        st.write(clean_text_for_latin1(generated_data['article']))
-
-        st.markdown("---")
-        st.subheader("❓ Related Trivia Quiz")
-        if generated_data['trivia']:
-            for i, trivia_item in enumerate(generated_data['trivia']):
-                st.markdown(f"**Question {i+1}:** {clean_text_for_latin1(trivia_item['question'])}")
-                st.info(f"Answer: {clean_text_for_latin1(trivia_item['answer'])}")
-                if trivia_item.get('hint'):
-                    st.info(f"Hint: {clean_text_for_latin1(trivia_item['hint'])}")
-        else:
-            st.info("No trivia questions generated. Please try with a more detailed memory.")
-
-        st.markdown("---")
-        st.subheader("✨ Additional Insight")
-        st.write(clean_text_for_latin1(generated_data['fun_fact_or_memory_prompt']))
-
-        st.markdown("---")
-        st.subheader("Step 4: Download & Share")
-
-        # Generate PDF bytes for dashboard content
-        pdf_bytes_dashboard = generate_dashboard_pdf(
-            generated_data,
-            st.session_state['resident_name_dashboard'],
-            st.session_state['resident_age_dashboard'],
-            st.session_state['dementia_mode']
-        )
-        
-        # Create Base64 encoded link for dashboard PDF
-        b64_pdf_dashboard = base64.b64encode(pdf_bytes_dashboard).decode('latin-1')
-        pdf_viewer_link_dashboard = f'<a href="data:application/pdf;base64,{b64_pdf_dashboard}" target="_blank">View PDF in Browser</a>'
-
-        col1_dash_pdf, col2_dash_pdf = st.columns([1, 1])
-        with col1_dash_pdf:
-            st.download_button(
-                "Download Content as PDF",
-                pdf_bytes_dashboard,
-                file_name=f"Resident_Memory_Content_{st.session_state['resident_name_dashboard'] or 'Generated'}_{datetime.now().strftime('%Y%m%d')}.pdf",
-                mime="application/pdf"
-            )
-        with col2_dash_pdf:
-            st.markdown(pdf_viewer_link_dashboard, unsafe_allow_html=True)
-    else:
-        st.info("Enter a resident's memory above and click 'Generate Content' to see results here.")
-    
-    st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',), key="back_to_main_from_dashboard_bottom")
-
-
 # --- Main App Logic (Router) ---
 if st.session_state['is_authenticated']:
     # --- Sidebar content (always visible when authenticated) ---
@@ -1139,8 +855,6 @@ if st.session_state['is_authenticated']:
         set_page('main_app')
     if st.sidebar.button("🎮 Play Trivia!", key="sidebar_trivia_btn"):
         set_page('trivia_page')
-    if st.sidebar.button("🧓 Director’s Dashboard", key="sidebar_director_dashboard_btn"):
-        set_page('director_dashboard') # New dashboard page
 
     st.sidebar.markdown("---")
     st.sidebar.header("Settings")
@@ -1177,8 +891,6 @@ if st.session_state['is_authenticated']:
         show_main_app_page()
     elif st.session_state['current_page'] == 'trivia_page':
         show_trivia_page()
-    elif st.session_state['current_page'] == 'director_dashboard': # New dashboard page
-        show_director_dashboard_page()
     # Default to main_app if current_page is somehow not set to a valid page
     else:
         st.session_state['current_page'] = 'main_app'
