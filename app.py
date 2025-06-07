@@ -342,6 +342,28 @@ def log_feedback(username, feedback_message):
         st.warning(f"⚠️ Could not log feedback: {e}")
         return False
 
+def log_pdf_download(username, filename, download_date):
+    """Logs a PDF download event to the 'PDFLogs' worksheet."""
+    try:
+        sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
+        try:
+            ws = sheet.worksheet("PDFLogs")
+        except gspread.exceptions.WorksheetNotFound:
+            ws = sheet.add_worksheet(title="PDFLogs", rows="100", cols="4")
+            ws.append_row(["Timestamp", "Username", "Filename", "DownloadDate"]) # Add headers if new sheet
+        
+        ws.append_row([
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            username,
+            filename,
+            download_date.strftime("%Y-%m-%d") if isinstance(download_date, date) else str(download_date)
+        ])
+        st.success(f"PDF download logged for {username}.")
+        return True
+    except Exception as e:
+        st.warning(f"⚠️ Could not log PDF download for '{username}': {e}")
+        return False
+
 
 def check_partial_correctness_with_ai(user_answer, correct_answer, _ai_client):
     """
@@ -1180,7 +1202,9 @@ Word of mouth goes a long way—if you enjoy using This Day In History, please s
             translate_text_with_ai("Download Daily Page PDF", st.session_state['preferred_language'], client_ai),
             pdf_bytes_main, 
             file_name=pdf_file_name,
-            mime="application/pdf"
+            mime="application/pdf",
+            on_click=log_pdf_download, # Add on_click event
+            args=(st.session_state['logged_in_username'], pdf_file_name, selected_date) # Pass arguments
         )
     with col2:
         st.markdown(pdf_viewer_link_main, unsafe_allow_html=True)
@@ -1488,7 +1512,7 @@ def show_login_register_page():
                         if save_new_user_to_sheet(new_username, new_password, new_email):
                             st.session_state['is_authenticated'] = True
                             st.session_state['logged_in_username'] = new_username
-                            st.success(translate_text_with_ai("Account created! Go to log-in screen to log in.", st.session_state['preferred_language'], client_ai))
+                            st.success(translate_text_with_ai(f"Account created successfully! You are now logged in as {new_username}.", st.session_state['preferred_language'], client_ai)) # Updated success message
                             log_event("register", new_username)
                             set_page('main_app') # Go to main app page (this handles the rerun)
                         else:
