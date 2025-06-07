@@ -1094,7 +1094,12 @@ You can download each day's content as a printable PDF—perfect for sharing wit
 Want to make it your own? You can even customize the masthead to match your community—try something fun like Arbor Courts Gazette or The Morning Maple 🍁.
 
 🌍 Need another language? Use the left-hand menu to translate the entire page and your downloadable PDF.
-👉 Click here to choose your language.""",
+
+This is a free platform. 
+💬 We'd Love Your Support!
+Word of mouth goes a long way—if you enjoy using This Day In History, please share it with your friends, coworkers, or anyone who might benefit. Your support means the world to us!
+
+""",
             st.session_state['preferred_language'],
             client_ai
         )
