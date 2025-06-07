@@ -175,6 +175,29 @@ if 'total_possible_daily_trivia_score' not in st.session_state:
 if 'score_logged_today' not in st.session_state:
     st.session_state['score_logged_today'] = False
 
+# --- Helper function to clean text for Latin-1 compatibility ---
+def clean_text_for_latin1(text):
+    """Replaces common problematic Unicode characters with Latin-1 safe equivalents."""
+    if not isinstance(text, str):
+        return text # Return as is if not a string (e.g., list or None)
+    
+    # Common smart quotes and other non-latin1 characters
+    text = text.replace('\u2019', "'")  # Right single quotation mark
+    text = text.replace('\u2018', "'")  # Left single quotation mark
+    text = text.replace('\u201c', '"')  # Left double quotation mark
+    text = text.replace('\u201d', '"')  # Right double quotation mark
+    text = text.replace('\u2013', '-')  # En dash
+    text = text.replace('\u2014', '--') # Em dash
+    text = text.replace('\u2026', '...') # Ellipsis
+    text = text.replace('\u00e9', 'e')  # é (e acute)
+    text = text.replace('\u00e2', 'a')  # â (a circumflex)
+    text = text.replace('\u00e7', 'c')  # ç (c cedilla)
+    # Add more replacements as needed for other common problematic characters
+    
+    # Fallback for any remaining non-latin-1 characters (replace with '?')
+    # This aggressive replacement should be a last resort but ensures no encoding errors
+    return text.encode('latin-1', errors='replace').decode('latin-1')
+
 
 # --- This Day in History Logic ---
 def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_client, preferred_decade=None, topic=None):
@@ -302,28 +325,28 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
         line_height = 10
         spacing = 5
 
-    pdf.multi_cell(0, line_height, f"This Day in History: {today_date_str}", align='C')
+    pdf.multi_cell(0, line_height, clean_text_for_latin1(f"This Day in History: {today_date_str}"), align='C')
     pdf.ln(spacing)
 
     # Event Article
     if not dementia_mode: pdf.set_font("Arial", "B", 14)
     pdf.multi_cell(0, line_height, "Significant Event:")
     if not dementia_mode: pdf.set_font("Arial", "", 12)
-    pdf.multi_cell(0, line_height, data['event_article'])
+    pdf.multi_cell(0, line_height, clean_text_for_latin1(data['event_article']))
     pdf.ln(spacing)
 
     # Born on this Day Article
     if not dementia_mode: pdf.set_font("Arial", "B", 14)
     pdf.multi_cell(0, line_height, "Born on this Day:")
     if not dementia_mode: pdf.set_font("Arial", "", 12)
-    pdf.multi_cell(0, line_height, data['born_article'])
+    pdf.multi_cell(0, line_height, clean_text_for_latin1(data['born_article']))
     pdf.ln(spacing)
 
     # Fun Fact
     if not dementia_mode: pdf.set_font("Arial", "B", 14)
     pdf.multi_cell(0, line_height, "Fun Fact:")
     if not dementia_mode: pdf.set_font("Arial", "", 12)
-    pdf.multi_cell(0, line_height, data['fun_fact_section'])
+    pdf.multi_cell(0, line_height, clean_text_for_latin1(data['fun_fact_section']))
     pdf.ln(spacing)
 
     # Trivia - Now includes answers in PDF (for reference)
@@ -332,8 +355,8 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     if not dementia_mode: pdf.set_font("Arial", "", 12)
     for item in data['trivia_section']:
         # Use .get() to safely access 'hint' key
-        hint_text = f" (Hint: {item['hint']})" if item.get('hint') else ""
-        pdf.multi_cell(0, line_height, f"{item['question']} (Answer: {item['answer']}){hint_text}")
+        hint_text = f" (Hint: {clean_text_for_latin1(item['hint'])})" if item.get('hint') else ""
+        pdf.multi_cell(0, line_height, clean_text_for_latin1(f"{item['question']} (Answer: {item['answer']}){hint_text}"))
     pdf.ln(spacing)
 
     # Did You Know?
@@ -342,7 +365,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
         pdf.multi_cell(0, line_height, "Did You Know?")
         if not dementia_mode: pdf.set_font("Arial", "", 12)
         for item in data['did_you_know_section']:
-            pdf.multi_cell(0, line_height, item)
+            pdf.multi_cell(0, line_height, clean_text_for_latin1(item))
         pdf.ln(spacing)
 
     # Memory Prompt
@@ -350,12 +373,12 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
         if not dementia_mode: pdf.set_font("Arial", "B", 14)
         pdf.multi_cell(0, line_height, "Memory Prompt:")
         if not dementia_mode: pdf.set_font("Arial", "", 12)
-        pdf.multi_cell(0, line_height, data['memory_prompt_section'])
+        pdf.multi_cell(0, line_height, clean_text_for_latin1(data['memory_prompt_section']))
     pdf.ln(spacing) # Add a line space at the end of content section
 
     if not dementia_mode:
         pdf.set_font("Arial", "I", 10)
-        pdf.multi_cell(0, 5, f"Generated for {user_info['name']}", align='C')
+        pdf.multi_cell(0, 5, clean_text_for_latin1(f"Generated for {user_info['name']}"), align='C')
         
     return pdf.output(dest='S').encode('latin-1')
 
