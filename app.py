@@ -671,7 +671,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     pdf.set_y(10) # Start from top
     pdf.set_x(left_margin)
     pdf.set_font("Times", "B", title_font_size) # Large, bold font for the title
-    pdf.cell(0, 15, clean_text_for_latin1("The Daily Resense Register"), align='C')
+    pdf.cell(0, 15, clean_text_for_latin1(translate_text_with_ai("The Daily Resense Register", current_language, client_ai)), align='C') # Translated
     pdf.ln(15)
 
     # Separator line
@@ -713,7 +713,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
 
     # Fun Fact
     pdf.set_font("Arial", "B", section_title_font_size)
-    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Fun Fact:", current_language, client_ai)))
+    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Fun Fact:", current_language, client_ai))) # Translated
     current_y_col1 += line_height_normal
     pdf.set_font("Arial", "", article_text_font_size)
     pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['fun_fact_section']))
@@ -722,7 +722,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
 
     # Daily Trivia
     pdf.set_font("Arial", "B", section_title_font_size)
-    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Daily Trivia", current_language, client_ai)))
+    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Daily Trivia", current_language, client_ai))) # Translated
     current_y_col1 += line_height_normal
     pdf.set_font("Arial", "", trivia_q_font_size) # Reset font to regular for trivia text if needed
 
@@ -730,8 +730,10 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     for i, item in enumerate(data['trivia_section'][:4]): # Limit to 4 questions for PDF
         # Ensure question marks are preserved by not replacing them in clean_text_for_latin1
         question_text_clean = clean_text_for_latin1(f"{chr(97+i)}. {item['question']}")
-        answer_text_clean = clean_text_for_latin1(translate_text_with_ai(f"Answer: {item['answer']}", current_language, client_ai))
-        hint_text_clean = clean_text_for_latin1(f"{translate_text_with_ai('Hint:', current_language, client_ai)} {item['hint']}")
+        answer_text_prefix = translate_text_with_ai("Answer:", current_language, client_ai) # Translated prefix
+        answer_text_clean = clean_text_for_latin1(f"{answer_text_prefix} {item['answer']}")
+        hint_text_prefix = translate_text_with_ai("Hint:", current_language, client_ai) # Translated prefix
+        hint_text_clean = clean_text_for_latin1(f"{hint_text_prefix} {item['hint']}")
 
         pdf.set_font("Arial", "B", trivia_q_font_size) # Bold for question
         pdf.multi_cell(col_width, line_height_trivia_ans_hint, question_text_clean)
@@ -754,7 +756,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
 
     # Quote of the Day
     pdf.set_font("Arial", "B", section_title_font_size)
-    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Quote of the Day", current_language, client_ai)), align='C')
+    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Quote of the Day", current_language, client_ai)), align='C') # Translated
     current_y_col2 += line_height_normal
     quote_text = clean_text_for_latin1(translate_text_with_ai('"The only way to do great work is to love what you do."', current_language, client_ai)) # Placeholder quote
     quote_author = clean_text_for_latin1(translate_text_with_ai("- Unknown", current_language, client_ai)) # Placeholder author
@@ -766,7 +768,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
 
     # Happy Birthday!
     pdf.set_font("Arial", "B", section_title_font_size)
-    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Happy Birthday!", current_language, client_ai)))
+    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Happy Birthday!", current_language, client_ai))) # Translated
     current_y_col2 += line_height_normal
     pdf.set_font("Arial", "", article_text_font_size)
     pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['born_article']))
@@ -776,7 +778,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     # Did You Know? - Title now ends with '?'
     if data['did_you_know_section']:
         pdf.set_font("Arial", "B", section_title_font_size)
-        pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Did You Know?", current_language, client_ai))) # Changed to '?'
+        pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Did You Know?", current_language, client_ai))) # Translated
         current_y_col2 += line_height_normal
         pdf.set_font("Arial", "", article_text_font_size)
         for item in data['did_you_know_section']:
@@ -789,7 +791,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     # Memory Prompt? - Title now ends with '?'
     if data['memory_prompt_section']:
         pdf.set_font("Arial", "B", section_title_font_size)
-        pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Memory Prompt?", current_language, client_ai))) # Changed to '?'
+        pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Memory Prompt?", current_language, client_ai))) # Translated
         current_y_col2 += line_height_normal
         pdf.set_font("Arial", "", article_text_font_size)
         # Iterate and display up to the first 3 memory prompts for PDF
@@ -823,7 +825,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
         # Set Y to the max of current column Ys, then add some spacing
         pdf.set_y(current_y_after_main_content + section_spacing_normal) 
 
-        pdf.multi_cell(content_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Local History:", current_language, client_ai)))
+        pdf.multi_cell(content_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Local History:", current_language, client_ai))) # Translated
         pdf.set_font("Arial", "", article_text_font_size)
         pdf.multi_cell(content_width, line_height_normal, clean_text_for_latin1(data['local_history_section']))
         
@@ -881,18 +883,18 @@ Mindful Libraries empowers care teams to reconnect residents with their pasts, s
 
     # Contact Information - still centered horizontally on the page
     pdf.set_font("Arial", "B", 16)
-    pdf.multi_cell(0, 10, clean_text_for_latin1(translate_text_with_ai("Contact Information", current_language, client_ai)), 0, 'C') # Use multi_cell for consistency and cleaning
+    pdf.multi_cell(0, 10, clean_text_for_latin1(translate_text_with_ai("Contact Information", current_language, client_ai)), 0, 'C') # Translated
     pdf.ln(5)
     pdf.set_font("Arial", "", 12)
-    pdf.multi_cell(0, 7, clean_text_for_latin1(translate_text_with_ai("Email: thisdayinhistoryapp@gmail.com", current_language, client_ai)), 0, 'C')
-    pdf.multi_cell(0, 7, clean_text_for_latin1(translate_text_with_ai("Website: ThisDayInHistoryApp.com (Coming Soon!)", current_language, client_ai)), 0, 'C')
+    pdf.multi_cell(0, 7, clean_text_for_latin1(translate_text_with_ai("Email: thisdayinhistoryapp@gmail.com", current_language, client_ai)), 0, 'C') # Translated
+    pdf.multi_cell(0, 7, clean_text_for_latin1(translate_text_with_ai("Website: ThisDayInHistoryApp.com (Coming Soon!)", current_language, client_ai)), 0, 'C') # Translated
     
     # Original bold website URL, keep if intended to have two website mentions
     pdf.set_font("Arial", "B", 12) # Set font to bold
-    pdf.multi_cell(0, 7, clean_text_for_latin1(translate_text_with_ai("www.mindfullibraries.com", current_language, client_ai)), 0, 'C')
+    pdf.multi_cell(0, 7, clean_text_for_latin1(translate_text_with_ai("www.mindfullibraries.com", current_language, client_ai)), 0, 'C') # Translated
     pdf.set_font("Arial", "", 12) # Reset font to normal
 
-    pdf.multi_cell(0, 7, clean_text_for_latin1(translate_text_with_ai("Phone: 412-212-6701 (For Support)", current_language, client_ai)), 0, 'C')
+    pdf.multi_cell(0, 7, clean_text_for_latin1(translate_text_with_ai("Phone: 412-212-6701 (For Support)", current_language, client_ai)), 0, 'C') # Translated
     pdf.ln(10)
 
     # User info at the very bottom of the second page, aligned right
@@ -902,7 +904,7 @@ Mindful Libraries empowers care teams to reconnect residents with their pasts, s
     pdf.set_right_margin(right_margin_p2)
     pdf.set_x(left_margin_p2)
     pdf.set_y(pdf.h - 15) # Position near bottom of the page
-    pdf.multi_cell(content_width_p2, 4, clean_text_for_latin1(translate_text_with_ai(f"Generated for {user_info['name']}", current_language, client_ai)), align='R')
+    pdf.multi_cell(content_width_p2, 4, clean_text_for_latin1(translate_text_with_ai(f"Generated for {user_info['name']}", current_language, client_ai)), align='R') # Translated
         
     return pdf.output(dest='S').encode('latin-1')
 
