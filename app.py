@@ -14,8 +14,7 @@ if 'is_authenticated' not in st.session_state:
     st.session_state['is_authenticated'] = False
 if 'logged_in_username' not in st.session_state:
     st.session_state['logged_in_username'] = ""
-if 'dementia_mode' not in st.session_state:
-    st.session_state['dementia_mode'] = False
+# Removed 'dementia_mode' from session state
 if 'current_page' not in st.session_state:
     st.session_state['current_page'] = 'main_app' # Default page for authenticated users
 if 'daily_data' not in st.session_state: # Store daily data to avoid re-fetching on page switch
@@ -534,7 +533,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
             'memory_prompt_section': "No memory prompt available."
         }
 
-def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=False):
+def generate_full_history_pdf(data, today_date_str, user_info): # Removed dementia_mode parameter
     """
     Generates a PDF of 'This Day in History' facts, formatted over two pages.
     Page 1: Two-column layout with daily content.
@@ -551,7 +550,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     content_width = page_width - left_margin - right_margin
     col_width = (content_width - 10) / 2 # 10mm gutter between columns
     
-    # Font sizes for normal mode
+    # Font sizes (now fixed for normal mode, as dementia mode is removed)
     title_font_size = 36
     date_font_size = 10
     section_title_font_size = 12
@@ -561,18 +560,6 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     line_height_normal = 5
     line_height_trivia_ans_hint = 4
     section_spacing_normal = 5
-
-    # Adjust font sizes and line heights for dementia mode
-    if dementia_mode:
-        title_font_size = 36 # Main title remains large
-        date_font_size = 12
-        section_title_font_size = 16
-        article_text_font_size = 14
-        trivia_q_font_size = 14
-        trivia_ans_hint_font_size = 12
-        line_height_normal = 8 # Increased line height for readability
-        line_height_trivia_ans_hint = 6 # Increased line height for readability
-        section_spacing_normal = 4 # Slightly reduced spacing to fit more
 
     # --- Masthead ---
     pdf.set_y(10) # Start from top
@@ -644,10 +631,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
         pdf.set_font("Arial", "", trivia_ans_hint_font_size) # Smaller, regular for answer
         pdf.multi_cell(col_width, line_height_trivia_ans_hint, answer_text_clean)
         pdf.multi_cell(col_width, line_height_trivia_ans_hint, hint_text_clean) # Display hint
-        if dementia_mode: # Reduce spacing between trivia questions in dementia mode
-            pdf.ln(2) 
-        else:
-            pdf.ln(3) # Small spacing after each trivia question
+        pdf.ln(3) # Small spacing after each trivia question
 
         current_y_col1 = pdf.get_y() # Get current Y to accurately track position
 
@@ -768,15 +752,14 @@ Mindful Libraries empowers care teams to reconnect residents with their pasts, s
     pdf.multi_cell(0, 7, clean_text_for_latin1("Phone: 412-212-6701 (For Support)"), 0, 'C')
     pdf.ln(10)
 
-    # Optional: User info at the very bottom of the second page, aligned right
-    if not dementia_mode:
-        pdf.set_font("Arial", "I", 8)
-        # Reset margins for a full width cell to align right
-        pdf.set_left_margin(left_margin_p2) # Revert to page 2 margins
-        pdf.set_right_margin(right_margin_p2)
-        pdf.set_x(left_margin_p2)
-        pdf.set_y(pdf.h - 15) # Position near bottom of the page
-        pdf.multi_cell(content_width_p2, 4, clean_text_for_latin1(f"Generated for {user_info['name']}"), align='R')
+    # User info at the very bottom of the second page, aligned right
+    pdf.set_font("Arial", "I", 8)
+    # Reset margins for a full width cell to align right
+    pdf.set_left_margin(left_margin_p2) # Revert to page 2 margins
+    pdf.set_right_margin(right_margin_p2)
+    pdf.set_x(left_margin_p2)
+    pdf.set_y(pdf.h - 15) # Position near bottom of the page
+    pdf.multi_cell(content_width_p2, 4, clean_text_for_latin1(f"Generated for {user_info['name']}"), align='R')
         
     return pdf.output(dest='S').encode('latin-1')
 
@@ -827,19 +810,19 @@ def show_feedback_form():
 def show_main_app_page():
     st.title("📅 This Day in History")
 
-    # Apply dementia-friendly styling if enabled
-    if st.session_state['dementia_mode']:
-        st.markdown(
-            """
-            <style>
-            body { font-family: 'Arial', sans-serif; font-size: 24px; line-height: 1.5; }
-            h1, h2, h3, h4, h5, h6 { font-family: 'Arial', sans-serif; font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
-            p { margin-bottom: 1em; }
-            </style>
-            """,
-            unsafe_allow_html=True
-        )
-        st.markdown("<p style='font-size:24px; font-weight:bold;'>Today's Daily Page</p>", unsafe_allow_html=True)
+    # Removed dementia-friendly styling if enabled
+    # if st.session_state['dementia_mode']:
+    #     st.markdown(
+    #         """
+    #         <style>
+    #         body { font-family: 'Arial', sans-serif; font-size: 24px; line-height: 1.5; }
+    #         h1, h2, h3, h4, h5, h6 { font-family: 'Arial', sans-serif; font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
+    #         p { margin-bottom: 1em; }
+    #         </style>
+    #         """,
+    #         unsafe_allow_html=True
+    #     )
+    st.markdown("<p style='font-size:24px; font-weight:bold;'>Today's Daily Page</p>", unsafe_allow_html=True)
 
 
     today = datetime.today()
@@ -908,7 +891,7 @@ def show_main_app_page():
     
     # Generate PDF bytes once
     pdf_bytes_main = generate_full_history_pdf(
-        data, selected_date.strftime('%B %d, %Y'), user_info, st.session_state['dementia_mode']
+        data, selected_date.strftime('%B %d, %Y'), user_info # Removed dementia_mode parameter
     )
     
     # Create Base64 encoded link
@@ -1286,23 +1269,23 @@ if st.session_state['is_authenticated']:
     st.sidebar.markdown("---")
     st.sidebar.header("Settings")
     
-    # Use columns to place the checkbox and the info icon next to each other
-    col_dementia, col_info = st.sidebar.columns([0.8, 0.2])
-    with col_dementia:
-        st.session_state['dementia_mode'] = st.checkbox("Dementia-Friendly Mode", value=st.session_state['dementia_mode'], key="sidebar_dementia_mode")
-    with col_info:
-        with st.popover("ⓘ"):
-            st.markdown(
-                """
-                The dementia-friendly mode is designed to make the daily history content more accessible, particularly for users with cognitive impairments. When this mode is active, the generated PDF download will feature:
+    # Removed dementia mode checkbox and info popover
+    # col_dementia, col_info = st.sidebar.columns([0.8, 0.2])
+    # with col_dementia:
+    #     st.session_state['dementia_mode'] = st.checkbox("Dementia-Friendly Mode", value=st.session_state['dementia_mode'], key="sidebar_dementia_mode")
+    # with col_info:
+    #     with st.popover("ⓘ"):
+    #         st.markdown(
+    #             """
+    #             The dementia-friendly mode is designed to make the daily history content more accessible, particularly for users with cognitive impairments. When this mode is active, the generated PDF download will feature:
 
-                * **Larger Font Size**: The text in the PDF will be displayed in a significantly larger font (24pt Arial) compared to the standard mode (12pt-20pt). This improves readability and reduces eye strain.
-                * **Increased Line Height and Spacing**: There is more vertical space between lines of text and between different sections. This reduces visual clutter and makes it easier to follow the content.
-                * **Simplified Formatting**: The PDF uses a simpler layout without bolding for subheadings within the content, focusing on clear, unobstructed presentation of information.
+    #             * **Larger Font Size**: The text in the PDF will be displayed in a significantly larger font (24pt Arial) compared to the standard mode (12pt-20pt). This improves readability and reduces eye strain.
+    #             * **Increased Line Height and Spacing**: There is more vertical space between lines of text and between different sections. This reduces visual clutter and makes it easier to follow the content.
+    #             * **Simplified Formatting**: The PDF uses a simpler layout without bolding for subheadings within the content, focusing on clear, unobstructed presentation of information.
                 
-                These adjustments ensure that the content is presented in a way that is easier to read and comprehend, enhancing accessibility for individuals who may benefit from simplified visual and textual presentation.
-                """
-            )
+    #             These adjustments ensure that the content is presented in a way that is easier to read and comprehend, enhancing accessibility for individuals who may benefit from simplified visual and textual presentation.
+    #             """
+    #         )
 
     st.sidebar.subheader("Content Customization")
     st.session_state['preferred_topic_main_app'] = st.sidebar.selectbox(
