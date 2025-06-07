@@ -227,6 +227,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         trivia_text_match = re.search(r"4\. Trivia Questions:\s*(.*?)(?=\n5\. Did You Know?:|\Z)", content, re.DOTALL)
         if trivia_text_match:
             raw_trivia = trivia_text_match.group(1).strip()
+            # Split by newline and process each line, ensuring only up to 5 questions are added
             for line in raw_trivia.split('\n'):
                 line = line.strip()
                 if line:
@@ -248,6 +249,11 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
                     question_text = re.sub(r'^\d+\.\s*', '', question_text).strip()
 
                     trivia_questions.append({'question': question_text, 'answer': answer, 'hint': hint})
+                
+                # IMPORTANT: Limit to 5 questions explicitly
+                if len(trivia_questions) >= 5:
+                    break
+
 
         # Extract content, providing defaults if not found
         event_article = event_article_match.group(1).strip() if event_article_match else "No event article found."
