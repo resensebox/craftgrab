@@ -441,7 +441,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
     3. Fun Fact: Provide one interesting and unusual fun fact that occurred on this day in history.
     4. Trivia Questions: Provide five concise, direct trivia questions based on today’s date. These should be actual questions that require a factual answer, and should not be "Did You Know?" statements or prompts for reflection. Topics can include history, famous birthdays, pop culture, or global events. The questions should be {trivia_complexity}. For each question, provide the correct answer in parentheses and a short, distinct hint in square brackets (e.g., "What year did the Berlin Wall fall? (1989) [Hint: Cold War era]").
     5. Did You Know?: Provide three "Did You Know?" facts related to nostalgic content (e.g., old prices, inventions, fashion facts) from past decades (e.g., 1930s-1970s).
-    6. Memory Prompt: Provide **three** engaging questions to encourage reminiscing and conversation. Each prompt should be on a new line and start with a hyphen. (e.g., "- Do you remember your first concert?", "- What was your favorite childhood game?", "- What's a memorable school event from your youth?").
+    6. Memory Prompts: Provide **two to three** engaging questions to encourage reminiscing and conversation. Each prompt should be a complete sentence or question, without leading hyphens or bullet points in the raw output, ready to be formatted as paragraphs. (e.g., "Do you remember your first concert?", "What was your favorite childhood game?", "What's a memorable school event from your youth?").
 
     Format your response clearly with these headings. Ensure articles are within the specified word counts.
     """
@@ -457,8 +457,8 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         born_article_match = re.search(r"2\. Born on this Day Article:\s*(.*?)(?=\n3\. Fun Fact:|\Z)", content, re.DOTALL)
         fun_fact_match = re.search(r"3\. Fun Fact:\s*(.*?)(?=\n4\. Trivia Questions:|\Z)", content, re.DOTALL)
         
-        # Updated regex for Memory Prompt to capture multiple lines
-        memory_prompt_match = re.search(r"6\. Memory Prompt:\s*(.*?)(?=\n\Z|$)", content, re.DOTALL)
+        # Updated regex for Memory Prompt to capture multiple lines, allowing for paragraph form
+        memory_prompt_match = re.search(r"6\. Memory Prompts:\s*(.*?)(?=\n\Z|$)", content, re.DOTALL)
 
         # Special handling for Trivia Questions to extract questions, answers, and hints
         trivia_questions = []
@@ -494,7 +494,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
 
         # Special handling for Did You Know? to make parsing more robust
         did_you_know_lines = []
-        did_you_know_match = re.search(r"5\. Did You Know\??:?\s*(?:\(Answer:\)\s*)?(.*?)(?=\n6\. Memory Prompt:|\Z)", content, re.DOTALL)
+        did_you_know_match = re.search(r"5\. Did You Know\??:?\s*(?:\(Answer:\)\s*)?(.*?)(?=\n6\. Memory Prompts:|\Z)", content, re.DOTALL)
         if did_you_know_match:
             raw_facts_content = did_you_know_match.group(1).strip()
             for line in raw_facts_content.split('\n'):
@@ -514,17 +514,20 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         born_article = born_article_match.group(1).strip() if born_article_match else "No birth article found."
         fun_fact_section = fun_fact_match.group(1).strip() if fun_fact_match else "No fun fact found."
         
-        # Parse multiple memory prompts into a list
+        # Parse multiple memory prompts into a list, splitting by paragraphs if possible
         memory_prompts_list = []
         if memory_prompt_match:
-            raw_prompts = memory_prompt_match.group(1).strip()
-            for line in raw_prompts.split('\n'):
-                cleaned_line = line.strip()
-                if cleaned_line.startswith('- '):
-                    cleaned_line = cleaned_line[2:].strip() # Remove the hyphen and space
-                if cleaned_line:
-                    memory_prompts_list.append(cleaned_line)
-        
+            raw_prompts_content = memory_prompt_match.group(1).strip()
+            # Split by double newlines to get distinct paragraphs/prompts
+            paragraphs = [p.strip() for p in raw_prompts_content.split('\n\n') if p.strip()]
+            
+            # If still only one paragraph, try splitting by single newline
+            if len(paragraphs) < 2 and '\n' in raw_prompts_content:
+                paragraphs = [p.strip() for p in raw_prompts_content.split('\n') if p.strip()]
+
+            # Filter out any leading hyphens that AI might still generate despite prompt
+            memory_prompts_list = [re.sub(r'^-?\s*', '', p) for p in paragraphs]
+
         # Ensure there are always at least a few prompts, even if AI fails
         if not memory_prompts_list:
             memory_prompts_list = [
@@ -705,9 +708,11 @@ def generate_full_history_pdf(data, today_date_str, user_info): # Removed dement
         pdf.multi_cell(col_width, line_height_normal, "Memory Prompt-") # Replaced ? with -
         current_y_col2 += line_height_normal
         pdf.set_font("Arial", "", article_text_font_size)
-        # Iterate and display each memory prompt
-        for prompt_text in data['memory_prompt_section']:
-            pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(f"- {prompt_text}"))
+        # Iterate and display up to the first 3 memory prompts for PDF
+        for prompt_text in data['memory_prompt_section'][:3]: # Limit to first 3 prompts
+            # Display without a leading hyphen to appear more like a paragraph
+            pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(prompt_text))
+            pdf.ln(2) # Small line break between prompts
             current_y_col2 = pdf.get_y() # Update Y after each prompt line
         current_y_col2 += section_spacing_normal # Spacing after section
         pdf.set_y(current_y_col2)
@@ -897,10 +902,10 @@ def show_main_app_page():
 
     st.markdown("---")
     st.subheader("💬 Memory Lane Prompt-") # Replaced ? with -
-    # Iterate and display each memory prompt
+    # Iterate and display each memory prompt without hyphens
     if data['memory_prompt_section']:
         for prompt_text in data['memory_prompt_section']:
-            st.write(f"- {prompt_text}")
+            st.write(f"{prompt_text}") # Display as paragraph, no leading hyphen
     else:
         st.write("No memory prompts available.")
 
@@ -1250,10 +1255,10 @@ def show_login_register_page():
         st.markdown(f"- {fact}")
 
     st.markdown("### 💬 Memory Lane Prompt-") # Replaced ? with -
-    # Iterate and display each memory prompt for example data
+    # Iterate and display each memory prompt for example data without hyphens
     if example_data['memory_prompt_section']:
         for prompt_text in example_data['memory_prompt_section']:
-            st.write(f"- {prompt_text}")
+            st.write(f"{prompt_text}") # Display as paragraph, no leading hyphen
     else:
         st.write("No memory prompts available.")
 
