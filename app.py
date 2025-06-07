@@ -411,7 +411,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
 
     # Adjust parameters based on difficulty for Trivia Questions ONLY
     # Main articles word count and language tone do not change with difficulty
-    event_word_count, born_word_count = 200, 150 # Fixed for main articles
+    event_word_count, born_word_count = 300, 150 # Increased event_word_count by 100 words
     trivia_complexity = ""
     if difficulty == 'Easy':
         trivia_complexity = "very well-known facts, common knowledge"
@@ -557,15 +557,15 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     # Separator line
     pdf.set_line_width(0.5)
     pdf.line(left_margin, pdf.get_y(), page_width - right_margin, pdf.get_y())
-    pdf.ln(5) # Increased space after line
+    pdf.ln(8) # Increased space after line (from 5 to 8)
 
     pdf.set_font("Arial", "", 10)
     pdf.cell(0, 5, today_date_str.upper(), align='C') # Date below the title
-    pdf.ln(10) # Increased space before content
+    pdf.ln(15) # Increased space before content (from 10 to 15)
 
     pdf.set_line_width(0.2) # Thinner line for content sections
     pdf.line(left_margin, pdf.get_y(), page_width - right_margin, pdf.get_y())
-    pdf.ln(5) # Space after line
+    pdf.ln(8) # Increased space after line (from 5 to 8)
 
     # --- Two-Column Layout ---
     # Store initial Y for content columns to ensure they start at the same height
@@ -589,7 +589,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     # Get estimated height of the article content
     event_article_height = pdf.get_string_width(clean_text_for_latin1(data['event_article'])) / col_width * 5 # Approx height
     pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['event_article']))
-    current_y_col1 += event_article_height + 8 # Increased spacing after section
+    current_y_col1 += event_article_height + 12 # Increased spacing after section (from 8 to 12)
     pdf.set_y(current_y_col1) # Update Y position
 
     # Fun Fact
@@ -599,20 +599,35 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     pdf.set_font("Arial", "", 10)
     fun_fact_height = pdf.get_string_width(clean_text_for_latin1(data['fun_fact_section'])) / col_width * 5
     pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['fun_fact_section']))
-    current_y_col1 += fun_fact_height + 8 # Increased spacing after section
+    current_y_col1 += fun_fact_height + 12 # Increased spacing after section (from 8 to 12)
     pdf.set_y(current_y_col1)
 
     # Daily Trivia
     pdf.set_font("Arial", "B", 12)
     pdf.multi_cell(col_width, 6, "Daily Trivia")
     current_y_col1 += 6
-    pdf.set_font("Arial", "", 10)
+    pdf.set_font("Arial", "", 10) # Reset font to regular for trivia text if needed
+
     for i, item in enumerate(data['trivia_section']):
-        trivia_line = clean_text_for_latin1(f"{chr(97+i)}. {item['question']} (Answer: {item['answer']})")
-        trivia_line_height = pdf.get_string_width(trivia_line) / col_width * 5
-        pdf.multi_cell(col_width, 5, trivia_line)
-        current_y_col1 += trivia_line_height # Update Y after each trivia line
-    current_y_col1 += 8 # Increased spacing after section
+        # Format question bold, answer regular with small spacing
+        question_text_clean = clean_text_for_latin1(f"{chr(97+i)}. {item['question']}")
+        answer_text_clean = clean_text_for_latin1(f"(Answer: {item['answer']})")
+
+        pdf.set_font("Arial", "B", 10) # Bold for question
+        pdf.multi_cell(col_width, 5, question_text_clean)
+        # No direct Y update here for multi_cell; FPDF handles it.
+        # current_y_col1 += pdf.get_string_width(question_text_clean) / col_width * 5 # Approximation, can be inaccurate
+
+        pdf.set_font("Arial", "", 9) # Smaller, regular for answer
+        pdf.multi_cell(col_width, 4, answer_text_clean)
+        # current_y_col1 += pdf.get_string_width(answer_text_clean) / col_width * 4 # Approximation
+
+        pdf.ln(3) # Small space after each trivia question
+        # For simplicity in Y tracking within a column, we can approximate total height added per trivia item
+        # A more precise way would be to get_y() before and after each multi_cell
+        current_y_col1 = pdf.get_y() # Get current Y to accurately track position
+
+    current_y_col1 += 12 # Increased spacing after the entire trivia section (from 8 to 12)
     pdf.set_y(current_y_col1)
 
     # Column 2 (Right Column)
@@ -630,7 +645,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     pdf.multi_cell(col_width, 5, quote_text, align='C')
     current_y_col2 += pdf.get_string_width(quote_text) / col_width * 5 # Estimate height
     pdf.multi_cell(col_width, 5, quote_author, align='C')
-    current_y_col2 += pdf.get_string_width(quote_author) / col_width * 5 + 8 # Increased spacing after section
+    current_y_col2 += pdf.get_string_width(quote_author) / col_width * 5 + 12 # Increased spacing after section (from 8 to 12)
     pdf.set_y(current_y_col2)
 
     # Happy Birthday!
@@ -640,7 +655,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     pdf.set_font("Arial", "", 10)
     born_article_height = pdf.get_string_width(clean_text_for_latin1(data['born_article'])) / col_width * 5
     pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['born_article']))
-    current_y_col2 += born_article_height + 8 # Increased spacing after section
+    current_y_col2 += born_article_height + 12 # Increased spacing after section (from 8 to 12)
     pdf.set_y(current_y_col2)
 
     # Did You Know?
@@ -654,7 +669,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
             did_you_know_height = pdf.get_string_width(did_you_know_line) / col_width * 5
             pdf.multi_cell(col_width, 5, did_you_know_line)
             current_y_col2 += did_you_know_height # Update Y after each fact line
-        current_y_col2 += 8 # Increased spacing after section
+        current_y_col2 += 12 # Increased spacing after section (from 8 to 12)
         pdf.set_y(current_y_col2)
 
     # Memory Prompt
@@ -665,7 +680,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
         pdf.set_font("Arial", "", 10)
         memory_prompt_height = pdf.get_string_width(clean_text_for_latin1(data['memory_prompt_section'])) / col_width * 5
         pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['memory_prompt_section']))
-        current_y_col2 += memory_prompt_height + 8 # Increased spacing after section
+        current_y_col2 += memory_prompt_height + 12 # Increased spacing after section (from 8 to 12)
         pdf.set_y(current_y_col2)
 
     # Reset margins for footer and determine where footer should start
