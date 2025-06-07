@@ -24,10 +24,14 @@ h1 { text-align: center; color: #333333; margin: 2rem auto 1.5rem; font-size: 2.
 """, unsafe_allow_html=True)
 
 # --- OpenAI Init ---
-api_key = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
+api_key = os.environ.get("OPENAI_API_KEY")
+if not api_key and "OPENAI_API_KEY" in st.secrets:
+    api_key = st.secrets["OPENAI_API_KEY"]
+
 if not api_key:
     st.error("❌ OPENAI_API_KEY is missing from environment or secrets.")
     st.stop()
+
 try:
     client_ai = OpenAI(api_key=api_key)
 except Exception as e:
