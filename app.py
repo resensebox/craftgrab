@@ -590,13 +590,15 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     pdf.ln(spacing) # Add a line space at the end of content section
 
     # Enhanced Contact Information in PDF
-    pdf.ln(spacing)
-    pdf.set_font("Arial", "B", 12)
-    pdf.multi_cell(0, line_height, "Contact Us:")
-    pdf.set_font("Arial", "", 10)
-    pdf.multi_cell(0, line_height, "Email: thisdayinhistoryapp@gmail.com")
-    pdf.multi_cell(0, line_height, "Website: ThisDayInHistoryApp.com (Coming Soon!)") # Example placeholder
-    pdf.multi_cell(0, line_height, "Phone: (555) 123-4567 (For Support)") # Example placeholder
+    pdf.ln(spacing + 5) # Add extra space above contact info
+    if not dementia_mode: pdf.set_font("Arial", "B", 10)
+    pdf.multi_cell(0, 5, "---", align='C') # Simple separator line
+    pdf.set_font("Arial", "B", 10) # Slightly smaller font for overall contact section
+    pdf.multi_cell(0, 5, "Contact Us:", align='C')
+    pdf.set_font("Arial", "", 8) # Even smaller for specific details
+    pdf.multi_cell(0, 5, "Email: thisdayinhistoryapp@gmail.com", align='C')
+    pdf.multi_cell(0, 5, "Website: ThisDayInHistoryApp.com (Coming Soon!)", align='C') # Example placeholder
+    pdf.multi_cell(0, 5, "Phone: (555) 123-4567 (For Support)", align='C') # Example placeholder
     pdf.ln(spacing)
 
     if not dementia_mode:
@@ -704,6 +706,9 @@ def show_main_app_page():
     # Display content - Articles are back on the main page
     st.subheader(f"✨ A Look Back at {selected_date.strftime('%B %d')}")
 
+    # New note for scrolling down to download/print at the top of the main page
+    st.info("Make sure to scroll down to download and print your 'This Day In History' worksheet!")
+
     st.markdown("---")
     st.subheader("🗓️ Significant Event")
     st.write(data['event_article'])
@@ -726,9 +731,6 @@ def show_main_app_page():
     st.write(data['memory_prompt_section'])
 
     st.markdown("---")
-
-    # New note for scrolling down to download/print
-    st.info("Make sure to scroll down to download and print your 'This Day In History' worksheet!")
     
     # Generate PDF bytes once
     pdf_bytes_main = generate_full_history_pdf(
@@ -1164,4 +1166,3 @@ if st.session_state['is_authenticated']:
         show_main_app_page()
 else: # Not authenticated, show login/register and January 1st example
     show_login_register_page()
-
