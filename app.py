@@ -5,6 +5,7 @@ from fpdf import FPDF
 import re
 import json
 import base64 # Import base64 for encoding PDF content
+import time # Import time for st.spinner delays
 
 st.set_option('client.showErrorDetails', True)
 st.set_page_config(page_title="This Day in History", layout="centered")
@@ -863,18 +864,19 @@ def show_main_app_page():
                        f"trivia_difficulty_{st.session_state['difficulty']}" # Still include trivia difficulty so data regenerates if it changes
 
     if st.session_state['last_fetched_date'] != current_data_key or st.session_state['daily_data'] is None:
-        st.session_state['daily_data'] = get_this_day_in_history_facts(
-            day, month, user_info, client_ai, 
-            topic=st.session_state.get('preferred_topic_main_app') if st.session_state.get('preferred_topic_main_app') != "None" else None,
-            preferred_decade=st.session_state.get('preferred_decade_main_app') if st.session_state.get('preferred_decade_main_app') != "None" else None,
-            difficulty=st.session_state['difficulty'] # Pass the selected difficulty to generate trivia
-        )
-        st.session_state['last_fetched_date'] = current_data_key
-        st.session_state['trivia_question_states'] = {} # Reset trivia states for new day's data
-        st.session_state['hints_remaining'] = 3 # Reset hints for a new day
-        st.session_state['current_trivia_score'] = 0 # Reset score for a new day
-        st.session_state['total_possible_daily_trivia_score'] = 0 # Reset total possible for a new day
-        st.session_state['score_logged_today'] = False # Reset logging flag
+        with st.spinner("Fetching today's historical facts and generating content..."):
+            st.session_state['daily_data'] = get_this_day_in_history_facts(
+                day, month, user_info, client_ai, 
+                topic=st.session_state.get('preferred_topic_main_app') if st.session_state.get('preferred_topic_main_app') != "None" else None,
+                preferred_decade=st.session_state.get('preferred_decade_main_app') if st.session_state.get('preferred_decade_main_app') != "None" else None,
+                difficulty=st.session_state['difficulty'] # Pass the selected difficulty to generate trivia
+            )
+            st.session_state['last_fetched_date'] = current_data_key
+            st.session_state['trivia_question_states'] = {} # Reset trivia states for new day's data
+            st.session_state['hints_remaining'] = 3 # Reset hints for a new day
+            st.session_state['current_trivia_score'] = 0 # Reset score for a new day
+            st.session_state['total_possible_daily_trivia_score'] = 0 # Reset total possible for a new day
+            st.session_state['score_logged_today'] = False # Reset logging flag
 
     data = st.session_state['daily_data']
 
@@ -882,7 +884,7 @@ def show_main_app_page():
     st.subheader(f"✨ A Look Back at {selected_date.strftime('%B %d')}")
 
     # New note for scrolling down to download/print at the top of the main page
-    st.info("Make sure to scroll down to download and print your 'This Day In History' worksheet!")
+    st.info("💡 Scroll down to download and print your 'This Day In History' worksheet!")
 
     st.markdown("---")
     st.subheader("🗓️ Significant Event")
@@ -913,9 +915,10 @@ def show_main_app_page():
     st.markdown("---")
     
     # Generate PDF bytes once
-    pdf_bytes_main = generate_full_history_pdf(
-        data, selected_date.strftime('%B %d, %Y'), user_info
-    )
+    with st.spinner("Preparing your PDF worksheet..."):
+        pdf_bytes_main = generate_full_history_pdf(
+            data, selected_date.strftime('%B %d, %Y'), user_info
+        )
     
     # Create Base64 encoded link
     b64_pdf_main = base64.b64encode(pdf_bytes_main).decode('latin-1')
@@ -934,12 +937,11 @@ def show_main_app_page():
     
     # --- Offline Access (Conceptual - requires local storage solution) ---
     st.sidebar.markdown("---")
-    st.sidebar.subheader("Offline Access")
-    st.sidebar.info("Offline access for the past 7 days is a planned feature. For now, you can download PDFs to save content.")
+    st.sidebar.subheader("Future Features")
+    st.sidebar.info("🗓️ **Offline Access:** Coming soon! Downloaded PDFs provide a workaround for now.")
     
     # --- Sharing/Email Option (Conceptual - requires external email service) ---
-    st.sidebar.subheader("Share Daily Page")
-    st.sidebar.info("Daily/weekly sharing via email is a planned feature. This would integrate with an email service.")
+    st.sidebar.info("📧 **Share Daily Page:** Future integration with email services for sharing daily/weekly content.")
 
     # Feedback form at the bottom
     show_feedback_form()
@@ -964,7 +966,7 @@ def show_trivia_page():
         options=["Easy", "Medium", "Hard"],
         index=["Easy", "Medium", "Hard"].index(st.session_state['difficulty']), # Set initial value from session state
         key='trivia_difficulty_select',
-        help="Adjusts the complexity of the trivia questions."
+        help="Adjusts the complexity of the trivia questions: Easy (well-known), Medium (general facts), Hard (obscure facts)."
     )
     st.markdown("---")
 
@@ -978,20 +980,21 @@ def show_trivia_page():
 
     # Only re-fetch if the selected difficulty or date has changed
     if st.session_state['last_fetched_date'] != data_key_for_trivia_regen:
-        st.session_state['daily_data'] = get_this_day_in_history_facts(
-            current_selected_date.day, current_selected_date.month, 
-            {'name': st.session_state['logged_in_username']}, client_ai, 
-            topic=st.session_state.get('preferred_topic_main_app') if st.session_state.get('preferred_topic_main_app') != "None" else None,
-            preferred_decade=st.session_state.get('preferred_decade_main_app') if st.session_state.get('preferred_decade_main_app') != "None" else None,
-            difficulty=st.session_state['difficulty']
-        )
-        st.session_state['last_fetched_date'] = data_key_for_trivia_regen # Update fetched key
-        st.session_state['trivia_question_states'] = {} # Reset trivia states for new difficulty's data
-        st.session_state['hints_remaining'] = 3
-        st.session_state['current_trivia_score'] = 0
-        st.session_state['total_possible_daily_trivia_score'] = 0
-        st.session_state['score_logged_today'] = False
-        st.rerun() # Rerun to apply new content
+        with st.spinner(f"Generating new trivia questions for {st.session_state['difficulty']} difficulty..."):
+            st.session_state['daily_data'] = get_this_day_in_history_facts(
+                current_selected_date.day, current_selected_date.month, 
+                {'name': st.session_state['logged_in_username']}, client_ai, 
+                topic=st.session_state.get('preferred_topic_main_app') if st.session_state.get('preferred_topic_main_app') != "None" else None,
+                preferred_decade=st.session_state.get('preferred_decade_main_app') if st.session_state.get('preferred_decade_main_app') != "None" else None,
+                difficulty=st.session_state['difficulty']
+            )
+            st.session_state['last_fetched_date'] = data_key_for_trivia_regen # Update fetched key
+            st.session_state['trivia_question_states'] = {} # Reset trivia states for new difficulty's data
+            st.session_state['hints_remaining'] = 3
+            st.session_state['current_trivia_score'] = 0
+            st.session_state['total_possible_daily_trivia_score'] = 0
+            st.session_state['score_logged_today'] = False
+            st.rerun() # Rerun to apply new content
 
     if st.session_state['daily_data'] and st.session_state['daily_data']['trivia_section']:
         trivia_questions = st.session_state['daily_data']['trivia_section']
@@ -999,6 +1002,8 @@ def show_trivia_page():
         # Calculate total possible points
         st.session_state['total_possible_daily_trivia_score'] = len(trivia_questions) * 3
         st.info(f"**Total Possible Points:** {st.session_state['total_possible_daily_trivia_score']} | **Your Current Score:** {st.session_state['current_trivia_score']}")
+        st.markdown("**Scoring:** You earn 3 points for a correct answer on the first attempt, 2 points on the second, and 1 point on the third. No points are awarded after three incorrect attempts.")
+
 
         for i, trivia_item in enumerate(trivia_questions):
             question_key_base = f"trivia_q_{i}" # Base key for state
@@ -1019,8 +1024,10 @@ def show_trivia_page():
             q_state = st.session_state['trivia_question_states'][question_key_base]
 
             st.markdown(f"---")
+            # Question X of Y indicator
+            st.markdown(f"**Question {i+1} of {len(trivia_questions)}:**")
             # Ensure question marks are preserved by not replacing them in clean_text_for_latin1
-            st.markdown(f"**Question {i+1}:** {trivia_item['question']}")
+            st.markdown(f"{trivia_item['question']}")
 
             col_input, col_check, col_hint = st.columns([0.6, 0.2, 0.2])
 
@@ -1181,7 +1188,7 @@ def show_login_register_page():
                     st.session_state['logged_in_username'] = username
                     st.success(f"Welcome {username}!")
                     log_event("login", username)
-                    set_page('main_app') # Go to main app page
+                    set_page('main_app') # Go to main app page (this handles the rerun)
                 else:
                     st.error("Invalid credentials.")
 
@@ -1212,7 +1219,7 @@ def show_login_register_page():
                             st.session_state['logged_in_username'] = new_username
                             st.success("Account created!")
                             log_event("register", new_username)
-                            set_page('main_app') # Go to main app page
+                            set_page('main_app') # Go to main app page (this handles the rerun)
                         else:
                             st.error("Failed to register user. Please try again.")
                 else:
@@ -1227,7 +1234,9 @@ def show_login_register_page():
     january_1st_example_date = date(datetime.today().year, 1, 1) # Use current year's Jan 1st for the example
     example_user_info = {'name': 'Example User', 'jobs': '', 'hobbies': '', 'decade': '', 'life_experiences': '', 'college_chapter': ''}
     # For the example, use a default difficulty (e.g., 'Medium') as it's not user-selectable here
-    example_data = get_this_day_in_history_facts(january_1st_example_date.day, january_1st_example_date.month, example_user_info, client_ai, difficulty='Medium')
+    
+    with st.spinner("Loading example content..."):
+        example_data = get_this_day_in_history_facts(january_1st_example_date.day, january_1st_example_date.month, example_user_info, client_ai, difficulty='Medium')
 
     st.markdown(f"### ✨ A Look Back at {january_1st_example_date.strftime('%B %d')}")
     st.markdown("### 🗓️ Significant Event")
@@ -1266,9 +1275,10 @@ def show_login_register_page():
 
 
     # Generate PDF bytes once for example content
-    pdf_bytes_example = generate_full_history_pdf(
-        example_data, january_1st_example_date.strftime('%B %d, %Y'), example_user_info
-    )
+    with st.spinner("Preparing example PDF..."):
+        pdf_bytes_example = generate_full_history_pdf(
+            example_data, january_1st_example_date.strftime('%B %d, %Y'), example_user_info
+        )
 
     # Create Base64 encoded link for example content
     b64_pdf_example = base64.b64encode(pdf_bytes_example).decode('latin-1')
@@ -1336,4 +1346,3 @@ if st.session_state['is_authenticated']:
         show_main_app_page()
 else: # Not authenticated, show login/register and January 1st example
     show_login_register_page()
-
