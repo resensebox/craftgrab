@@ -227,30 +227,30 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         trivia_text_match = re.search(r"4\. Trivia Questions:\s*(.*?)(?=\n5\. Did You Know?:|\Z)", content, re.DOTALL)
         if trivia_text_match:
             raw_trivia = trivia_text_match.group(1).strip()
-            # Split by newline and process each line, ensuring only up to 5 questions are added
+            
+            # Use a more specific regex to find lines that look like trivia questions
+            # This regex looks for:
+            # - Starts with optional number (e.g., "1.", "a.")
+            # - Captures the question text
+            # - Captures the answer in parentheses
+            # - Captures the hint in square brackets
+            # It also handles variations where there might be extra spaces.
+            trivia_line_pattern = re.compile(r'^\s*\d*\.?\s*(.*?)\s*\((.*?)\)\s*\[(.*?)\]\s*$')
+
             for line in raw_trivia.split('\n'):
                 line = line.strip()
-                if line:
-                    answer_match = re.search(r'\((.*?)\)', line)
-                    hint_match = re.search(r'\[(.*?)\]', line)
-                    
-                    question_text = line
-                    answer = ''
-                    hint = ''
+                if not line:
+                    continue # Skip empty lines
 
-                    if answer_match:
-                        answer = answer_match.group(1).strip()
-                        question_text = question_text.replace(answer_match.group(0), '').strip()
-                    if hint_match:
-                        hint = hint_match.group(1).strip()
-                        question_text = question_text.replace(hint_match.group(0), '').strip()
+                match = trivia_line_pattern.match(line)
+                if match:
+                    question_text = match.group(1).strip()
+                    answer = match.group(2).strip()
+                    hint = match.group(3).strip()
                     
-                    # Clean up question_text by removing any numbering like "1."
-                    question_text = re.sub(r'^\d+\.\s*', '', question_text).strip()
-
                     trivia_questions.append({'question': question_text, 'answer': answer, 'hint': hint})
                 
-                # IMPORTANT: Limit to 5 questions explicitly
+                # IMPORTANT: Limit to 5 questions explicitly after successful parsing
                 if len(trivia_questions) >= 5:
                     break
 
