@@ -85,12 +85,16 @@ h1, h2, h3, h4, h5, h6, label {
 </style>
 """, unsafe_allow_html=True)
 
+# --- Google Sheets Configuration ---
+GSHEET_USERS_ID = '15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4'
+
 # --- Google Sheets Debugging ---
 def get_gsheet_client():
     try:
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         creds_dict = st.secrets["GOOGLE_SERVICE_JSON"]
-        logging.debug(f"Loaded credentials: {creds_dict.get('client_email', 'no email found')}")
+        if "private_key" in creds_dict and "\\n" in creds_dict["private_key"]:
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
         logging.debug("Google Sheets client successfully authorized.")
@@ -100,50 +104,9 @@ def get_gsheet_client():
         st.error(f"Google Sheets error: {e}")
         return None
 
-# --- Daily Email Export (placeholder) ---
-def send_daily_email(subject, body, to_email):
-    try:
-        smtp_server = os.getenv("SMTP_SERVER")
-        smtp_user = os.getenv("SMTP_USER")
-        smtp_pass = os.getenv("SMTP_PASS")
-
-        msg = MIMEText(body)
-        msg['Subject'] = subject
-        msg['From'] = smtp_user
-        msg['To'] = to_email
-
-        with smtplib.SMTP_SSL(smtp_server, 465) as server:
-            server.login(smtp_user, smtp_pass)
-            server.sendmail(smtp_user, [to_email], msg.as_string())
-        logging.info("Daily email sent successfully.")
-    except Exception as e:
-        logging.error(f"Failed to send email: {e}")
-        st.warning(f"Email send failed: {e}")
-
-# --- Multi-date Comparison (placeholder setup) ---
-if 'history_cache' not in st.session_state:
-    st.session_state['history_cache'] = {}
-
-# --- Initialize App Content ---
-api_key = os.environ.get("OPENAI_API_KEY")
-if not api_key and "OPENAI_API_KEY" in st.secrets:
-    api_key = st.secrets["OPENAI_API_KEY"]
-if not api_key:
-    st.error("❌ OPENAI_API_KEY is missing.")
-    st.stop()
-client_ai = OpenAI(api_key=api_key)
-
-DB_NAME = 'users.db'
-def init_db():
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password_plain TEXT NOT NULL)''')
-    conn.commit()
-    conn.close()
-init_db()
-
+# --- Updated add_user to log to specific Sheet ---
 def add_user(username, password):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("users.db")
     c = conn.cursor()
     try:
         c.execute("INSERT INTO users (username, password_plain) VALUES (?, ?)", (username, password))
@@ -151,26 +114,41 @@ def add_user(username, password):
         client = get_gsheet_client()
         if client:
             try:
-                sheet = client.open("This Day in History").worksheet("Users")
-                sheet.append_row([username, str(datetime.now())])
-                logging.info(f"User {username} logged in and recorded in Google Sheets.")
+                sheet = client.open_by_key(GSHEET_USERS_ID).worksheet("Users")
+                sheet.append_row([username, str(datetime.now()), "REGISTER"])
+                logging.info(f"User {username} registered and logged to Google Sheets.")
             except Exception as sheet_error:
-                logging.error(f"Failed to write to Google Sheet: {sheet_error}")
+                logging.error(f"Failed to log user to Google Sheet: {sheet_error}")
         return True
     except sqlite3.IntegrityError:
         return False
     finally:
         conn.close()
 
+# --- Add login logging ---
+def log_login(username):
+    client = get_gsheet_client()
+    if client:
+        try:
+            sheet = client.open_by_key(GSHEET_USERS_ID).worksheet("Users")
+            sheet.append_row([username, str(datetime.now()), "LOGIN"])
+            logging.info(f"Login by {username} logged to Google Sheets.")
+        except Exception as sheet_error:
+            logging.error(f"Failed to log login to Google Sheet: {sheet_error}")
+
+# --- Verify user login ---
 def verify_user(username, password):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("users.db")
     c = conn.cursor()
     c.execute("SELECT password_plain FROM users WHERE username = ?", (username,))
     result = c.fetchone()
     conn.close()
-    return result and result[0] == password
+    if result and result[0] == password:
+        log_login(username)
+        return True
+    return False
 
-# --- PDF Helper ---
+# --- Generate PDF ---
 def generate_article_pdf(title, content):
     pdf = FPDF()
     pdf.add_page()
@@ -181,91 +159,92 @@ def generate_article_pdf(title, content):
     pdf.multi_cell(0, 8, content.encode('latin-1', 'replace').decode('latin-1'))
     return pdf.output(dest='S').encode('latin-1')
 
-# --- Auth ---
-if 'logged_in' not in st.session_state:
-    st.session_state['logged_in'] = False
-if 'show_login' not in st.session_state:
-    st.session_state['show_login'] = True
-
-if not st.session_state.logged_in:
-    if st.session_state.show_login:
-        with st.sidebar.form("login"):
-            st.text_input("Username", key="login_user")
-            st.text_input("Password", type="password", key="login_pass")
-            if st.form_submit_button("Log In"):
-                if verify_user(st.session_state.login_user, st.session_state.login_pass):
-                    st.session_state.logged_in = True
-                    st.session_state.username = st.session_state.login_user
-                    st.rerun()
-                else:
-                    st.error("Incorrect username or password")
-        if st.sidebar.button("Don't have an account?"):
-            st.session_state.show_login = False
-            st.rerun()
-    else:
-        with st.sidebar.form("register"):
-            st.text_input("New Username", key="reg_user")
-            st.text_input("New Password", type="password", key="reg_pass")
-            st.text_input("Confirm Password", type="password", key="reg_confirm")
-            if st.form_submit_button("Register"):
-                if st.session_state.reg_pass == st.session_state.reg_confirm:
-                    if add_user(st.session_state.reg_user, st.session_state.reg_pass):
-                        st.success("Registration successful. Please log in.")
-                        st.session_state.show_login = True
-                        st.rerun()
-                    else:
-                        st.error("Username already exists.")
-                else:
-                    st.error("Passwords do not match.")
-        if st.sidebar.button("Already registered?"):
-            st.session_state.show_login = True
-            st.rerun()
-    st.stop()
-
 # --- Main App Logic ---
 st.header("🗓️ This Day in History!")
-st.sidebar.success(f"Logged in as {st.session_state['username']}")
-if st.sidebar.button("Log Out"):
-    st.session_state.clear()
-    st.rerun()
-
 name = st.text_input("Enter Pair's Name:", "")
 today = st.date_input("Select a date", value=date.today(), max_value=date.today())
 
 if name:
-    prompt = f"""
-    You are a historical assistant. Provide:
-    1. A cultural or positive event from {today.month:02d}-{today.day:02d} (1900-1965)
-    2. A famous birth (1850-1960)
-    3. A fun fact
-    4. 3 trivia Q&A
+    @st.cache_data(ttl=86400)
+    def get_history_data(day, month, ai_client):
+        prompt = f"""
+        You are a historical assistant. Provide:
+        1. A cultural or positive event from {month:02d}-{day:02d} (1900-1965)
+        2. A famous birth (1850-1960)
+        3. A fun fact
+        4. 3 trivia Q&A
 
-    Format:
-    Event: [Title] - [Year]
-    [Description]
+        Format:
+        Event: [Title] - [Year]
+        [Description]
 
-    Born on this Day: [Name]
-    [Description]
+        Born on this Day: [Name]
+        [Description]
 
-    Fun Fact: [Fact]
+        Fun Fact: [Fact]
 
-    Trivia Questions:
-    1. [Q]? (Answer: [A])
-    """
-    try:
-        response = client_ai.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        output = response.choices[0].message.content
-    except Exception as e:
-        st.error(f"AI error: {e}")
-        st.stop()
+        Trivia Questions:
+        1. [Q]? (Answer: [A])
+        2. [Q]? (Answer: [A])
+        3. [Q]? (Answer: [A])
+        """
+        try:
+            response = OpenAI(api_key=st.secrets["OPENAI_API_KEY"]).chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            st.error(f"Failed to fetch history: {e}")
+            return None
 
-    for block in output.split("\n\n"):
-        if block.strip():
-            st.markdown(f'<div class="card">{block.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+    output = get_history_data(today.day, today.month, OpenAI(api_key=st.secrets["OPENAI_API_KEY"]))
+    if output:
+        sections = output.split("\n\n")
+        parsed_data = {
+            "Event": "",
+            "Born on this Day": "",
+            "Fun Fact": "",
+            "Trivia Questions": []
+        }
+        current_section = None
+        for line in output.split('\n'):
+            line = line.strip()
+            if line.startswith("Event:"):
+                parsed_data["Event"] = line + "\n"
+                current_section = "Event"
+            elif line.startswith("Born on this Day:"):
+                parsed_data["Born on this Day"] = line + "\n"
+                current_section = "Born on this Day"
+            elif line.startswith("Fun Fact:"):
+                parsed_data["Fun Fact"] = line + "\n"
+                current_section = "Fun Fact"
+            elif line.startswith("Trivia Questions:"):
+                current_section = "Trivia Questions"
+            elif current_section == "Trivia Questions" and line and line[0].isdigit():
+                parsed_data["Trivia Questions"].append(line)
+            elif current_section:
+                parsed_data[current_section] += line + "\n"
 
-    st.download_button("Download Summary PDF", generate_article_pdf(f"This Day in History - {today}", output), file_name="history_summary.pdf")
+        if parsed_data["Event"]:
+            st.markdown(f'<div class="card"><h3>Significant Event:</h3><p>{parsed_data["Event"].replace("\n", "<br>")}</p></div>', unsafe_allow_html=True)
+        if parsed_data["Born on this Day"]:
+            st.markdown(f'<div class="card"><h3>Famous Person Born Today:</h3><p>{parsed_data["Born on this Day"].replace("\n", "<br>")}</p></div>', unsafe_allow_html=True)
+        if parsed_data["Fun Fact"]:
+            st.markdown(f'<div class="card"><h3>Fun Fact:</h3><p>{parsed_data["Fun Fact"].replace("\n", "<br>")}</p></div>', unsafe_allow_html=True)
+        if parsed_data["Trivia Questions"]:
+            trivia_html = "<h3>Trivia Time!</h3><ul>"
+            for q in parsed_data["Trivia Questions"]:
+                trivia_html += f"<li>{q}</li>"
+            trivia_html += "</ul>"
+            st.markdown(f'<div class="card">{trivia_html}</div>', unsafe_allow_html=True)
+
+        full_pdf_content = "\n\n".join([
+            parsed_data["Event"],
+            parsed_data["Born on this Day"],
+            parsed_data["Fun Fact"],
+            "Trivia Questions:\n" + "\n".join(parsed_data["Trivia Questions"])
+        ])
+        st.download_button("Download Summary PDF", generate_article_pdf(f"This Day in History - {today.strftime('%B %d, %Y')}", full_pdf_content), file_name=f"history_summary_{today.strftime('%Y%m%d')}.pdf")
 else:
-    st.info("Please enter a name to begin.")
+    st.info("Please enter a Pair's Name to begin.")
