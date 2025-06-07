@@ -21,69 +21,86 @@ st.set_page_config(page_title="This Day in History", layout="centered")
 # --- Theme Styling ---
 st.markdown("""
 <style>
+/* Overall App Styling */
 body, .stApp {
-    background-color: #ffffff !important;
-    color: #000000 !important; /* Main text color set to black */
+    background-color: #f8f4fa !important;  /* Soft lavender background */
+    color: #2d2d2d !important;  /* Text color */
     font-family: 'Inter', sans-serif;
-    padding: 1rem;
 }
 
+/* Header & Label Styling */
 h1, h2, h3, h4, h5, h6, label {
-    color: #000000 !important; /* Headings and labels set to black */
+    color: #3b2f5e !important;  /* Deep purple */
     text-align: center;
     font-weight: 700;
-    margin: 2rem auto 1.5rem;
-    font-size: 2em;
 }
 
-.stButton>button {
-    background-color: #4CAF50;
+/* Buttons */
+.stButton > button {
+    background-color: #f49d37;  /* Warm orange */
     color: white;
-    padding: 0.8em 2em;
+    padding: 0.75em 1.5em;
+    font-size: 1em;
+    font-weight: 600;
     border: none;
-    border-radius: 8px;
-    font-weight: bold;
-    box-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+    border-radius: 10px;
+    box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.1);
+    transition: background 0.3s ease;
 }
-.stButton>button:hover {
-    background-color: #45a049;
+.stButton > button:hover {
+    background-color: #d87f1f;
     transform: translateY(-2px);
 }
 
-.stTextInput>div>div>input {
-    background-color: #ffffff;
-    color: #000000; /* Input text color set to black */
-    border-radius: 8px;
+/* Text Inputs */
+.stTextInput > div > div > input {
+    background-color: #fff;
+    color: #2d2d2d;
+    border-radius: 10px;
     padding: 10px;
-    border: 1px solid #ccc;
-    box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
+    border: 1px solid #cfc3dd;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+.stTextInput > div > div > input:focus {
+    border-color: #9e7ac2;
+    outline: none;
 }
 
-.stTextInput>div>div>input:focus {
-    border-color: #4CAF50;
-}
-
+/* Card Containers */
 .card {
-    background-color: #f8f9fa;
-    border-radius: 12px;
+    background-color: #ffffff;
+    border-radius: 14px;
     padding: 20px;
     margin: 20px 0;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.05); /* Corrected box-shadow syntax */
-    border: 1px solid #e0e0e0;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.04);
+    border: 1px solid #ebdff7;
 }
 .card h3 {
     font-size: 1.4em;
-    margin-bottom: 0.5em; /* Corrected margin-bottom syntax */
-    color: #000; /* Card headings set to black */
+    margin-bottom: 0.5em;
+    color: #3b2f5e;
 }
 .card p {
     font-size: 1.1em;
-    color: #000; /* Changed from #333 to #000 for better contrast on cards */
-    line-height: 1.6em; /* Corrected line-height syntax */
+    color: #2d2d2d;
+    line-height: 1.6em;
     margin-bottom: 1em;
+}
+
+/* Sidebar Styling */
+section[data-testid="stSidebar"] {
+    background-color: #ede2f3 !important;
+}
+section[data-testid="stSidebar"] .css-1d391kg {  /* For newer Streamlit sidebar headers */
+    color: #3b2f5e !important;
+}
+section[data-testid="stSidebar"] .stButton > button {
+    background-color: #f49d37 !important;
+    color: white;
 }
 </style>
 """, unsafe_allow_html=True)
+
 
 # --- Google Sheets Configuration ---
 GSHEET_USERS_ID = '15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4'
