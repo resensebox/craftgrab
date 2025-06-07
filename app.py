@@ -259,9 +259,9 @@ def log_trivia_score(username, score):
             ws.append_row(["Username", "Score", "Timestamp"]) # Add headers if new sheet
         
         ws.append_row([
-            username,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             score,
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            username
         ])
         return True
     except Exception as e:
@@ -369,6 +369,7 @@ def clean_text_for_latin1(text):
     text = text.replace('\u00e9', 'e')  # é (e acute)
     text = text.replace('\u00e2', 'a')  # â (a circumflex)
     text = text.replace('\u00e7', 'c')  # ç (c cedilla)
+    text = text.replace('?', '-') # Replace question marks with dashes
     # Add more replacements as needed for other common problematic characters
     
     # Fallback for any remaining non-latin-1 characters (replace with '?')
@@ -721,6 +722,12 @@ Mindful Libraries empowers care teams to reconnect residents with their pasts, s
     pdf.set_font("Arial", "", 12)
     pdf.multi_cell(0, 7, clean_text_for_latin1("Email: thisdayinhistoryapp@gmail.com"), 0, 'C')
     pdf.multi_cell(0, 7, clean_text_for_latin1("Website: ThisDayInHistoryApp.com (Coming Soon!)"), 0, 'C')
+    
+    # Add the bold website URL
+    pdf.set_font("Arial", "B", 12) # Set font to bold
+    pdf.multi_cell(0, 7, clean_text_for_latin1("www.mindfullibraries.com"), 0, 'C')
+    pdf.set_font("Arial", "", 12) # Reset font to normal
+
     pdf.multi_cell(0, 7, clean_text_for_latin1("Phone: 412-212-6701 (For Support)"), 0, 'C')
     pdf.ln(10)
 
