@@ -59,6 +59,9 @@ if 'custom_masthead_text' not in st.session_state: # NEW: Custom masthead text f
     st.session_state['custom_masthead_text'] = ""
 if 'last_download_status' not in st.session_state: # NEW: To track PDF download logging status for user feedback
     st.session_state['last_download_status'] = None
+# NEW: To track weekly PDF download logging status for user feedback
+if 'last_weekly_download_status' not in st.session_state: 
+    st.session_state['last_weekly_download_status'] = None
 
 # NEW: Initialize OpenAI client once and store in session state
 if 'client_ai' not in st.session_state:
@@ -790,7 +793,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     pdf.ln(8)
 
     pdf.set_font("Arial", "", date_font_size)
-    pdf.cell(0, 5, today_date_str.upper(), align='C') # Date below the title
+    pdf.cell(0, 5, clean_text_for_latin1(today_date_str.upper()), align='C') # Date below the title
     pdf.ln(15)
 
     pdf.set_line_width(0.2) # Thinner line for content sections
@@ -817,7 +820,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     current_y_col1 += line_height_normal # Update Y after title
     pdf.set_font("Arial", "", article_text_font_size) # Ensure font is not bold for article text
     # Translate content explicitly before adding to PDF
-    translated_event_article = translate_text_with_ai(data.get('event_article', ''), current_language) # Removed client_ai
+    translated_event_article = clean_text_for_latin1(translate_text_with_ai(data.get('event_article', ''), current_language)) # Removed client_ai
     pdf.multi_cell(col_width, line_height_normal, translated_event_article)
     current_y_col1 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
 
@@ -829,7 +832,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     current_y_col1 += line_height_normal
     pdf.set_font("Arial", "", article_text_font_size) # Ensure font is not bold for article text
     # Translate content explicitly before adding to PDF
-    translated_fun_fact = translate_text_with_ai(data.get('fun_fact_section', ''), current_language) # Removed client_ai
+    translated_fun_fact = clean_text_for_latin1(translate_text_with_ai(data.get('fun_fact_section', ''), current_language)) # Removed client_ai
     pdf.multi_cell(col_width, line_height_normal, translated_fun_fact)
     current_y_col1 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
     pdf.set_y(current_y_col1)
@@ -863,7 +866,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     current_y_col2 += line_height_normal
     pdf.set_font("Arial", "", article_text_font_size) # Ensure font is not bold for article text
     # Translate content explicitly before adding to PDF
-    translated_born_article = translate_text_with_ai(data.get('born_article', ''), current_language) # Removed client_ai
+    translated_born_article = clean_text_for_latin1(translate_text_with_ai(data.get('born_article', ''), current_language)) # Removed client_ai
     pdf.multi_cell(col_width, line_height_normal, translated_born_article)
     current_y_col2 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
     pdf.set_y(current_y_col2)
@@ -876,8 +879,8 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
         pdf.set_font("Arial", "", article_text_font_size)
         for item in data['did_you_know_section']:
             # Translate each item explicitly before adding to PDF
-            translated_item = translate_text_with_ai(item if item is not None else '', current_language) # Removed client_ai
-            pdf.multi_cell(col_width, line_height_normal, f"- {translated_item}")
+            translated_item = clean_text_for_latin1(translate_text_with_ai(item if item is not None else '', current_language)) # Removed client_ai
+            pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(f"- {translated_item}")) # Ensure the whole f-string is cleaned
             current_y_col2 = pdf.get_y() # Update Y after each fact line
         current_y_col2 += section_spacing_normal # Spacing after section
         pdf.set_y(current_y_col2)
@@ -891,7 +894,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
         # Iterate and display up to the first 3 memory prompts for PDF
         for prompt_text in data['memory_prompt_section'][:3]: # Limit to first 3 prompts
             # Translate each prompt explicitly before adding to PDF
-            translated_prompt = translate_text_with_ai(prompt_text if prompt_text is not None else '', current_language) # Removed client_ai
+            translated_prompt = clean_text_for_latin1(translate_text_with_ai(prompt_text if prompt_text is not None else '', current_language)) # Removed client_ai
             pdf.multi_cell(col_width, line_height_normal, translated_prompt)
             pdf.ln(2) # Small line break between prompts
             current_y_col2 = pdf.get_y() # Update Y after each prompt line
@@ -924,7 +927,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
         pdf.multi_cell(content_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Local History:", current_language))) # Translated # Removed client_ai
         pdf.set_font("Arial", "", article_text_font_size)
         # Translate content explicitly before adding to PDF
-        translated_local_history = translate_text_with_ai(local_history_content, current_language) # Removed client_ai
+        translated_local_history = clean_text_for_latin1(translate_text_with_ai(local_history_content, current_language)) # Removed client_ai
         pdf.multi_cell(content_width, line_height_normal, translated_local_history)
         
         # Restore original margins for subsequent content (Page 2)
@@ -1059,6 +1062,19 @@ def handle_pdf_download_click(username, filename, selected_date):
         st.session_state['last_download_status'] = 'success'
     else:
         st.session_state['last_download_status'] = 'failure'
+
+# NEW: Wrapper function for weekly PDF download button
+def handle_weekly_pdf_download_click(username, filename, selected_date):
+    """
+    Handles the weekly PDF download button click event, logging the download
+    and setting a session state flag for persistent feedback.
+    """
+    success = log_pdf_download(username, filename, selected_date)
+    if success:
+        st.session_state['last_weekly_download_status'] = 'success'
+    else:
+        st.session_state['last_weekly_download_status'] = 'failure'
+
 
 # --- UI Functions for Pages ---
 def show_main_app_page():
@@ -1436,8 +1452,8 @@ def show_trivia_page():
                             trivia_item.get('question', ''), trivia_item.get('answer', '') # Removed client_ai
                         )
                         # Translate to preferred language for display
-                        translated_article = translate_text_with_ai(generated_article_en, st.session_state['preferred_language']) # Removed client_ai
-                        q_state['related_article_content'] = clean_text_for_latin1(translated_article)
+                        translated_article = clean_text_for_latin1(translate_text_with_ai(generated_article_en, st.session_state['preferred_language'])) # Ensured cleaning here
+                        q_state['related_article_content'] = translated_article
                     st.write(q_state['related_article_content'])
             
         st.markdown("---")
@@ -1490,6 +1506,7 @@ def show_weekly_planner_page():
         # Use a spinner to indicate that a process is running, as it might take time.
         with st.spinner(translate_text_with_ai("Generating weekly PDFs and zipping them... This may take a moment.", st.session_state['preferred_language'])): # Removed client_ai
             pdf_files_to_zip = [] # List to store paths of generated PDF files.
+            zip_file_name = "This_Week_in_History.zip" # Define the zip file name here
 
             try:
                 # Create a temporary directory. This directory and its contents will be
@@ -1527,15 +1544,15 @@ def show_weekly_planner_page():
                         )
 
                         # Define the path for the temporary PDF file.
-                        pdf_filename = os.path.join(tmpdir, f"This_Day_in_History_{date_str}.pdf")
+                        pdf_filename_temp = os.path.join(tmpdir, f"This_Day_in_History_{date_str}.pdf")
                         # Write the PDF bytes to the temporary file.
-                        with open(pdf_filename, "wb") as f:
+                        with open(pdf_filename_temp, "wb") as f:
                             f.write(pdf_bytes)
-                        pdf_files_to_zip.append(pdf_filename) # Add the file path to the list.
+                        pdf_files_to_zip.append(pdf_filename_temp) # Add the file path to the list.
                         time.sleep(0.1) # Small delay to improve UX and prevent hammering resources/APIs.
 
                     # Define the path for the output ZIP file.
-                    zip_filepath = os.path.join(tempfile.gettempdir(), "This_Week_in_History.zip")
+                    zip_filepath = os.path.join(tempfile.gettempdir(), zip_file_name)
                     # Create the ZIP file and add all generated PDFs to it.
                     with zipfile.ZipFile(zip_filepath, 'w', zipfile.ZIP_DEFLATED) as zipf:
                         for pdf_file in pdf_files_to_zip:
@@ -1550,9 +1567,10 @@ def show_weekly_planner_page():
                     st.download_button(
                         label=translate_text_with_ai("⬇️ Download This_Week_in_History.zip", st.session_state['preferred_language']), # Removed client_ai
                         data=zip_bytes,
-                        file_name="This_Week_in_History.zip",
+                        file_name=zip_file_name,
                         mime="application/zip",
-                        key="download_weekly_zip_button" # Unique key for the button.
+                        on_click=handle_weekly_pdf_download_click, # Use the new handler for weekly download
+                        args=(st.session_state['logged_in_username'], zip_file_name, start_date) # Pass arguments
                     )
                     st.success(translate_text_with_ai("Weekly PDFs generated and zipped successfully! Click the button above to download.", st.session_state['preferred_language'])) # Removed client_ai
 
@@ -1561,6 +1579,14 @@ def show_weekly_planner_page():
                 st.error(translate_text_with_ai(f"An error occurred during PDF generation or zipping: {e}", st.session_state['preferred_language'])) # Removed client_ai
                 st.error(translate_text_with_ai("Please ensure your `generate_full_history_pdf` and data fetching logic are correctly implemented and accessible.", st.session_state['preferred_language'])) # Removed client_ai
         
+    # Display status message for weekly download if any
+    if st.session_state['last_weekly_download_status'] == 'success':
+        st.success(translate_text_with_ai("Weekly PDF download successfully logged to Google Sheet!", st.session_state['preferred_language'])) # Removed client_ai
+        st.session_state['last_weekly_download_status'] = None # Clear the message after display
+    elif st.session_state['last_weekly_download_status'] == 'failure':
+        st.error(translate_text_with_ai("Failed to log weekly PDF download to Google Sheet. Please check permissions or try again.", st.session_state['preferred_language'])) # Removed client_ai
+        st.session_state['last_weekly_download_status'] = None # Clear the message after display
+
     st.markdown("---") # Visual separator
     # Navigation buttons within the page for convenience.
     st.button(translate_text_with_ai("⬅️ Back to Main App", st.session_state['preferred_language']), on_click=lambda: set_page('main_app')) # Removed client_ai
