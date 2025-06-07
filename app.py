@@ -149,7 +149,7 @@ st.markdown(
     div[data-testid="stHorizontalBlock"] {
         background-color: transparent !important;
     }
-    /* Adjust button colors for main content */
+    /* Adjust button colors for general main content buttons */
     .stButton > button {
         background-color: #555555; /* Darker button for main content */
         color: #E0E0E0;
@@ -165,6 +165,18 @@ st.markdown(
         color: #E0E0E0;
         border-color: #444444;
     }
+
+    /* Specific styling for the "Check Answer" button */
+    div[data-testid^="stButton-primary-check_btn_"] > button {
+        background-color: #FFFFFF !important; /* White background */
+        color: #000000 !important; /* Black text */
+    }
+
+    div[data-testid^="stButton-primary-check_btn_"] > button:hover {
+        background-color: #F0F0F0 !important; /* Slightly off-white on hover */
+        color: #000000 !important;
+    }
+
     </style>
     """,
     unsafe_allow_html=True
@@ -766,7 +778,7 @@ def show_trivia_page():
             with col_check:
                 # Disable check button if correct, no input, or out of chances
                 if not q_state['is_correct'] and not q_state.get('out_of_chances', False):
-                    if st.button("Check", key=f"check_btn_{question_key_base}", disabled=not user_input.strip()):
+                    if st.button("Check Answer", key=f"check_btn_{question_key_base}", disabled=not user_input.strip()): # Changed button text to "Check Answer"
                         user_answer_cleaned = user_input.strip().lower()
                         correct_answer_cleaned = trivia_item['answer'].strip().lower()
 
