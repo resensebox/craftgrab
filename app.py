@@ -170,11 +170,13 @@ st.markdown(
     div[data-testid^="stButton-primary-check_btn_"] > button {
         background-color: #FFFFFF !important; /* White background */
         color: #000000 !important; /* Black text */
+        border: 1px solid #000000 !important; /* Add a thin black border for contrast */
     }
 
     div[data-testid^="stButton-primary-check_btn_"] > button:hover {
         background-color: #F0F0F0 !important; /* Slightly off-white on hover */
         color: #000000 !important;
+        border: 1px solid #000000 !important;
     }
 
     </style>
