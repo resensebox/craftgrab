@@ -277,8 +277,9 @@ def log_trivia_score(username, score):
             ws = sheet.add_worksheet(title="History", rows="100", cols="3")
             ws.append_row(["Username", "Score", "Timestamp"]) # Add headers if new sheet
         
+        # Corrected order: [Username, Score, Timestamp]
         ws.append_row([
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            username,
             score,
             datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         ])
@@ -1260,11 +1261,13 @@ def show_trivia_page():
             # Question X of Y indicator
             st.markdown(f"**{translate_text_with_ai('Question', st.session_state['preferred_language'], client_ai)} {i+1} {translate_text_with_ai('of', st.session_state['preferred_language'], client_ai)} {len(trivia_questions)}:**")
             
-            # Display question, hint, and answer without translation for the trivia page
+            # Display question
             st.markdown(f"{trivia_item.get('question', 'No question available.')}") # Display question
-            st.info(f"Answer: {trivia_item.get('answer', 'No answer available.')}") # Display answer explicitly
-            if trivia_item.get('hint'):
-                st.info(f"Hint: {trivia_item.get('hint', 'No hint available.')}") # Display hint
+            
+            # Display hint ONLY if revealed or out of chances
+            if q_state['hint_revealed'] or q_state.get('out_of_chances', False):
+                 if trivia_item.get('hint'):
+                    st.info(f"Hint: {trivia_item.get('hint', 'No hint available.')}") # Display hint
 
             col_input, col_check, col_hint = st.columns([0.6, 0.2, 0.2])
 
@@ -1315,8 +1318,10 @@ def show_trivia_page():
                             q_state['attempts'] += 1 # Increment attempts on incorrect answer
                             if q_state['attempts'] >= 3:
                                 q_state['out_of_chances'] = True
+                                # Display correct answer here if user is out of chances
                                 translated_correct_answer = translate_text_with_ai(trivia_item.get('answer', ''), st.session_state['preferred_language'], client_ai) # Use .get() here too
                                 q_state['feedback'] = translate_text_with_ai(f"❌ You've used all {q_state['attempts']} attempts. The correct answer was: **{translated_correct_answer}**. You earned 0 points for this question.", st.session_state['preferred_language'], client_ai)
+                                st.info(f"Answer: {trivia_item.get('answer', 'No answer available.')}") # Display answer immediately if out of chances
                                 # Ensure points_earned is 0 if out of chances and not previously correct
                                 if q_state['points_earned'] == 0:
                                     q_state['points_earned'] = 0 # Explicitly set to 0
@@ -1331,11 +1336,8 @@ def show_trivia_page():
                         st.session_state['hints_remaining'] -= 1
                         q_state['hint_revealed'] = True
                         # No st.rerun() needed here; button click triggers rerun automatically
-                # Always display hint if it was revealed for this question AND hint content exists
-                elif q_state['hint_revealed'] and trivia_item.get('hint'):
-                    st.info(f"{translate_text_with_ai('Hint', st.session_state['preferred_language'], client_ai)}: {trivia_item.get('hint', '')}")
-                # If question is correct or out of chances, display the hint if it exists (for learning)
-                elif (q_state['is_correct'] or q_state.get('out_of_chances', False)) and trivia_item.get('hint'):
+                # Always display hint if it was revealed for this question OR out of chances (for learning) AND hint content exists
+                elif (q_state['hint_revealed'] or q_state.get('out_of_chances', False)) and trivia_item.get('hint'):
                     st.info(f"{translate_text_with_ai('Hint', st.session_state['preferred_language'], client_ai)}: {trivia_item.get('hint', '')}")
 
             # Display feedback based on the state
