@@ -121,6 +121,29 @@ def get_leaderboard_data():
         st.error(f"❌ Error retrieving leaderboard data: {e}")
         return {}
 
+def check_partial_correctness_with_ai(user_answer, correct_answer, _ai_client):
+    """
+    Uses AI to determine if a user's answer is partially correct compared to the actual answer.
+    Returns "Yes" or "No".
+    """
+    prompt = f"""
+    Compare the user's answer "{user_answer}" with the correct answer "{correct_answer}".
+    Is the user's answer partially correct or substantially similar to the correct answer, even if not an exact match?
+    Consider misspellings, slightly different phrasing, or capturing the main idea.
+    Respond with "Yes" or "No" only.
+    """
+    try:
+        response = _ai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=5, # Expecting a short answer
+            temperature=0.0 # Make it deterministic
+        )
+        return response.choices[0].message.content.strip().lower() == "yes"
+    except Exception as e:
+        st.warning(f"⚠️ AI partial correctness check failed: {e}. Defaulting to exact match for this question.")
+        return False
+
 
 # --- OpenAI API Setup ---
 if "OPENAI_API_KEY" not in st.secrets:
@@ -179,7 +202,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
     1. Event Article: Write a short article (around 200 words) about a famous historical event that happened on this day {event_year_range}{topic_clause}{decade_clause}.
     2. Born on this Day Article: Write a brief article (around 150-200 words) about a well-known person born on this day {born_year_range}{decade_clause}.
     3. Fun Fact: Provide one interesting and unusual fun fact that occurred on this day in history.
-    4. Trivia Questions: Provide five trivia questions based on today’s date, spanning topics like history, famous birthdays, pop culture, or global events. For each question, provide the answer in parentheses and a short, distinct hint in square brackets (e.g., "[Hint: ...]").
+    4. Trivia Questions: Provide five concise, direct trivia questions based on today’s date. These should be actual questions that require a factual answer, and should not be "Did You Know?" statements or prompts for reflection. Topics can include history, famous birthdays, pop culture, or global events. For each question, provide the correct answer in parentheses and a short, distinct hint in square brackets (e.g., "What year did the Berlin Wall fall? (1989) [Hint: Cold War era]").
     5. Did You Know?: Provide three "Did You Know?" facts related to nostalgic content (e.g., old prices, inventions, fashion facts) from past decades (e.g., 1930s-1970s).
     6. Memory Prompt: Provide one engaging question to encourage reminiscing and conversation (e.g., "Do you remember your first concert?", "What was your favorite childhood game?").
 
@@ -487,7 +510,15 @@ def show_trivia_page():
                 # Disable check button if correct, no input, or out of chances
                 if not q_state['is_correct'] and not q_state.get('out_of_chances', False):
                     if st.button("Check", key=f"check_btn_{question_key_base}", disabled=not user_input.strip()):
-                        if user_input.strip().lower() == trivia_item['answer'].strip().lower():
+                        user_answer_cleaned = user_input.strip().lower()
+                        correct_answer_cleaned = trivia_item['answer'].strip().lower()
+
+                        is_exact_match = (user_answer_cleaned == correct_answer_cleaned)
+                        is_partial_match = False
+                        if not is_exact_match:
+                            is_partial_match = check_partial_correctness_with_ai(user_input, trivia_item['answer'], client_ai)
+
+                        if is_exact_match or is_partial_match:
                             if not q_state['is_correct']: # Only award points if not already correct
                                 q_state['is_correct'] = True
                                 points = 0
@@ -501,10 +532,14 @@ def show_trivia_page():
                                 if q_state['points_earned'] == 0:
                                     q_state['points_earned'] = points
                                     st.session_state['current_trivia_score'] += points
-                                q_state['feedback'] = f"✅ Correct! You earned {points} points for this question."
+                                
+                                if is_exact_match:
+                                    q_state['feedback'] = f"✅ Correct! You earned {points} points for this question."
+                                else: # It's a partial match
+                                    q_state['feedback'] = f"✅ Partially correct! You earned {points} points for this question."
                             else:
                                 q_state['feedback'] = "✅ Already correct!" # Should not happen with disabled button, but as a safeguard
-                        else:
+                        else: # Neither exact nor partial match
                             q_state['attempts'] += 1 # Increment attempts on incorrect answer
                             if q_state['attempts'] >= 3:
                                 q_state['out_of_chances'] = True
