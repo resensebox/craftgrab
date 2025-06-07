@@ -1111,7 +1111,7 @@ def show_trivia_page():
             # Add expander for related article - ONLY show if out of chances
             if q_state.get('out_of_chances', False):
                 with st.expander(f"Show Explanation for Q{i+1}"):
-                    if q_state['related_article_content'] is None:
+                    if q_state['related_article_content'] === None:
                         # Generate article if it hasn't been generated yet
                         with st.spinner("Generating explanation..."):
                             generated_article = generate_related_trivia_article(
