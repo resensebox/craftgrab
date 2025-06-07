@@ -189,7 +189,7 @@ st.markdown(
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+scope = ['https://sheets.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'] # Updated scope for Google Sheets API v4
 if "GOOGLE_SERVICE_JSON" not in st.secrets:
     st.error("❌ GOOGLE_SERVICE_JSON is missing from Streamlit secrets.")
     st.stop()
@@ -259,9 +259,9 @@ def log_trivia_score(username, score):
             ws.append_row(["Username", "Score", "Timestamp"]) # Add headers if new sheet
         
         ws.append_row([
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            username,
             score,
-            username
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         ])
         return True
     except Exception as e:
@@ -550,10 +550,32 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     content_width = page_width - left_margin - right_margin
     col_width = (content_width - 10) / 2 # 10mm gutter between columns
     
+    # Font sizes for normal mode
+    title_font_size = 36
+    date_font_size = 10
+    section_title_font_size = 12
+    article_text_font_size = 10
+    trivia_q_font_size = 10
+    trivia_ans_hint_font_size = 9
+    line_height_normal = 5
+    line_height_trivia_ans_hint = 4
+
+    # Adjust font sizes and line heights for dementia mode
+    if dementia_mode:
+        title_font_size = 36 # Main title remains large
+        date_font_size = 12
+        section_title_font_size = 16
+        article_text_font_size = 14
+        trivia_q_font_size = 14
+        trivia_ans_hint_font_size = 12
+        line_height_normal = 8 # Increased line height for readability
+        line_height_trivia_ans_hint = 6 # Increased line height for readability
+
+
     # --- Masthead ---
     pdf.set_y(10) # Start from top
     pdf.set_x(left_margin)
-    pdf.set_font("Times", "B", 36) # Large, bold font for the title
+    pdf.set_font("Times", "B", title_font_size) # Large, bold font for the title
     pdf.cell(0, 15, "The Daily Resense Register", align='C')
     pdf.ln(15)
 
@@ -562,7 +584,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     pdf.line(left_margin, pdf.get_y(), page_width - right_margin, pdf.get_y())
     pdf.ln(8)
 
-    pdf.set_font("Arial", "", 10)
+    pdf.set_font("Arial", "", date_font_size)
     pdf.cell(0, 5, today_date_str.upper(), align='C') # Date below the title
     pdf.ln(15)
 
@@ -585,41 +607,41 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     pdf.set_y(current_y_col1) # Start content at the same Y level
 
     # On This Date
-    pdf.set_font("Arial", "B", 12)
-    pdf.multi_cell(col_width, 6, "On This Date")
-    current_y_col1 += 6 # Update Y after title
-    pdf.set_font("Arial", "", 10)
-    pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['event_article']))
+    pdf.set_font("Arial", "B", section_title_font_size)
+    pdf.multi_cell(col_width, line_height_normal, "On This Date")
+    current_y_col1 += line_height_normal # Update Y after title
+    pdf.set_font("Arial", "", article_text_font_size)
+    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['event_article']))
     current_y_col1 = pdf.get_y() + 5 # Update Y and add spacing
 
     pdf.set_y(current_y_col1) # Ensure position is updated
 
     # Fun Fact
-    pdf.set_font("Arial", "B", 12)
-    pdf.multi_cell(col_width, 6, "Fun Fact:")
-    current_y_col1 += 6
-    pdf.set_font("Arial", "", 10)
-    pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['fun_fact_section']))
+    pdf.set_font("Arial", "B", section_title_font_size)
+    pdf.multi_cell(col_width, line_height_normal, "Fun Fact:")
+    current_y_col1 += line_height_normal
+    pdf.set_font("Arial", "", article_text_font_size)
+    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['fun_fact_section']))
     current_y_col1 = pdf.get_y() + 5 # Update Y and add spacing
     pdf.set_y(current_y_col1)
 
     # Daily Trivia
-    pdf.set_font("Arial", "B", 12)
-    pdf.multi_cell(col_width, 6, "Daily Trivia")
-    current_y_col1 += 6
-    pdf.set_font("Arial", "", 10) # Reset font to regular for trivia text if needed
+    pdf.set_font("Arial", "B", section_title_font_size)
+    pdf.multi_cell(col_width, line_height_normal, "Daily Trivia")
+    current_y_col1 += line_height_normal
+    pdf.set_font("Arial", "", trivia_q_font_size) # Reset font to regular for trivia text if needed
 
     for i, item in enumerate(data['trivia_section']):
         question_text_clean = clean_text_for_latin1(f"{chr(97+i)}. {item['question']}")
         answer_text_clean = clean_text_for_latin1(f"Answer: {item['answer']}")
         hint_text_clean = clean_text_for_latin1(f"Hint: {item['hint']}")
 
-        pdf.set_font("Arial", "B", 10) # Bold for question
-        pdf.multi_cell(col_width, 5, question_text_clean)
+        pdf.set_font("Arial", "B", trivia_q_font_size) # Bold for question
+        pdf.multi_cell(col_width, line_height_trivia_ans_hint, question_text_clean)
         
-        pdf.set_font("Arial", "", 9) # Smaller, regular for answer
-        pdf.multi_cell(col_width, 4, answer_text_clean)
-        pdf.multi_cell(col_width, 4, hint_text_clean) # Display hint
+        pdf.set_font("Arial", "", trivia_ans_hint_font_size) # Smaller, regular for answer
+        pdf.multi_cell(col_width, line_height_trivia_ans_hint, answer_text_clean)
+        pdf.multi_cell(col_width, line_height_trivia_ans_hint, hint_text_clean) # Display hint
         pdf.ln(3) # Small spacing after each trivia question
 
         current_y_col1 = pdf.get_y() # Get current Y to accurately track position
@@ -634,46 +656,46 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     pdf.set_left_margin(page_width / 2 + 5) # Left margin for right column
 
     # Quote of the Day
-    pdf.set_font("Arial", "B", 12)
-    pdf.multi_cell(col_width, 6, "Quote of the Day", align='C')
-    current_y_col2 += 6
+    pdf.set_font("Arial", "B", section_title_font_size)
+    pdf.multi_cell(col_width, line_height_normal, "Quote of the Day", align='C')
+    current_y_col2 += line_height_normal
     quote_text = clean_text_for_latin1(f'"The only way to do great work is to love what you do."') # Placeholder quote
     quote_author = clean_text_for_latin1("- Unknown") # Placeholder author
-    pdf.set_font("Times", "I", 10) # Italic for quote
-    pdf.multi_cell(col_width, 5, quote_text, align='C')
-    pdf.multi_cell(col_width, 5, quote_author, align='C')
+    pdf.set_font("Times", "I", article_text_font_size) # Italic for quote
+    pdf.multi_cell(col_width, line_height_normal, quote_text, align='C')
+    pdf.multi_cell(col_width, line_height_normal, quote_author, align='C')
     current_y_col2 = pdf.get_y() + 5 # Update Y and add spacing
     pdf.set_y(current_y_col2)
 
     # Happy Birthday!
-    pdf.set_font("Arial", "B", 12)
-    pdf.multi_cell(col_width, 6, "Happy Birthday!")
-    current_y_col2 += 6
-    pdf.set_font("Arial", "", 10)
-    pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['born_article']))
+    pdf.set_font("Arial", "B", section_title_font_size)
+    pdf.multi_cell(col_width, line_height_normal, "Happy Birthday!")
+    current_y_col2 += line_height_normal
+    pdf.set_font("Arial", "", article_text_font_size)
+    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['born_article']))
     current_y_col2 = pdf.get_y() + 5 # Update Y and add spacing
     pdf.set_y(current_y_col2)
 
-    # Did You Know?
+    # Did You Know-
     if data['did_you_know_section']:
-        pdf.set_font("Arial", "B", 12)
-        pdf.multi_cell(col_width, 6, "Did You Know-") # Replaced ? with -
-        current_y_col2 += 6
-        pdf.set_font("Arial", "", 10)
+        pdf.set_font("Arial", "B", section_title_font_size)
+        pdf.multi_cell(col_width, line_height_normal, "Did You Know-") # Replaced ? with -
+        current_y_col2 += line_height_normal
+        pdf.set_font("Arial", "", article_text_font_size)
         for item in data['did_you_know_section']:
             did_you_know_line = clean_text_for_latin1(f"- {item}")
-            pdf.multi_cell(col_width, 5, did_you_know_line)
+            pdf.multi_cell(col_width, line_height_normal, did_you_know_line)
             current_y_col2 = pdf.get_y() # Update Y after each fact line
         current_y_col2 += 5 # Spacing after section
         pdf.set_y(current_y_col2)
 
-    # Memory Prompt
+    # Memory Prompt-
     if data['memory_prompt_section']:
-        pdf.set_font("Arial", "B", 12)
-        pdf.multi_cell(col_width, 6, "Memory Prompt-") # Replaced ? with -
-        current_y_col2 += 6
-        pdf.set_font("Arial", "", 10)
-        pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['memory_prompt_section']))
+        pdf.set_font("Arial", "B", section_title_font_size)
+        pdf.multi_cell(col_width, line_height_normal, "Memory Prompt-") # Replaced ? with -
+        current_y_col2 += line_height_normal
+        pdf.set_font("Arial", "", article_text_font_size)
+        pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['memory_prompt_section']))
         current_y_col2 = pdf.get_y() + 5 # Update Y and add spacing
         pdf.set_y(current_y_col2)
 
@@ -1313,4 +1335,5 @@ if st.session_state['is_authenticated']:
         show_main_app_page()
 else: # Not authenticated, show login/register and January 1st example
     show_login_register_page()
+
 
