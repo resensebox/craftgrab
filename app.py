@@ -70,14 +70,51 @@ init_db()
 # --- Custom CSS ---
 st.markdown("""
 <style>
-body { background-color: #e8f0fe; font-family: 'Inter', sans-serif; } /* This sets the light blue background */
-.stApp { background-color: #e8f0fe; } /* Ensure Streamlit's main app container also gets the color */
-h1 { text-align: center; color: #333333; margin: 2rem auto 1.5rem; font-size: 2.5em; font-weight: 700; }
-.stButton>button { background-color: #4CAF50; color: white; padding: 0.8em 2em; border: none; border-radius: 8px; font-weight: bold; box-shadow: 2px 2px 4px rgba(0,0,0,0.2); }
-.stButton>button:hover { background-color: #45a049; transform: translateY(-2px); }
-.stTextInput>div>div>input { border-radius: 8px; padding: 10px; border: 1px solid #ccc; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05); }
-.stTextInput>div>div>input:focus { border-color: #4CAF50; }
-.stAlert { border-radius: 8px; background-color: #e6f7ff; border-color: #91d5ff; color: #004085; }
+body {
+    background-color: #e8f0fe; /* Light blue background */
+    font-family: 'Inter', sans-serif;
+    color: #333333; /* Dark grey for general text */
+}
+.stApp {
+    background-color: #e8f0fe; /* Ensure Streamlit's main app container also gets the color */
+    color: #333333; /* Dark grey for text within the app container */
+}
+h1, h2, h3, h4, h5, h6 {
+    text-align: center;
+    color: #333333; /* Dark grey for all headings */
+    margin: 2rem auto 1.5rem;
+    font-size: 2.5em;
+    font-weight: 700;
+}
+.stButton>button {
+    background-color: #4CAF50;
+    color: white; /* White text for buttons */
+    padding: 0.8em 2em;
+    border: none;
+    border-radius: 8px;
+    font-weight: bold;
+    box-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+}
+.stButton>button:hover {
+    background-color: #45a049;
+    transform: translateY(-2px);
+}
+.stTextInput>div>div>input {
+    border-radius: 8px;
+    padding: 10px;
+    border: 1px solid #ccc;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
+    color: #333333; /* Dark grey text in input fields */
+}
+.stTextInput>div>div>input:focus {
+    border-color: #4CAF50;
+}
+.stAlert {
+    border-radius: 8px;
+    background-color: #e6f7ff;
+    border-color: #91d5ff;
+    color: #004085; /* Dark blue for alert text */
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -200,7 +237,6 @@ def register_form():
             else:
                 if add_user(new_username, new_password):
                     st.success("Account created successfully! Please log in.")
-                    # Log with security warning
                     logging.info(f"User '{new_username}' registered successfully (password stored insecurely).")
                     st.session_state['show_login'] = True # Switch to login after successful registration
                 else:
