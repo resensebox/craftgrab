@@ -72,6 +72,56 @@ def get_users_from_sheet():
         st.error(f"❌ Error retrieving users from Google Sheet: {e}")
         return {}
 
+def log_trivia_score(username, score):
+    """Logs a user's trivia score to the 'History' worksheet."""
+    try:
+        sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
+        try:
+            ws = sheet.worksheet("History")
+        except gspread.exceptions.WorksheetNotFound:
+            ws = sheet.add_worksheet(title="History", rows="100", cols="3")
+            ws.append_row(["Username", "Score", "Timestamp"]) # Add headers if new sheet
+        
+        ws.append_row([
+            username,
+            score,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ])
+        return True
+    except Exception as e:
+        st.warning(f"⚠️ Could not log trivia score for '{username}': {e}")
+        return False
+
+def get_leaderboard_data():
+    """Retrieves and processes scores for the leaderboard."""
+    try:
+        sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
+        try:
+            ws = sheet.worksheet("History")
+        except gspread.exceptions.WorksheetNotFound:
+            return {} # No history sheet, no leaderboard
+        
+        scores_data = ws.get_all_records(head=1)
+        
+        user_highest_scores = {}
+        for entry in scores_data:
+            username = entry.get('Username')
+            score = entry.get('Score')
+            
+            if username and isinstance(score, (int, float)): # Ensure score is a number
+                if username not in user_highest_scores or score > user_highest_scores[username]:
+                    user_highest_scores[username] = score
+        
+        # Sort users by highest score in descending order
+        sorted_leaderboard = sorted(user_highest_scores.items(), key=lambda item: item[1], reverse=True)
+        
+        # Take top 3
+        return sorted_leaderboard[:3]
+    except Exception as e:
+        st.error(f"❌ Error retrieving leaderboard data: {e}")
+        return {}
+
+
 # --- OpenAI API Setup ---
 if "OPENAI_API_KEY" not in st.secrets:
     st.error("❌ OPENAI_API_KEY is missing from Streamlit secrets.")
@@ -92,9 +142,16 @@ if 'daily_data' not in st.session_state: # Store daily data to avoid re-fetching
 if 'last_fetched_date' not in st.session_state:
     st.session_state['last_fetched_date'] = None # To track when data was last fetched
 if 'trivia_question_states' not in st.session_state:
-    st.session_state['trivia_question_states'] = {} # Stores per-question state: {'q_index': {'user_answer': '', 'is_correct': False, 'feedback': '', 'hint_revealed': False, 'attempts': 0, 'out_of_chances': False}}
+    st.session_state['trivia_question_states'] = {} # Stores per-question state: {'q_index': {'user_answer': '', 'is_correct': False, 'feedback': '', 'hint_revealed': False, 'attempts': 0, 'out_of_chances': False, 'points_earned': 0}}
 if 'hints_remaining' not in st.session_state:
     st.session_state['hints_remaining'] = 3 # Total hints allowed per day
+if 'current_trivia_score' not in st.session_state:
+    st.session_state['current_trivia_score'] = 0
+if 'total_possible_daily_trivia_score' not in st.session_state:
+    st.session_state['total_possible_daily_trivia_score'] = 0
+if 'score_logged_today' not in st.session_state:
+    st.session_state['score_logged_today'] = False
+
 
 # --- This Day in History Logic ---
 def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_client, preferred_decade=None, topic=None):
@@ -275,6 +332,9 @@ def set_page(page_name):
     if page_name == 'main_app':
         st.session_state['trivia_question_states'] = {}
         st.session_state['hints_remaining'] = 3 # Reset hints when going back to main page for a new day's content
+        st.session_state['current_trivia_score'] = 0 # Reset score for a new day
+        st.session_state['total_possible_daily_trivia_score'] = 0 # Reset total possible for a new day
+        st.session_state['score_logged_today'] = False # Reset logging flag
     st.rerun() # Rerun to switch page immediately
 
 
@@ -319,6 +379,9 @@ def show_main_app_page():
         st.session_state['last_fetched_date'] = current_data_key
         st.session_state['trivia_question_states'] = {} # Reset trivia states for new day's data
         st.session_state['hints_remaining'] = 3 # Reset hints for a new day
+        st.session_state['current_trivia_score'] = 0 # Reset score for a new day
+        st.session_state['total_possible_daily_trivia_score'] = 0 # Reset total possible for a new day
+        st.session_state['score_logged_today'] = False # Reset logging flag
 
     data = st.session_state['daily_data']
 
@@ -385,6 +448,10 @@ def show_trivia_page():
     if st.session_state['daily_data'] and st.session_state['daily_data']['trivia_section']:
         trivia_questions = st.session_state['daily_data']['trivia_section']
 
+        # Calculate total possible points
+        st.session_state['total_possible_daily_trivia_score'] = len(trivia_questions) * 3
+        st.info(f"**Total Possible Points:** {st.session_state['total_possible_daily_trivia_score']} | **Your Current Score:** {st.session_state['current_trivia_score']}")
+
         for i, trivia_item in enumerate(trivia_questions):
             question_key_base = f"trivia_q_{i}" # Base key for state
             
@@ -396,7 +463,8 @@ def show_trivia_page():
                     'feedback': '',
                     'hint_revealed': False,
                     'attempts': 0, # NEW: Track attempts for this question
-                    'out_of_chances': False # NEW: Track if user is out of chances for this question
+                    'out_of_chances': False, # NEW: Track if user is out of chances for this question
+                    'points_earned': 0 # NEW: Points earned for this specific question
                 }
 
             q_state = st.session_state['trivia_question_states'][question_key_base]
@@ -420,13 +488,30 @@ def show_trivia_page():
                 if not q_state['is_correct'] and not q_state.get('out_of_chances', False):
                     if st.button("Check", key=f"check_btn_{question_key_base}", disabled=not user_input.strip()):
                         if user_input.strip().lower() == trivia_item['answer'].strip().lower():
-                            q_state['is_correct'] = True
-                            q_state['feedback'] = "✅ Correct!"
+                            if not q_state['is_correct']: # Only award points if not already correct
+                                q_state['is_correct'] = True
+                                points = 0
+                                if q_state['attempts'] == 0: # First try (0 attempts before this correct one)
+                                    points = 3
+                                elif q_state['attempts'] == 1: # Second try
+                                    points = 2
+                                elif q_state['attempts'] == 2: # Third try
+                                    points = 1
+                                # If points have already been awarded, don't add them again
+                                if q_state['points_earned'] == 0:
+                                    q_state['points_earned'] = points
+                                    st.session_state['current_trivia_score'] += points
+                                q_state['feedback'] = f"✅ Correct! You earned {points} points for this question."
+                            else:
+                                q_state['feedback'] = "✅ Already correct!" # Should not happen with disabled button, but as a safeguard
                         else:
                             q_state['attempts'] += 1 # Increment attempts on incorrect answer
                             if q_state['attempts'] >= 3:
                                 q_state['out_of_chances'] = True
-                                q_state['feedback'] = f"❌ You've used all {q_state['attempts']} attempts. The correct answer was: **{trivia_item['answer']}**"
+                                q_state['feedback'] = f"❌ You've used all {q_state['attempts']} attempts. The correct answer was: **{trivia_item['answer']}**. You earned 0 points for this question."
+                                # Ensure points_earned is 0 if out of chances and not previously correct
+                                if q_state['points_earned'] == 0:
+                                    q_state['points_earned'] = 0 # Explicitly set to 0
                             else:
                                 q_state['feedback'] = f"❌ Incorrect. Try again! (Attempts: {q_state['attempts']}/3)"
                         st.rerun() # Rerun to update feedback/disable input immediately
@@ -463,8 +548,23 @@ def show_trivia_page():
         
         if all_completed:
             st.success("You've completed the trivia challenge for today!")
+            if not st.session_state['score_logged_today']:
+                if log_trivia_score(st.session_state['logged_in_username'], st.session_state['current_trivia_score']):
+                    st.session_state['score_logged_today'] = True
+                    st.success("Your score has been logged!")
+                else:
+                    st.error("Failed to log your score.")
         else:
             st.info(f"You have {st.session_state['hints_remaining']} hints remaining.")
+        
+        st.markdown("---")
+        st.subheader("🏆 Leaderboard")
+        leaderboard = get_leaderboard_data()
+        if leaderboard:
+            for rank, (username, score) in enumerate(leaderboard):
+                st.write(f"{rank+1}. {username}: {score} points")
+        else:
+            st.info("No scores logged yet for the leaderboard. Be the first!")
 
         st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_bottom")
     else:
