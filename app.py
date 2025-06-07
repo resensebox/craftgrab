@@ -25,6 +25,18 @@ creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, s
 gs_client = gspread.authorize(creds)
 
 def log_event(event_type, username):
+def save_new_user_to_sheet(username, password, email):
+    try:
+        sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
+        try:
+            ws = sheet.worksheet("Users")
+        except gspread.exceptions.WorksheetNotFound:
+            ws = sheet.add_worksheet(title="Users", rows="100", cols="3")
+            ws.append_row(["Username", "Password", "Email"])
+        ws.append_row([username, password, email])
+    except Exception as e:
+        st.warning(f"⚠️ Could not register user '{username}': {e}")
+
     try:
         sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
         ws = sheet.worksheet("LoginLogs")
@@ -50,9 +62,6 @@ if 'logged_in_username' not in st.session_state:
 # --- Dummy User Store (in production, use Google Sheets or database) ---
 USERS = {"demo": "demo123"}
 
-def save_new_user(username, password):
-    USERS[username] = password
-    return True
 
 # --- This Day in History Logic ---
 def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_client, max_retries=2):
@@ -142,7 +151,7 @@ if st.session_state['is_authenticated']:
         st.session_state['logged_in_username'] = ""
         st.rerun()
 
-    st.title("📅 This Day in History")
+st.title("📅 This Day in History")
     today = datetime.today()
     day, month = today.day, today.month
     user_info = {
@@ -184,6 +193,7 @@ else:
     with register_tab:
         with st.form("register_form"):
             new_username = st.text_input("New Username")
+            new_email = st.text_input("Email")
             new_password = st.text_input("New Password", type="password")
             confirm_password = st.text_input("Confirm Password", type="password")
             if st.form_submit_button("Register"):
