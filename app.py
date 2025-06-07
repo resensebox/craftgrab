@@ -815,7 +815,17 @@ Mindful Libraries empowers care teams to reconnect residents with their pasts, s
     pdf.multi_cell(0, 7, clean_text_for_latin1("Phone: 412-212-6701 (For Support)"), 0, 'C')
     pdf.ln(10)
 
+    # User info at the very bottom of the second page, aligned right
+    pdf.set_font("Arial", "I", 8)
+    # Reset margins for a full width cell to align right
+    pdf.set_left_margin(left_margin_p2) # Revert to page 2 margins
+    pdf.set_right_margin(right_margin_p2)
+    pdf.set_x(left_margin_p2)
+    pdf.set_y(pdf.h - 15) # Position near bottom of the page
+    pdf.multi_cell(content_width_p2, 4, clean_text_for_latin1(f"Generated for {user_info['name']}"), align='R')
+        
     
+# --- Insert Music of the Decades QR Code (if decade selected) ---
 decade = st.session_state.get('preferred_decade_main_app', 'None')
 if decade and decade != 'None':
     qr_buffer = generate_decade_music_qr(decade)
@@ -828,15 +838,6 @@ if decade and decade != 'None':
     pdf.multi_cell(0, 10, clean_text_for_latin1("🎵 Music of the Decades – Scan to Listen"), 0, 'L')
 
 
-# User info at the very bottom of the second page, aligned right
-    pdf.set_font("Arial", "I", 8)
-    # Reset margins for a full width cell to align right
-    pdf.set_left_margin(left_margin_p2) # Revert to page 2 margins
-    pdf.set_right_margin(right_margin_p2)
-    pdf.set_x(left_margin_p2)
-    pdf.set_y(pdf.h - 15) # Position near bottom of the page
-    pdf.multi_cell(content_width_p2, 4, clean_text_for_latin1(f"Generated for {user_info['name']}"), align='R')
-        
     return pdf.output(dest='S').encode('latin-1')
 
 
