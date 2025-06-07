@@ -165,7 +165,7 @@ if 'daily_data' not in st.session_state: # Store daily data to avoid re-fetching
 if 'last_fetched_date' not in st.session_state:
     st.session_state['last_fetched_date'] = None # To track when data was last fetched
 if 'trivia_question_states' not in st.session_state:
-    st.session_state['trivia_question_states'] = {} # Stores per-question state: {'q_index': {'user_answer': '', 'is_correct': False, 'feedback': '', 'hint_revealed': False, 'attempts': 0, 'out_of_chances': False, 'points_earned': 0}}
+    st.session_state['trivia_question_states'] = {} # Stores per-question state: {'q_index': {'user_answer': '', 'is_correct': False, 'feedback': '', 'hint_revealed': False, 'attempts': 0, 'out_of_chances': False, 'points_earned': 0, 'related_article_content': None}}
 if 'hints_remaining' not in st.session_state:
     st.session_state['hints_remaining'] = 3 # Total hints allowed per day
 if 'current_trivia_score' not in st.session_state:
@@ -197,6 +197,31 @@ def clean_text_for_latin1(text):
     # Fallback for any remaining non-latin-1 characters (replace with '?')
     # This aggressive replacement should be a last resort but ensures no encoding errors
     return text.encode('latin-1', errors='replace').decode('latin-1')
+
+# --- New function to generate a specific article for a trivia question ---
+def generate_related_trivia_article(question, answer, _ai_client):
+    """
+    Generates a short educational article explaining the answer to a trivia question.
+    """
+    prompt = f"""
+    Write a concise, educational article (around 50-100 words) that explains the answer to the following trivia question and provides relevant context.
+    
+    Trivia Question: "{question}"
+    Correct Answer: "{answer}"
+    
+    Focus on educating the reader about the topic related to the question and answer.
+    """
+    try:
+        response = _ai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=200, # Max 200 tokens for around 100 words
+            temperature=0.5 # A bit more creativity
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        st.warning(f"⚠️ Could not generate explanation for trivia question: {e}. Please try again.")
+        return "An explanation could not be generated at this time."
 
 
 # --- This Day in History Logic ---
@@ -442,7 +467,7 @@ def show_main_app_page():
 
     data = st.session_state['daily_data']
 
-    # Display content
+    # Display content - Re-added articles to the main page
     st.subheader(f"✨ A Look Back at {today.strftime('%B %d')}")
 
     st.markdown("---")
@@ -521,7 +546,8 @@ def show_trivia_page():
                     'hint_revealed': False,
                     'attempts': 0, # NEW: Track attempts for this question
                     'out_of_chances': False, # NEW: Track if user is out of chances for this question
-                    'points_earned': 0 # NEW: Points earned for this specific question
+                    'points_earned': 0, # NEW: Points earned for this specific question
+                    'related_article_content': None # NEW: Store generated article for this question
                 }
 
             q_state = st.session_state['trivia_question_states'][question_key_base]
@@ -608,15 +634,19 @@ def show_trivia_page():
                 else: # Incorrect but still has chances
                     st.error(q_state['feedback'])
 
-            # Add expander for article context
-            with st.expander(f"Show Article Context for Q{i+1}"):
-                if st.session_state['daily_data']:
-                    st.markdown("##### Significant Event Article:")
-                    st.write(st.session_state['daily_data']['event_article'])
-                    st.markdown("##### Born on this Day Article:")
-                    st.write(st.session_state['daily_data']['born_article'])
-                else:
-                    st.info("No daily data available to show article context.")
+            # Add expander for related article - ONLY show if out of chances
+            if q_state.get('out_of_chances', False):
+                with st.expander(f"Show Explanation for Q{i+1}"):
+                    if q_state['related_article_content'] is None:
+                        # Generate article if it hasn't been generated yet
+                        with st.spinner("Generating explanation..."):
+                            generated_article = generate_related_trivia_article(
+                                trivia_item['question'], trivia_item['answer'], client_ai
+                            )
+                            q_state['related_article_content'] = clean_text_for_latin1(generated_article)
+                        st.write(q_state['related_article_content'])
+                    else:
+                        st.write(q_state['related_article_content'])
             
         st.markdown("---")
         # Check if all questions are answered correctly or out of chances
