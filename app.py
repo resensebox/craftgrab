@@ -679,28 +679,42 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
 
     # --- Page 2 Content ---
     pdf.add_page()
-    pdf.set_left_margin(0) # Reset margins for centering elements
-    pdf.set_right_margin(0)
-    pdf.set_x(0)
+    # Set new, better margins for page 2 content
+    left_margin_p2 = 25
+    right_margin_p2 = 25
+    content_width_p2 = page_width - left_margin_p2 - right_margin_p2
+
+    pdf.set_left_margin(left_margin_p2)
+    pdf.set_right_margin(right_margin_p2)
+    pdf.set_x(left_margin_p2) # Start content at the new left margin
     pdf.set_y(20) # Start further down on the new page
 
-    # About Us
-    pdf.set_font("Arial", "B", 20)
-    pdf.cell(0, 10, "About Us", 0, 1, 'C')
-    pdf.ln(5)
-    pdf.set_font("Arial", "", 12)
-    about_us_text = "Mindful Libraries aims to provide engaging and informative historical content, trivia, and nostalgic facts to foster remembrance and conversation. We strive to create a personalized experience that encourages interaction and provides a daily dose of history."
-    pdf.multi_cell(0, 7, about_us_text, 0, 'C')
-    pdf.ln(20) # More space after About Us
+    # About Us Title
+    pdf.set_font("Arial", "B", 18) # Slightly smaller font for longer title
+    new_about_us_title = "Learn More About US! 🧠📚 Mindful Libraries – A Dementia-Inclusive Reading Program"
+    pdf.multi_cell(content_width_p2, 10, new_about_us_title, 0, 'C') # Using multi_cell for title as it's long
+    pdf.ln(5) # Smaller line break after title
 
-    # Logo
-    logo_width = 70 # Increased size slightly for better visibility on a dedicated page
-    logo_height = 70 
-    logo_x = (page_width - logo_width) / 2
+    # About Us Text
+    pdf.set_font("Arial", "", 11) # Slightly smaller font for better fit
+    new_about_us_text = """Mindful Libraries is a collaborative initiative between Resense, Nana’s Books, and Mirador Magazine, designed to bring adaptive, nostalgic reading experiences to individuals living with dementia. This innovative program provides:
+
+📦 Curated Libraries of dementia-friendly newspapers, books, and magazines
+🎓 Staff Training accredited by NCCAP, focusing on reminiscence, person-centered care, and meaningful engagement
+💻 Digital Access Tools like downloadable discussion guides, activity templates, and reading prompts
+🤝 Partnerships with Long-Term Care Communities to build inclusive, life-enriching environments
+Mindful Libraries empowers care teams to reconnect residents with their pasts, spark joyful conversation, and foster dignity through storytelling and memory-based engagement."""
+    pdf.multi_cell(content_width_p2, 6, new_about_us_text, 0, 'L') # Left align for readability
+    pdf.ln(15) # More space after About Us text
+
+    # Logo - still centered horizontally on the page
+    logo_width = 70
+    logo_height = 70
+    logo_x = (page_width - logo_width) / 2 # Still calculated based on full page width for centering
     pdf.image("https://i.postimg.cc/8CRsCGCC/Chat-GPT-Image-Jun-7-2025-12-32-18-AM.png", x=logo_x, y=pdf.get_y(), w=logo_width, h=logo_height)
     pdf.ln(logo_height + 15) # Add space after logo
 
-    # Contact Information
+    # Contact Information - still centered horizontally on the page
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, "Contact Information", 0, 1, 'C')
     pdf.ln(5)
@@ -714,11 +728,11 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     if not dementia_mode:
         pdf.set_font("Arial", "I", 8)
         # Reset margins for a full width cell to align right
-        pdf.set_left_margin(left_margin)
-        pdf.set_right_margin(right_margin)
-        pdf.set_x(left_margin)
+        pdf.set_left_margin(left_margin_p2) # Revert to page 2 margins
+        pdf.set_right_margin(right_margin_p2)
+        pdf.set_x(left_margin_p2)
         pdf.set_y(pdf.h - 15) # Position near bottom of the page
-        pdf.multi_cell(0, 4, clean_text_for_latin1(f"Generated for {user_info['name']}"), align='R')
+        pdf.multi_cell(content_width_p2, 4, clean_text_for_latin1(f"Generated for {user_info['name']}"), align='R')
         
     return pdf.output(dest='S').encode('latin-1')
 
