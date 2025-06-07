@@ -490,12 +490,7 @@ def parse_single_trivia_entry(entry_string):
         # Capture everything after "Hint:" or "Indice:" until the end of the string or a newline
         hint_match_prefix = re.search(r'(?:Hint|Indice):\s*(.*)', temp_string, re.IGNORECASE | re.DOTALL)
         if hint_match_prefix:
-            extracted_hint_content = hint_match_prefix.group(1).strip()
-            # If the extracted content itself starts with "Hint:", remove it (to avoid "Hint: Hint:")
-            if extracted_hint_content.lower().startswith("hint:"):
-                hint = extracted_hint_content[len("hint:"):].strip()
-            else:
-                hint = extracted_hint_content
+            hint = hint_match_prefix.group(1).strip()
             # Remove the full line that matched the hint
             temp_string = re.sub(r'(?:Hint|Indice):\s*.*', '', temp_string, flags=re.IGNORECASE | re.DOTALL).strip()
 
@@ -571,7 +566,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
     1. Event Article: Write a short article (around {event_word_count} words) about a famous historical event that happened on this day {event_year_range}{topic_clause}{decade_clause}. Use clear, informative language.
     2. Born on this Day Article: Write a brief article (around {born_word_count} words) about a well-known person born on this day {born_year_range}{decade_clause}. Use clear, informative language.
     3. Fun Fact: Provide one interesting and unusual fun fact that occurred on this day in history.
-    4. Trivia Questions: Provide five concise, direct trivia questions based on today’s date. These should be actual questions that require a factual answer, and should not be "Did You Know?" statements or prompts for reflection. **Strictly avoid generating "Did You Know?" statements, "Memory Prompts", or any conversational phrases within the trivia questions themselves.** Topics can include history, famous birthdays, pop culture, or global events. The questions should be {trivia_complexity}. For each question, provide the correct answer in parentheses and a short, distinct hint in square brackets (e.g., "What year did the Berlin Wall fall? (1989) [Hint: Cold War era]").
+    4. Trivia Questions: Provide **exactly five** concise, direct trivia questions based on today’s date. These should be actual questions that require a factual answer, and should not be "Did You Know?" statements or prompts for reflection. **Strictly avoid generating "Did You Know?" statements, "Memory Prompts", or any conversational phrases within the trivia questions themselves.** Topics can include history, famous birthdays, pop culture, or global events. The questions should be {trivia_complexity}. For each question, provide the correct answer in parentheses (like this) and a short, distinct hint in square brackets [like this]. Ensure each question is on a new line and begins with "a. ", "b. ", "c. ", "d. ", "e. " respectively.
     5. Did You Know?: Provide three "Did You Know?" facts related to nostalgic content (e.g., old prices, inventions, fashion facts) from past decades (e.g., 1930s-1970s).
     6. Memory Prompts: Provide **two to three** engaging questions to encourage reminiscing and conversation. Each prompt should be a complete sentence or question, without leading hyphens or bullet points in the raw output, ready to be formatted as paragraphs. (e.g., "Do you remember your first concert?", "What was your favorite childhood game?", "What's a memorable school event from your youth?").
     {local_history_clause}
@@ -599,20 +594,38 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         if trivia_text_match:
             raw_trivia_block = trivia_text_match.group(1).strip()
             
-            # Split by newlines, assuming each line is a potential trivia question
-            # Filter out empty lines
-            potential_trivia_lines = [line.strip() for line in raw_trivia_block.split('\n') if line.strip()]
+            # Use a more robust pattern to find individual trivia entries.
+            # This pattern looks for lines starting with a letter (a-e) or digit, followed by '.' or ')' or '-',
+            # and then captures everything until the next similar pattern or end of string.
+            # This makes it robust to multiline questions/answers within one entry.
+            trivia_entry_pattern = re.compile(r'^\s*(?:[a-eA-E]|\d+)[.)-]?\s*(.*?)(?=(?:\n\s*(?:[a-eA-E]|\d+)[.)-]?\s*|\Z))', re.MULTILINE | re.DOTALL)
+            
+            all_trivia_entries_raw = trivia_entry_pattern.findall(raw_trivia_block)
 
-            for line in potential_trivia_lines:
-                # Attempt to parse each line individually
-                parsed_item = parse_single_trivia_entry(line)
+            for entry_text_raw in all_trivia_entries_raw:
+                # The findall might return a tuple if there are capturing groups, take the first element if so
+                if isinstance(entry_text_raw, tuple):
+                    entry_text_raw = entry_text_raw[0]
+                
+                parsed_item = parse_single_trivia_entry(entry_text_raw)
                 
                 # Add question only if it's not the default "No question found."
-                if parsed_item['question'] != "No question found.":
+                # and it actually contains some meaningful content
+                if parsed_item['question'] != "No question found." and parsed_item['question'].strip() != "":
                     trivia_questions.append(parsed_item)
                 
                 if len(trivia_questions) >= 5: # Limit to 5 questions explicitly
                     break
+        # If less than 5 questions are found, or none, ensure default behavior
+        if len(trivia_questions) < 5:
+            st.warning(f"⚠️ Only {len(trivia_questions)} trivia questions found. AI might not have generated enough or parsing failed for some. Filling missing questions with placeholders.")
+            while len(trivia_questions) < 5:
+                trivia_questions.append({
+                    'question': 'No question available.',
+                    'answer': 'No answer available.',
+                    'hint': 'No hint available.'
+                })
+
 
         # Special handling for Did You Know? to make parsing more robust
         did_you_know_lines = []
