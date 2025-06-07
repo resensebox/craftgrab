@@ -1035,6 +1035,12 @@ def show_main_app_page():
                 local_city=st.session_state['local_city'] if st.session_state['local_city'].strip() else None,
                 local_state_country=st.session_state['local_state_country'] if st.session_state['local_state_country'].strip() else None
             )
+            
+            # Defensive check: Ensure fetched_raw_data is indeed a dictionary
+            if not isinstance(fetched_raw_data, dict):
+                st.error("Generated raw data was not a dictionary. Using default empty data.")
+                fetched_raw_data = _INITIAL_EMPTY_DATA.copy()
+
             # Store both raw and translated data in session state
             st.session_state['raw_fetched_data'] = fetched_raw_data # Store the raw data
             st.session_state['daily_data'] = translate_content(fetched_raw_data, st.session_state['preferred_language'], client_ai)
@@ -1178,6 +1184,11 @@ def show_trivia_page():
                 local_city=st.session_state['local_city'] if st.session_state['local_city'].strip() else None,
                 local_state_country=st.session_state['local_state_country'] if st.session_state['local_state_country'].strip() else None
             )
+            # Defensive check: Ensure fetched_raw_data is indeed a dictionary
+            if not isinstance(fetched_raw_data, dict):
+                st.error("Generated raw data for trivia was not a dictionary. Using default empty data.")
+                fetched_raw_data = _INITIAL_EMPTY_DATA.copy()
+            
             # Store translated content for non-trivia sections, but trivia in raw_data will remain English
             st.session_state['daily_data'] = translate_content(fetched_raw_data, st.session_state['preferred_language'], client_ai) 
             # Store the raw, untranslated trivia questions separately for direct use on trivia page
@@ -1442,6 +1453,12 @@ def show_login_register_page():
             local_city=st.session_state['local_city'] if st.session_state['local_city'].strip() else None,
             local_state_country=st.session_state['local_state_country'] if st.session_state['local_state_country'].strip() else None
         )
+        
+        # Defensive check for example data as well
+        if not isinstance(fetched_raw_example_data, dict):
+            st.error("Generated raw example data was not a dictionary. Using default empty data for example.")
+            fetched_raw_example_data = _INITIAL_EMPTY_DATA.copy()
+            
         example_data = translate_content(fetched_raw_example_data, st.session_state['preferred_language'], client_ai)
 
 
