@@ -535,13 +535,13 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     left_margin = 15
     right_margin = 15
     content_width = page_width - left_margin - right_margin
-    col_width = (content_width - 10) / 2 # 10mm gutter
+    col_width = (content_width - 10) / 2 # 10mm gutter between columns
     
     # --- Masthead ---
     pdf.set_y(10) # Start from top
     pdf.set_x(left_margin)
     pdf.set_font("Times", "B", 36) # Large, bold font for the title
-    pdf.cell(0, 15, "The Daily Chronicle", align='C')
+    pdf.cell(0, 15, "The Daily Resense Register", align='C') # Changed title here
     pdf.ln(10) # Line break after title
 
     # Separator line
@@ -558,98 +558,119 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     pdf.ln(5) # Space after line
 
     # --- Two-Column Layout ---
-    pdf.set_x(left_margin) # Reset X position to left margin
-    start_y_content = pdf.get_y() # Capture Y position after header
+    # Store initial Y for content columns to ensure they start at the same height
+    start_y_content = pdf.get_y()
+    
+    # Track current Y for each column
+    current_y_col1 = start_y_content
+    current_y_col2 = start_y_content
 
     # Column 1 (Left Column)
     pdf.set_left_margin(left_margin)
-    pdf.set_right_margin(page_width / 2 + 5) # Right margin for left column
+    pdf.set_right_margin(page_width / 2 + 5) # Right margin for left column = page_width / 2 + half_gutter
     pdf.set_x(left_margin) # Set X for the first column
-    pdf.set_y(start_y_content) # Start content at the same Y level
+    pdf.set_y(current_y_col1) # Start content at the same Y level
 
     # On This Date
     pdf.set_font("Arial", "B", 12)
     pdf.multi_cell(col_width, 6, "On This Date")
-    pdf.ln(1)
+    current_y_col1 += 6 # Update Y after title
     pdf.set_font("Arial", "", 10)
+    # Get estimated height of the article content
+    event_article_height = pdf.get_string_width(clean_text_for_latin1(data['event_article'])) / col_width * 5 # Approx height
     pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['event_article']))
-    pdf.ln(5)
+    current_y_col1 += event_article_height + 5 # Add content height + spacing
+    pdf.set_y(current_y_col1) # Update Y position
 
     # Fun Fact
     pdf.set_font("Arial", "B", 12)
     pdf.multi_cell(col_width, 6, "Fun Fact:")
-    pdf.ln(1)
+    current_y_col1 += 6
     pdf.set_font("Arial", "", 10)
+    fun_fact_height = pdf.get_string_width(clean_text_for_latin1(data['fun_fact_section'])) / col_width * 5
     pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['fun_fact_section']))
-    pdf.ln(5)
+    current_y_col1 += fun_fact_height + 5
+    pdf.set_y(current_y_col1)
 
     # Daily Trivia
     pdf.set_font("Arial", "B", 12)
     pdf.multi_cell(col_width, 6, "Daily Trivia")
-    pdf.ln(1)
+    current_y_col1 += 6
     pdf.set_font("Arial", "", 10)
     for i, item in enumerate(data['trivia_section']):
-        pdf.multi_cell(col_width, 5, clean_text_for_latin1(f"{chr(97+i)}. {item['question']} (Answer: {item['answer']})"))
-        # Removed hint from PDF for cleaner look, similar to "The Daily Chronicle" trivia section format.
-    pdf.ln(5)
+        trivia_line = clean_text_for_latin1(f"{chr(97+i)}. {item['question']} (Answer: {item['answer']})")
+        trivia_line_height = pdf.get_string_width(trivia_line) / col_width * 5
+        pdf.multi_cell(col_width, 5, trivia_line)
+        current_y_col1 += trivia_line_height # Update Y after each trivia line
+    current_y_col1 += 5 # Add extra space after trivia section
+    pdf.set_y(current_y_col1)
 
     # Column 2 (Right Column)
-    # Set X and margins for the second column
-    pdf.set_xy(page_width / 2 + 5, start_y_content) # X start for right column, Y at same level as left
+    pdf.set_xy(page_width / 2 + 5, current_y_col2) # X start for right column, Y at same level as left
     pdf.set_right_margin(right_margin)
     pdf.set_left_margin(page_width / 2 + 5) # Left margin for right column
 
     # Quote of the Day (Generated for now)
     pdf.set_font("Arial", "B", 12)
     pdf.multi_cell(col_width, 6, "Quote of the Day", align='C')
-    pdf.ln(1)
-    # Generate a simple, generic quote as a placeholder
+    current_y_col2 += 6
     quote_text = clean_text_for_latin1(f'"The only way to do great work is to love what you do."') # Placeholder quote
     quote_author = clean_text_for_latin1("- Unknown") # Placeholder author
     pdf.set_font("Times", "I", 10) # Italic for quote
     pdf.multi_cell(col_width, 5, quote_text, align='C')
+    current_y_col2 += pdf.get_string_width(quote_text) / col_width * 5 # Estimate height
     pdf.multi_cell(col_width, 5, quote_author, align='C')
-    pdf.ln(5)
+    current_y_col2 += pdf.get_string_width(quote_author) / col_width * 5 + 5 # Add spacing
+    pdf.set_y(current_y_col2)
 
     # Happy Birthday!
     pdf.set_font("Arial", "B", 12)
     pdf.multi_cell(col_width, 6, "Happy Birthday!")
-    pdf.ln(1)
+    current_y_col2 += 6
     pdf.set_font("Arial", "", 10)
+    born_article_height = pdf.get_string_width(clean_text_for_latin1(data['born_article'])) / col_width * 5
     pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['born_article']))
-    pdf.ln(5)
+    current_y_col2 += born_article_height + 5
+    pdf.set_y(current_y_col2)
 
     # Did You Know?
     if data['did_you_know_section']:
         pdf.set_font("Arial", "B", 12)
         pdf.multi_cell(col_width, 6, "Did You Know?")
-        pdf.ln(1)
+        current_y_col2 += 6
         pdf.set_font("Arial", "", 10)
         for item in data['did_you_know_section']:
-            pdf.multi_cell(col_width, 5, clean_text_for_latin1(f"- {item}"))
-        pdf.ln(5)
+            did_you_know_line = clean_text_for_latin1(f"- {item}")
+            did_you_know_height = pdf.get_string_width(did_you_know_line) / col_width * 5
+            pdf.multi_cell(col_width, 5, did_you_know_line)
+            current_y_col2 += did_you_know_height # Update Y after each fact line
+        current_y_col2 += 5
+        pdf.set_y(current_y_col2)
 
     # Memory Prompt
     if data['memory_prompt_section']:
         pdf.set_font("Arial", "B", 12)
         pdf.multi_cell(col_width, 6, "Memory Prompt:")
-        pdf.ln(1)
+        current_y_col2 += 6
         pdf.set_font("Arial", "", 10)
+        memory_prompt_height = pdf.get_string_width(clean_text_for_latin1(data['memory_prompt_section'])) / col_width * 5
         pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['memory_prompt_section']))
-        pdf.ln(5)
+        current_y_col2 += memory_prompt_height + 5
+        pdf.set_y(current_y_col2)
 
-    # Reset margins for footer
+    # Reset margins for footer and determine where footer should start
+    # Find the maximum Y position reached by either column
+    max_y_content = max(current_y_col1, current_y_col2)
+    pdf.set_y(max_y_content)
     pdf.set_left_margin(left_margin)
     pdf.set_right_margin(right_margin)
     pdf.set_x(left_margin)
     
-    # Ensure footer is at the bottom of the page if content doesn't fill it, or on new page if it overflows
-    # This is a bit tricky with auto page breaks and columns. We'll simply print it at the current Y position.
-    pdf.ln(10) # Add a buffer space
+    pdf.ln(10) # Add a buffer space before the footer
 
-    # Enhanced Contact Information in PDF - Moved to bottom and made more structured
+    # Enhanced Contact Information in PDF - Centered at the bottom
     pdf.set_font("Arial", "B", 8)
-    pdf.multi_cell(0, 4, "--- Activity Connection ---", align='C') # Consistent with image
+    pdf.multi_cell(0, 4, "--- Activity Connection ---", align='C')
     pdf.set_font("Arial", "", 7)
     pdf.multi_cell(0, 4, "Email: thisdayinhistoryapp@gmail.com", align='C')
     pdf.multi_cell(0, 4, "Website: ThisDayInHistoryApp.com (Coming Soon!)", align='C')
