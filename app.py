@@ -142,7 +142,7 @@ if st.session_state['is_authenticated']:
         st.session_state['logged_in_username'] = ""
         st.rerun()
 
-st.title("📅 This Day in History")
+    st.title("📅 This Day in History")
     today = datetime.today()
     day, month = today.day, today.month
     user_info = {
