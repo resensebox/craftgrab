@@ -1145,6 +1145,8 @@ Want to make it your own? You can even customize the masthead to match your comm
 
 🌍 Need another language? Use the left-hand menu to translate the entire page and your downloadable PDF.
 
+📅 Want to plan a week ahead? Click the Weekly Planner Button to generate a weeks worth of worksheets all at once!
+
 This is a free platform. 
 💬 We'd Love Your Support!
 Word of mouth goes a long way—if you enjoy using This Day In History, please share it with your friends, coworkers, or anyone who might benefit. Your support means the world to us!
