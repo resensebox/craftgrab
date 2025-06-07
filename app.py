@@ -952,10 +952,11 @@ def show_trivia_page():
 
 
 def show_login_register_page():
-    st.title("Login to Access")
+    # Centering the logo using columns
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.image("https://i.postimg.cc/8CRsCGCC/Chat-GPT-Image-Jun-7-2025-12-32-18-AM.png", use_container_width=False, width=200)
 
-    # Add Logo and App Explanation at the top of the login page
-    st.image("https://i.postimg.cc/8CRsCGCC/Chat-GPT-Image-Jun-7-2025-12-32-18-AM.png", use_container_width=False, width=200)
     st.markdown(
         """
         Welcome to **This Day in History**!
@@ -963,6 +964,8 @@ def show_login_register_page():
         Sign in or register to personalize your daily historical journey and track your trivia scores!
         """
     )
+    st.title("Login to Access") # Moved this line
+
     st.markdown("---")
 
     # Feedback email note at the top
