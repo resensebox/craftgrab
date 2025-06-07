@@ -21,111 +21,104 @@ st.set_page_config(page_title="This Day in History", layout="centered")
 # --- Theme Styling ---
 st.markdown("""
 <style>
-/* Base App Styling */
+/* Reset and base colors */
 body, .stApp {
-    background-color: #f8f4fa !important;  /* Soft lavender */
-    color: #2d2d2d !important;  /* Main text color */
+    background-color: #f4f1f8 !important;  /* Light lavender */
+    color: #222 !important;  /* Dark text */
     font-family: 'Inter', sans-serif;
 }
 
-/* Headers & Labels */
+/* Headings */
 h1, h2, h3, h4, h5, h6, label {
     color: #3b2f5e !important;  /* Deep purple */
+    font-weight: bold;
     text-align: center;
-    font-weight: 700;
 }
 
 /* Buttons */
 .stButton > button {
     background-color: #f49d37 !important;  /* Orange */
     color: white !important;
-    padding: 0.75em 1.5em;
-    font-size: 1em;
     font-weight: 600;
     border: none;
-    border-radius: 10px;
-    box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.1);
-    transition: all 0.2s ease;
+    border-radius: 8px;
+    padding: 0.7em 1.5em;
+    box-shadow: 1px 1px 5px rgba(0,0,0,0.1);
+    transition: background 0.2s ease-in-out;
 }
 .stButton > button:hover {
     background-color: #d87f1f !important;
-    transform: translateY(-2px);
+    transform: translateY(-1px);
 }
 
-/* Inputs */
-.stTextInput input {
-    background-color: #ffffff !important;
-    color: #2d2d2d !important;
-    border-radius: 10px;
-    border: 1px solid #cfc3dd;
-    padding: 10px;
-    box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
+/* Input Fields */
+input, textarea {
+    background-color: white !important;
+    color: #222 !important;
+    border: 1px solid #ccc !important;
+    border-radius: 8px !important;
+    padding: 10px !important;
+    box-shadow: none !important;
 }
-.stTextInput input:focus {
+input:focus, textarea:focus {
     border-color: #9e7ac2 !important;
-    outline: none;
+    outline: none !important;
 }
 
-/* Cards and Containers */
-.card {
-    background-color: #ffffff;
-    border-radius: 14px;
-    padding: 20px;
-    margin: 20px 0;
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.04);
-    border: 1px solid #ebdff7;
-}
-.card h3 {
-    font-size: 1.4em;
-    margin-bottom: 0.5em;
-    color: #3b2f5e;
-}
-.card p {
-    font-size: 1.1em;
-    color: #2d2d2d;
-    line-height: 1.6em;
-    margin-bottom: 1em;
-}
-
-/* Sidebar Styling */
+/* Sidebar */
 section[data-testid="stSidebar"] {
-    background-color: #ede2f3 !important;
+    background-color: #e8ddf0 !important;
+    color: #2d2d2d !important;
 }
-section[data-testid="stSidebar"] .css-1d391kg,
-section[data-testid="stSidebar"] h1, 
-section[data-testid="stSidebar"] h2 {
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] label {
     color: #3b2f5e !important;
 }
 
-/* Streamlit Feedback Boxes */
-.stAlert, .stNotification, .st-cq, .st-da {
-    background-color: #ffffff !important;
-    border-left: 6px solid #9e7ac2 !important;
-    color: #2d2d2d !important;
-    border-radius: 8px;
-    padding: 1rem;
+/* Alert Boxes (info, success, warning, error) */
+div[data-testid="stAlertInfo"] {
+    background-color: #e0ecff !important;
+    color: #1a3c66 !important;
+    border-left: 6px solid #4299e1;
 }
-
-/* Success / Info / Error text colors */
 div[data-testid="stAlertSuccess"] {
     background-color: #e6f4ea !important;
     color: #276749 !important;
-    border-left: 6px solid #38a169 !important;
-}
-div[data-testid="stAlertInfo"] {
-    background-color: #ebf8ff !important;
-    color: #2b6cb0 !important;
-    border-left: 6px solid #4299e1 !important;
+    border-left: 6px solid #38a169;
 }
 div[data-testid="stAlertWarning"] {
-    background-color: #fffaf0 !important;
-    color: #b7791f !important;
-    border-left: 6px solid #ed8936 !important;
+    background-color: #fff7e6 !important;
+    color: #975a16 !important;
+    border-left: 6px solid #ed8936;
 }
 div[data-testid="stAlertError"] {
-    background-color: #fff5f5 !important;
-    color: #c53030 !important;
-    border-left: 6px solid #f56565 !important;
+    background-color: #ffe5e5 !important;
+    color: #9b2c2c !important;
+    border-left: 6px solid #f56565;
+}
+
+/* Tabs */
+.css-1v0mbdj > div {
+    background-color: #ffffff !important;
+    border-radius: 8px;
+    padding: 0.75em;
+    color: #3b2f5e !important;
+    font-weight: bold;
+    border: 1px solid #d1c4e9;
+}
+.css-1v0mbdj > div[aria-selected="true"] {
+    background-color: #f4e8ff !important;
+    border-color: #9e7ac2;
+}
+
+/* Containers */
+.card {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
 }
 </style>
 """, unsafe_allow_html=True)
