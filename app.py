@@ -24,6 +24,10 @@ DB_NAME = 'users.db'
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
+    # Drop the table if it exists to ensure a clean schema, especially during development
+    c.execute('''
+        DROP TABLE IF EXISTS users
+    ''')
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             username TEXT PRIMARY KEY,
