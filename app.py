@@ -735,7 +735,7 @@ def show_trivia_page():
         else:
             st.info("No scores logged yet for the leaderboard. Be the first!")
 
-        st.button("⬅️ Back to Main Page", on_on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_bottom")
+        st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_bottom")
     else:
         st.write("No trivia questions available for today. Please go back to the main page.")
         st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_no_questions")
@@ -858,7 +858,24 @@ if st.session_state['is_authenticated']:
 
     st.sidebar.markdown("---")
     st.sidebar.header("Settings")
-    st.session_state['dementia_mode'] = st.sidebar.checkbox("Dementia-Friendly Mode", value=st.session_state['dementia_mode'], key="sidebar_dementia_mode")
+    
+    # Use columns to place the checkbox and the info icon next to each other
+    col_dementia, col_info = st.sidebar.columns([0.8, 0.2])
+    with col_dementia:
+        st.session_state['dementia_mode'] = st.checkbox("Dementia-Friendly Mode", value=st.session_state['dementia_mode'], key="sidebar_dementia_mode")
+    with col_info:
+        with st.popover("ⓘ"):
+            st.markdown(
+                """
+                The dementia-friendly mode is designed to make the daily history content more accessible, particularly for users with cognitive impairments. When this mode is active, the generated PDF download will feature:
+
+                * **Larger Font Size**: The text in the PDF will be displayed in a significantly larger font (24pt Arial) compared to the standard mode (12pt-20pt). This improves readability and reduces eye strain.
+                * **Increased Line Height and Spacing**: There is more vertical space between lines of text and between different sections. This reduces visual clutter and makes it easier to follow the content.
+                * **Simplified Formatting**: The PDF uses a simpler layout without bolding for subheadings within the content, focusing on clear, unobstructed presentation of information.
+                
+                These adjustments ensure that the content is presented in a way that is easier to read and comprehend, enhancing accessibility for individuals who may benefit from simplified visual and textual presentation.
+                """
+            )
 
     st.sidebar.subheader("Content Customization")
     # Difficulty selection is moved to trivia page, removed from sidebar here
