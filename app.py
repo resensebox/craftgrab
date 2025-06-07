@@ -954,8 +954,18 @@ def show_trivia_page():
 def show_login_register_page():
     st.title("Login to Access")
 
-    # Feedback email note at the top
+    # Add Logo and App Explanation at the top of the login page
+    st.image("https://i.postimg.cc/8CRsCGCC/Chat-GPT-Image-Jun-7-2025-12-32-18-AM.png", use_container_width=False, width=200)
+    st.markdown(
+        """
+        Welcome to **This Day in History**!
+        Discover fascinating historical events, learn about notable birthdays, and test your knowledge with daily trivia.
+        Sign in or register to personalize your daily historical journey and track your trivia scores!
+        """
+    )
     st.markdown("---")
+
+    # Feedback email note at the top
     st.markdown("📧 You can send us feedback at: `thisdayinhistoryapp@gmail.com`")
     st.markdown("---")
 
