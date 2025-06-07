@@ -589,6 +589,16 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
         pdf.multi_cell(0, line_height, clean_text_for_latin1(data['memory_prompt_section']))
     pdf.ln(spacing) # Add a line space at the end of content section
 
+    # Enhanced Contact Information in PDF
+    pdf.ln(spacing)
+    pdf.set_font("Arial", "B", 12)
+    pdf.multi_cell(0, line_height, "Contact Us:")
+    pdf.set_font("Arial", "", 10)
+    pdf.multi_cell(0, line_height, "Email: thisdayinhistoryapp@gmail.com")
+    pdf.multi_cell(0, line_height, "Website: ThisDayInHistoryApp.com (Coming Soon!)") # Example placeholder
+    pdf.multi_cell(0, line_height, "Phone: (555) 123-4567 (For Support)") # Example placeholder
+    pdf.ln(spacing)
+
     if not dementia_mode:
         pdf.set_font("Arial", "I", 10)
         pdf.multi_cell(0, 5, clean_text_for_latin1(f"Generated for {user_info['name']}"), align='C')
@@ -716,6 +726,9 @@ def show_main_app_page():
     st.write(data['memory_prompt_section'])
 
     st.markdown("---")
+
+    # New note for scrolling down to download/print
+    st.info("Make sure to scroll down to download and print your 'This Day In History' worksheet!")
     
     # Generate PDF bytes once
     pdf_bytes_main = generate_full_history_pdf(
@@ -1151,3 +1164,4 @@ if st.session_state['is_authenticated']:
         show_main_app_page()
 else: # Not authenticated, show login/register and January 1st example
     show_login_register_page()
+
