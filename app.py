@@ -189,7 +189,8 @@ st.markdown(
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-scope = ['https://sheets.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'] # Updated scope for Google Sheets API v4
+# Corrected scope for Google Sheets API v4
+scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'] 
 if "GOOGLE_SERVICE_JSON" not in st.secrets:
     st.error("❌ GOOGLE_SERVICE_JSON is missing from Streamlit secrets.")
     st.stop()
@@ -559,6 +560,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     trivia_ans_hint_font_size = 9
     line_height_normal = 5
     line_height_trivia_ans_hint = 4
+    section_spacing_normal = 5
 
     # Adjust font sizes and line heights for dementia mode
     if dementia_mode:
@@ -570,7 +572,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
         trivia_ans_hint_font_size = 12
         line_height_normal = 8 # Increased line height for readability
         line_height_trivia_ans_hint = 6 # Increased line height for readability
-
+        section_spacing_normal = 4 # Slightly reduced spacing to fit more
 
     # --- Masthead ---
     pdf.set_y(10) # Start from top
@@ -612,7 +614,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     current_y_col1 += line_height_normal # Update Y after title
     pdf.set_font("Arial", "", article_text_font_size)
     pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['event_article']))
-    current_y_col1 = pdf.get_y() + 5 # Update Y and add spacing
+    current_y_col1 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
 
     pdf.set_y(current_y_col1) # Ensure position is updated
 
@@ -622,7 +624,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     current_y_col1 += line_height_normal
     pdf.set_font("Arial", "", article_text_font_size)
     pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['fun_fact_section']))
-    current_y_col1 = pdf.get_y() + 5 # Update Y and add spacing
+    current_y_col1 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
     pdf.set_y(current_y_col1)
 
     # Daily Trivia
@@ -642,11 +644,14 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
         pdf.set_font("Arial", "", trivia_ans_hint_font_size) # Smaller, regular for answer
         pdf.multi_cell(col_width, line_height_trivia_ans_hint, answer_text_clean)
         pdf.multi_cell(col_width, line_height_trivia_ans_hint, hint_text_clean) # Display hint
-        pdf.ln(3) # Small spacing after each trivia question
+        if dementia_mode: # Reduce spacing between trivia questions in dementia mode
+            pdf.ln(2) 
+        else:
+            pdf.ln(3) # Small spacing after each trivia question
 
         current_y_col1 = pdf.get_y() # Get current Y to accurately track position
 
-    current_y_col1 += 5 # Spacing after trivia section
+    current_y_col1 += section_spacing_normal # Spacing after trivia section
     pdf.set_y(current_y_col1)
 
 
@@ -664,7 +669,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     pdf.set_font("Times", "I", article_text_font_size) # Italic for quote
     pdf.multi_cell(col_width, line_height_normal, quote_text, align='C')
     pdf.multi_cell(col_width, line_height_normal, quote_author, align='C')
-    current_y_col2 = pdf.get_y() + 5 # Update Y and add spacing
+    current_y_col2 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
     pdf.set_y(current_y_col2)
 
     # Happy Birthday!
@@ -673,7 +678,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     current_y_col2 += line_height_normal
     pdf.set_font("Arial", "", article_text_font_size)
     pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['born_article']))
-    current_y_col2 = pdf.get_y() + 5 # Update Y and add spacing
+    current_y_col2 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
     pdf.set_y(current_y_col2)
 
     # Did You Know-
@@ -686,7 +691,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
             did_you_know_line = clean_text_for_latin1(f"- {item}")
             pdf.multi_cell(col_width, line_height_normal, did_you_know_line)
             current_y_col2 = pdf.get_y() # Update Y after each fact line
-        current_y_col2 += 5 # Spacing after section
+        current_y_col2 += section_spacing_normal # Spacing after section
         pdf.set_y(current_y_col2)
 
     # Memory Prompt-
@@ -696,7 +701,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
         current_y_col2 += line_height_normal
         pdf.set_font("Arial", "", article_text_font_size)
         pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['memory_prompt_section']))
-        current_y_col2 = pdf.get_y() + 5 # Update Y and add spacing
+        current_y_col2 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
         pdf.set_y(current_y_col2)
 
 
@@ -1335,5 +1340,3 @@ if st.session_state['is_authenticated']:
         show_main_app_page()
 else: # Not authenticated, show login/register and January 1st example
     show_login_register_page()
-
-
