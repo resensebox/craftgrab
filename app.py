@@ -9,15 +9,13 @@ import base64 # Import base64 for encoding PDF content
 st.set_option('client.showErrorDetails', True)
 st.set_page_config(page_title="This Day in History", layout="centered")
 
-# --- Session State Initialization (Ensure dark_mode is initialized early) ---
+# --- Session State Initialization ---
 if 'is_authenticated' not in st.session_state:
     st.session_state['is_authenticated'] = False
 if 'logged_in_username' not in st.session_state:
     st.session_state['logged_in_username'] = ""
 if 'dementia_mode' not in st.session_state:
     st.session_state['dementia_mode'] = False
-# Removed: if 'dark_mode' not in st.session_state: # Initialize dark mode state
-# Removed:    st.session_state['dark_mode'] = False
 if 'current_page' not in st.session_state:
     st.session_state['current_page'] = 'main_app' # Default page for authenticated users
 if 'daily_data' not in st.session_state: # Store daily data to avoid re-fetching on page switch
@@ -38,8 +36,7 @@ if 'difficulty' not in st.session_state: # New session state for difficulty
     st.session_state['difficulty'] = 'Medium' # Default difficulty
 
 
-# --- Custom CSS for Sidebar Styling ---
-# Sidebar specific styling (branding colors)
+# --- Custom CSS for Sidebar Styling and Default App Theme (Black) ---
 st.markdown(
     """
     <style>
@@ -121,29 +118,29 @@ st.markdown(
         border-color: #A020F0;
     }
 
-    /* Default general app styling for main content area (light mode always) */
+    /* Default general app styling for main content area (black background) */
     .stApp {
-        background-color: #FFFFFF; /* White background */
-        color: #333333; /* Dark text */
+        background-color: #000000; /* Black background */
+        color: #E0E0E0; /* Light text for contrast */
     }
-    .stMarkdown, .stText { color: #333333; }
-    h1, h2, h3, h4, h5, h6 { color: #333333; }
+    .stMarkdown, .stText { color: #E0E0E0; }
+    h1, h2, h3, h4, h5, h6 { color: #E0E0E0; }
     .stAlert {
-        background-color: #f0f2f6; /* Default Streamlit info/light background */
-        color: #333333;
-        border-color: #e0e0e0;
+        background-color: #333333; /* Darker background for alerts */
+        color: #E0E0E0;
+        border-color: #444444;
     }
     .stTextInput > div > div > input {
-        background-color: #FFFFFF;
-        color: #333333;
-        border-color: #DDDDDD;
+        background-color: #333333;
+        color: #E0E0E0;
+        border-color: #444444;
     }
     .stSelectbox > div > div > div { /* Target for selectbox background */
-        background-color: #FFFFFF;
-        color: #333333;
+        background-color: #333333;
+        color: #E0E0E0;
     }
     .stSelectbox > div > div > div > div > span { /* Target for selectbox text */
-        color: #333333 !important;
+        color: #E0E0E0 !important;
     }
     /* Ensure no lingering background issues from blocks */
     div[data-testid="stVerticalBlock"] {
@@ -154,19 +151,19 @@ st.markdown(
     }
     /* Adjust button colors for main content */
     .stButton > button {
-        background-color: #e6e6e6; /* Light gray button for main content */
-        color: #333333;
+        background-color: #555555; /* Darker button for main content */
+        color: #E0E0E0;
         border: none;
         border-radius: 0.5rem;
     }
     .stButton > button:hover {
-        background-color: #cccccc;
+        background-color: #777777;
     }
     /* Date input styling */
     .stDateInput > div > div > input {
-        background-color: #FFFFFF;
-        color: #333333;
-        border-color: #DDDDDD;
+        background-color: #333333;
+        color: #E0E0E0;
+        border-color: #444444;
     }
     </style>
     """,
@@ -987,8 +984,7 @@ def show_login_register_page():
 # --- Main App Logic (Router) ---
 if st.session_state['is_authenticated']:
     # --- Sidebar content (always visible when authenticated) ---
-    # Removed st.sidebar.title("This Day in History") as the logo serves as the title
-    st.sidebar.image("https://i.postimg.cc/8CRsCGCC/Chat-GPT-Image-Jun-7-2025-12-32-18-AM.png", use_container_width=True) # Changed to use_container_width
+    st.sidebar.image("https://i.postimg.cc/8CRsCGCC/Chat-GPT-Image-Jun-7-2025-12-32-18-AM.png", use_container_width=True)
     st.sidebar.markdown("---")
     st.sidebar.header("Navigation")
     if st.sidebar.button("🏠 Home", key="sidebar_home_btn"):
@@ -1016,11 +1012,8 @@ if st.session_state['is_authenticated']:
                 These adjustments ensure that the content is presented in a way that is easier to read and comprehend, enhancing accessibility for individuals who may benefit from simplified visual and textual presentation.
                 """
             )
-    # Removed: Dark Mode Toggle
-    # Removed: st.sidebar.checkbox("Dark Mode", value=st.session_state['dark_mode'], key="sidebar_dark_mode")
 
     st.sidebar.subheader("Content Customization")
-    # Difficulty selection is moved to trivia page, removed from sidebar here
     st.session_state['preferred_topic_main_app'] = st.sidebar.selectbox(
         "Preferred Topic for Events (Optional)",
         options=["None", "Sports", "Music", "Inventions", "Politics", "Science", "Arts"],
