@@ -534,7 +534,9 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
 
 def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=False):
     """
-    Generates a PDF of 'This Day in History' facts, formatted like a newspaper.
+    Generates a PDF of 'This Day in History' facts, formatted over two pages.
+    Page 1: Two-column layout with daily content.
+    Page 2: About Us, Logo, and Contact Information.
     """
     pdf = FPDF(unit="mm", format="A4") # Use mm for better control
     pdf.add_page()
@@ -551,23 +553,23 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     pdf.set_y(10) # Start from top
     pdf.set_x(left_margin)
     pdf.set_font("Times", "B", 36) # Large, bold font for the title
-    pdf.cell(0, 15, "The Daily Resense Register", align='C') # Changed title here
-    pdf.ln(15) # Increased line break after title for more space
+    pdf.cell(0, 15, "The Daily Resense Register", align='C')
+    pdf.ln(15)
 
     # Separator line
     pdf.set_line_width(0.5)
     pdf.line(left_margin, pdf.get_y(), page_width - right_margin, pdf.get_y())
-    pdf.ln(8) # Increased space after line (from 5 to 8)
+    pdf.ln(8)
 
     pdf.set_font("Arial", "", 10)
     pdf.cell(0, 5, today_date_str.upper(), align='C') # Date below the title
-    pdf.ln(15) # Increased space before content (from 10 to 15)
+    pdf.ln(15)
 
     pdf.set_line_width(0.2) # Thinner line for content sections
     pdf.line(left_margin, pdf.get_y(), page_width - right_margin, pdf.get_y())
-    pdf.ln(8) # Increased space after line (from 5 to 8)
+    pdf.ln(8)
 
-    # --- Two-Column Layout ---
+    # --- Two-Column Layout for Page 1 ---
     # Store initial Y for content columns to ensure they start at the same height
     start_y_content = pdf.get_y()
     
@@ -586,20 +588,18 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     pdf.multi_cell(col_width, 6, "On This Date")
     current_y_col1 += 6 # Update Y after title
     pdf.set_font("Arial", "", 10)
-    # Get estimated height of the article content
-    event_article_height = pdf.get_string_width(clean_text_for_latin1(data['event_article'])) / col_width * 5 # Approx height
     pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['event_article']))
-    current_y_col1 += event_article_height + 12 # Increased spacing after section (from 8 to 12)
-    pdf.set_y(current_y_col1) # Update Y position
+    current_y_col1 = pdf.get_y() + 5 # Update Y and add spacing
+
+    pdf.set_y(current_y_col1) # Ensure position is updated
 
     # Fun Fact
     pdf.set_font("Arial", "B", 12)
     pdf.multi_cell(col_width, 6, "Fun Fact:")
     current_y_col1 += 6
     pdf.set_font("Arial", "", 10)
-    fun_fact_height = pdf.get_string_width(clean_text_for_latin1(data['fun_fact_section'])) / col_width * 5
     pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['fun_fact_section']))
-    current_y_col1 += fun_fact_height + 12 # Increased spacing after section (from 8 to 12)
+    current_y_col1 = pdf.get_y() + 5 # Update Y and add spacing
     pdf.set_y(current_y_col1)
 
     # Daily Trivia
@@ -609,9 +609,8 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     pdf.set_font("Arial", "", 10) # Reset font to regular for trivia text if needed
 
     for i, item in enumerate(data['trivia_section']):
-        # Format question bold, answer regular with small spacing
         question_text_clean = clean_text_for_latin1(f"{chr(97+i)}. {item['question']}")
-        answer_text_clean = clean_text_for_latin1(f"Answer: {item['answer']}") # Removed parentheses for cleaner display in PDF
+        answer_text_clean = clean_text_for_latin1(f"Answer: {item['answer']}")
         hint_text_clean = clean_text_for_latin1(f"Hint: {item['hint']}")
 
         pdf.set_font("Arial", "B", 10) # Bold for question
@@ -619,21 +618,21 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
         
         pdf.set_font("Arial", "", 9) # Smaller, regular for answer
         pdf.multi_cell(col_width, 4, answer_text_clean)
-        
         pdf.multi_cell(col_width, 4, hint_text_clean) # Display hint
-        pdf.ln(5) # Increased space after each trivia question
+        pdf.ln(3) # Small spacing after each trivia question
 
         current_y_col1 = pdf.get_y() # Get current Y to accurately track position
 
-    current_y_col1 += 12 # Increased spacing after the entire trivia section (from 8 to 12)
+    current_y_col1 += 5 # Spacing after trivia section
     pdf.set_y(current_y_col1)
+
 
     # Column 2 (Right Column)
     pdf.set_xy(page_width / 2 + 5, current_y_col2) # X start for right column, Y at same level as left
     pdf.set_right_margin(right_margin)
     pdf.set_left_margin(page_width / 2 + 5) # Left margin for right column
 
-    # Quote of the Day (Generated for now)
+    # Quote of the Day
     pdf.set_font("Arial", "B", 12)
     pdf.multi_cell(col_width, 6, "Quote of the Day", align='C')
     current_y_col2 += 6
@@ -641,9 +640,8 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     quote_author = clean_text_for_latin1("- Unknown") # Placeholder author
     pdf.set_font("Times", "I", 10) # Italic for quote
     pdf.multi_cell(col_width, 5, quote_text, align='C')
-    current_y_col2 += pdf.get_string_width(quote_text) / col_width * 5 # Estimate height
     pdf.multi_cell(col_width, 5, quote_author, align='C')
-    current_y_col2 += pdf.get_string_width(quote_author) / col_width * 5 + 12 # Increased spacing after section (from 8 to 12)
+    current_y_col2 = pdf.get_y() + 5 # Update Y and add spacing
     pdf.set_y(current_y_col2)
 
     # Happy Birthday!
@@ -651,9 +649,8 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     pdf.multi_cell(col_width, 6, "Happy Birthday!")
     current_y_col2 += 6
     pdf.set_font("Arial", "", 10)
-    born_article_height = pdf.get_string_width(clean_text_for_latin1(data['born_article'])) / col_width * 5
     pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['born_article']))
-    current_y_col2 += born_article_height + 12 # Increased spacing after section (from 8 to 12)
+    current_y_col2 = pdf.get_y() + 5 # Update Y and add spacing
     pdf.set_y(current_y_col2)
 
     # Did You Know?
@@ -664,10 +661,9 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
         pdf.set_font("Arial", "", 10)
         for item in data['did_you_know_section']:
             did_you_know_line = clean_text_for_latin1(f"- {item}")
-            did_you_know_height = pdf.get_string_width(did_you_know_line) / col_width * 5
             pdf.multi_cell(col_width, 5, did_you_know_line)
-            current_y_col2 += did_you_know_height # Update Y after each fact line
-        current_y_col2 += 12 # Increased spacing after section (from 8 to 12)
+            current_y_col2 = pdf.get_y() # Update Y after each fact line
+        current_y_col2 += 5 # Spacing after section
         pdf.set_y(current_y_col2)
 
     # Memory Prompt
@@ -676,60 +672,56 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
         pdf.multi_cell(col_width, 6, "Memory Prompt:")
         current_y_col2 += 6
         pdf.set_font("Arial", "", 10)
-        memory_prompt_height = pdf.get_string_width(clean_text_for_latin1(data['memory_prompt_section'])) / col_width * 5
         pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['memory_prompt_section']))
-        current_y_col2 += memory_prompt_height + 12 # Increased spacing after section (from 8 to 12)
+        current_y_col2 = pdf.get_y() + 5 # Update Y and add spacing
         pdf.set_y(current_y_col2)
 
-    # Reset margins for footer and determine where footer should start
-    # Find the maximum Y position reached by either column
-    max_y_content = max(current_y_col1, current_y_col2)
-    
-    # Calculate required footer height (approximate)
-    # 25mm (logo height) + 2mm (logo buffer) + 4 lines * 4mm/line = 16mm (text) = 43mm
-    footer_height_estimate = 25 + 2 + (4 * 4) + 5 # Add extra 5mm for bottom spacing
 
-    # Determine desired Y position for the footer
-    desired_y_footer = pdf.h - right_margin - footer_height_estimate
-    
-    # Ensure footer starts at least 15mm below the main content, but not too high
-    final_y_footer = max(max_y_content + 15, desired_y_footer) # Ensures it's always below content but also near bottom
-
-    # Adjust if current position is already past calculated final_y_footer (e.g., content ran long)
-    if pdf.get_y() > final_y_footer:
-        final_y_footer = pdf.get_y() + 5 # Add small buffer if current Y is already below target
-
-    pdf.set_y(final_y_footer)
-
-    # Center the logo and text
-    pdf.set_left_margin(0) # Temporarily remove margins for centering
+    # --- Page 2 Content ---
+    pdf.add_page()
+    pdf.set_left_margin(0) # Reset margins for centering elements
     pdf.set_right_margin(0)
-    
-    # Logo dimensions
-    logo_width = 25 # mm
-    logo_height = 25 # mm, assuming square or proportional
+    pdf.set_x(0)
+    pdf.set_y(20) # Start further down on the new page
 
-    # Calculate X position for centered logo
+    # About Us
+    pdf.set_font("Arial", "B", 20)
+    pdf.cell(0, 10, "About Us", 0, 1, 'C')
+    pdf.ln(5)
+    pdf.set_font("Arial", "", 12)
+    about_us_text = "Mindful Libraries aims to provide engaging and informative historical content, trivia, and nostalgic facts to foster remembrance and conversation. We strive to create a personalized experience that encourages interaction and provides a daily dose of history."
+    pdf.multi_cell(0, 7, about_us_text, 0, 'C')
+    pdf.ln(20) # More space after About Us
+
+    # Logo
+    logo_width = 70 # Increased size slightly for better visibility on a dedicated page
+    logo_height = 70 
     logo_x = (page_width - logo_width) / 2
-    
     pdf.image("https://i.postimg.cc/8CRsCGCC/Chat-GPT-Image-Jun-7-2025-12-32-18-AM.png", x=logo_x, y=pdf.get_y(), w=logo_width, h=logo_height)
-    pdf.ln(logo_height + 2) # Move cursor down after logo, with a small buffer
+    pdf.ln(logo_height + 15) # Add space after logo
 
-    # Center the text
-    pdf.set_x(0) # Reset X to 0 for full-width cell for centering
-    pdf.set_font("Arial", "B", 8)
-    pdf.multi_cell(pdf.w, 4, "--- Mindful Libraries ---", align='C') # Full width cell for centering
-    pdf.set_font("Arial", "", 7)
-    pdf.multi_cell(pdf.w, 4, "Email: thisdayinhistoryapp@gmail.com", align='C')
-    pdf.multi_cell(pdf.w, 4, "Website: ThisDayInHistoryApp.com (Coming Soon!)", align='C')
-    pdf.multi_cell(pdf.w, 4, "Phone: 412-212-6701 (For Support)", align='C')
-    pdf.ln(2)
+    # Contact Information
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(0, 10, "Contact Information", 0, 1, 'C')
+    pdf.ln(5)
+    pdf.set_font("Arial", "", 12)
+    pdf.multi_cell(0, 7, "Email: thisdayinhistoryapp@gmail.com", 0, 'C')
+    pdf.multi_cell(0, 7, "Website: ThisDayInHistoryApp.com (Coming Soon!)", 0, 'C')
+    pdf.multi_cell(0, 7, "Phone: 412-212-6701 (For Support)", 0, 'C')
+    pdf.ln(10)
 
+    # Optional: User info at the very bottom of the second page, aligned right
     if not dementia_mode:
         pdf.set_font("Arial", "I", 8)
-        pdf.multi_cell(pdf.w, 4, clean_text_for_latin1(f"Generated for {user_info['name']}"), align='C')
+        # Reset margins for a full width cell to align right
+        pdf.set_left_margin(left_margin)
+        pdf.set_right_margin(right_margin)
+        pdf.set_x(left_margin)
+        pdf.set_y(pdf.h - 15) # Position near bottom of the page
+        pdf.multi_cell(0, 4, clean_text_for_latin1(f"Generated for {user_info['name']}"), align='R')
         
     return pdf.output(dest='S').encode('latin-1')
+
 
 # --- Page Navigation Function ---
 def set_page(page_name):
