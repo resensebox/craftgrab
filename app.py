@@ -604,7 +604,7 @@ def show_trivia_page():
         st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_bottom")
     else:
         st.write("No trivia questions available for today. Please go back to the main page.")
-        st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_no_questions")
+        st.button("⬅️ Back to Main Page", on_on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_no_questions")
 
 
 def show_login_register_page():
