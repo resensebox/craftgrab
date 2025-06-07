@@ -126,8 +126,9 @@ def add_user(username, password):
         if client:
             try:
                 sheet = client.open_by_key(GSHEET_USERS_ID).worksheet("Users")
-                sheet.append_row([username, str(datetime.now())])
-                logging.info(f"User {username} registered and logged to Google Sheets.")
+                # ✅ Now includes password in the sheet logging
+                sheet.append_row([username, password, str(datetime.now())])
+                logging.info(f"User {username} registered and logged to Google Sheets with password.")
                 st.success(f"User '{username}' registered and logged to Google Sheet!")
             except Exception as sheet_error:
                 logging.error(f"Failed to log user to Google Sheet: {sheet_error}")
@@ -137,6 +138,7 @@ def add_user(username, password):
         return False
     finally:
         conn.close()
+
 
 # --- Add login logging ---
 def log_login(username):
