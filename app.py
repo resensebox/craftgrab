@@ -9,6 +9,93 @@ import base64 # Import base64 for encoding PDF content
 st.set_option('client.showErrorDetails', True)
 st.set_page_config(page_title="This Day in History", layout="centered")
 
+# --- Custom CSS for Sidebar Styling ---
+st.markdown(
+    """
+    <style>
+    /* Overall Sidebar Styling to match logo colors */
+    div[data-testid="stSidebar"] {
+        background-color: #5A2D81; /* Deep purple from logo */
+        color: white; /* Default text color */
+    }
+
+    /* Ensuring all text elements within sidebar are white */
+    div[data-testid="stSidebar"] * {
+        color: white !important;
+    }
+
+    /* Headers in sidebar */
+    div[data-testid="stSidebar"] h1,
+    div[data-testid="stSidebar"] h2,
+    div[data-testid="stSidebar"] h3,
+    div[data-testid="stSidebar"] h4,
+    div[data-testid="stSidebar"] h5,
+    div[data-testid="stSidebar"] h6 {
+        color: white !important;
+    }
+
+    /* Info boxes in sidebar */
+    div[data-testid="stSidebar"] .stAlert {
+        background-color: #7B4CA0; /* Slightly lighter purple for info boxes */
+        border-color: #7B4CA0;
+    }
+
+    /* Buttons in sidebar */
+    div[data-testid="stSidebar"] .stButton > button {
+        background-color: #8A2BE2; /* Blue Violet for buttons */
+        color: white;
+        border: none;
+        border-radius: 0.5rem;
+        padding: 0.5rem 1rem;
+        transition: all 0.2s ease-in-out;
+    }
+
+    div[data-testid="stSidebar"] .stButton > button:hover {
+        background-color: #A020F0; /* Purple on hover */
+        color: white;
+    }
+
+    /* Selectbox dropdown background and text */
+    .st-emotion-cache-10q763j { /* This is a common class for dropdowns/popovers */
+        background-color: #7B4CA0 !important; /* Lighter purple for dropdowns */
+        color: white !important;
+    }
+    .st-emotion-cache-10q763j * { /* Ensure all text in dropdowns is white */
+        color: white !important;
+    }
+    /* Specific styling for selectbox options on hover/selected */
+    .st-emotion-cache-lck165:hover { /* Selectbox option on hover */
+        background-color: #A020F0 !important;
+    }
+    .st-emotion-cache-1n1j053 { /* Selectbox selected option */
+        background-color: #A020F0 !important;
+    }
+
+    /* Popover button (the 'ⓘ' icon) */
+    div[data-testid="stSidebar"] .stPopover > button {
+        color: white !important;
+        background-color: transparent !important;
+        border: none !important;
+    }
+    div[data-testid="stSidebar"] .stPopover > button:hover {
+        background-color: #7B4CA0 !important; /* Lighter purple on hover for icon */
+    }
+
+    /* Input fields (e.g., text_input for selectbox search) within sidebar */
+    div[data-testid="stSidebar"] input[type="text"] {
+        background-color: #7B4CA0; /* Match selectbox background */
+        color: white;
+        border-color: #7B4CA0;
+    }
+    div[data-testid="stSidebar"] input[type="text"]:focus {
+        border-color: #A020F0;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # --- Google Sheets API Setup ---
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -698,7 +785,7 @@ def show_trivia_page():
             # Add expander for related article - ONLY show if out of chances
             if q_state.get('out_of_chances', False):
                 with st.expander(f"Show Explanation for Q{i+1}"):
-                    if q_state['related_article_content'] is None:
+                    if q_state['related_article_content'] === None:
                         # Generate article if it hasn't been generated yet
                         with st.spinner("Generating explanation..."):
                             generated_article = generate_related_trivia_article(
@@ -849,6 +936,8 @@ def show_login_register_page():
 if st.session_state['is_authenticated']:
     # --- Sidebar content (always visible when authenticated) ---
     st.sidebar.title("This Day in History")
+    # Add the logo here
+    st.sidebar.image("https://i.postimg.cc/8CRsCGCC/Chat-GPT-Image-Jun-7-2025-12-32-18-AM.png", use_column_width=True)
     st.sidebar.markdown("---")
     st.sidebar.header("Navigation")
     if st.sidebar.button("🏠 Home", key="sidebar_home_btn"):
