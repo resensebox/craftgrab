@@ -27,20 +27,22 @@ def log_event(event_type, username):
         sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
         try:
             ws = sheet.worksheet("LoginLogs")
+            print("Successfully found 'LoginLogs' worksheet.") # Debugging print
         except gspread.exceptions.WorksheetNotFound:
-            # Create the worksheet if it doesn't exist and add headers
+            print("Worksheet 'LoginLogs' not found. Attempting to create it.") # Debugging print
             ws = sheet.add_worksheet(title="LoginLogs", rows="100", cols="3")
-            ws.append_row(["Timestamp", "EventType", "Username"])
+            ws.append_row(["Timestamp", "EventType", "Username"])  # Add headers if new sheet
+            print("Created 'LoginLogs' worksheet with headers.") # Debugging print
         
         ws.append_row([
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             event_type,
             username
         ])
-        print(f"Event '{event_type}' logged for user '{username}'") # For debugging in console
+        print(f"Event '{event_type}' logged for user '{username}' successfully.")  # Debugging print
     except Exception as e:
         st.warning(f"⚠️ Could not log event '{event_type}' for '{username}': {e}")
-        print(f"Error logging event: {e}") # For debugging in console
+        print(f"Error in log_event for '{event_type}' and '{username}': {e}") # Debugging print
 
 def save_new_user_to_sheet(username, password, email):
     """Saves new user credentials to the 'Users' worksheet."""
@@ -49,9 +51,8 @@ def save_new_user_to_sheet(username, password, email):
         try:
             ws = sheet.worksheet("Users")
         except gspread.exceptions.WorksheetNotFound:
-            # Create the worksheet if it doesn't exist and add headers
             ws = sheet.add_worksheet(title="Users", rows="100", cols="3")
-            ws.append_row(["Username", "Password", "Email"])
+            ws.append_row(["Username", "Password", "Email"]) # Add headers if new sheet
         ws.append_row([username, password, email])
         return True
     except Exception as e:
