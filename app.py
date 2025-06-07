@@ -28,22 +28,22 @@ def log_event(event_type, username):
         sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
         try:
             ws = sheet.worksheet("LoginLogs")
-            print("Successfully found 'LoginLogs' worksheet.") # Debugging print
+            # print("Successfully found 'LoginLogs' worksheet.") # Debugging print
         except gspread.exceptions.WorksheetNotFound:
-            print("Worksheet 'LoginLogs' not found. Attempting to create it.") # Debugging print
+            # print("Worksheet 'LoginLogs' not found. Attempting to create it.") # Debugging print
             ws = sheet.add_worksheet(title="LoginLogs", rows="100", cols="3")
             ws.append_row(["Timestamp", "EventType", "Username"])  # Add headers if new sheet
-            print("Created 'LoginLogs' worksheet with headers.") # Debugging print
+            # print("Created 'LoginLogs' worksheet with headers.") # Debugging print
         
         ws.append_row([
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             event_type,
             username
         ])
-        print(f"Event '{event_type}' logged for user '{username}' successfully.")  # Debugging print
+        # print(f"Event '{event_type}' logged for user '{username}' successfully.")  # Debugging print
     except Exception as e:
         st.warning(f"⚠️ Could not log event '{event_type}' for '{username}': {e}")
-        print(f"Error in log_event for '{event_type}' and '{username}': {e}") # Debugging print
+        # print(f"Error in log_event for '{event_type}' and '{username}': {e}") # Debugging print
 
 def save_new_user_to_sheet(username, password, email):
     """Saves new user credentials to the 'Users' worksheet."""
@@ -90,8 +90,14 @@ if 'logged_in_username' not in st.session_state:
     st.session_state['logged_in_username'] = ""
 if 'dementia_mode' not in st.session_state:
     st.session_state['dementia_mode'] = False
-if 'trivia_answers' not in st.session_state:
-    st.session_state['trivia_answers'] = {} # To store user answers for trivia
+if 'current_page' not in st.session_state:
+    st.session_state['current_page'] = 'main_app' # Default page for authenticated users
+if 'daily_data' not in st.session_state: # Store daily data to avoid re-fetching on page switch
+    st.session_state['daily_data'] = None
+if 'last_fetched_date' not in st.session_state:
+    st.session_state['last_fetched_date'] = None # To track when data was last fetched
+if 'trivia_question_states' not in st.session_state:
+    st.session_state['trivia_question_states'] = {} # Stores per-question state: {'q_index': {'user_answer': '', 'is_correct': False, 'feedback': ''}}
 
 # --- This Day in History Logic ---
 def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_client, preferred_decade=None, topic=None):
@@ -255,8 +261,17 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
         
     return pdf.output(dest='S').encode('latin-1')
 
-# --- App UI ---
-if st.session_state['is_authenticated']:
+# --- Page Navigation Function ---
+def set_page(page_name):
+    st.session_state['current_page'] = page_name
+    # Reset trivia states if navigating away from trivia page to ensure fresh start if new day
+    if page_name == 'main_app':
+        st.session_state['trivia_question_states'] = {}
+    st.rerun() # Rerun to switch page immediately
+
+
+# --- UI Functions for Pages ---
+def show_main_app_page():
     st.sidebar.title("This Day in History")
     
     st.sidebar.markdown("---")
@@ -266,18 +281,19 @@ if st.session_state['is_authenticated']:
 
     # Customization Options
     st.sidebar.subheader("Content Customization")
-    preferred_topic = st.sidebar.selectbox(
+    # Store these in session state so they persist across main app reruns
+    st.session_state['preferred_topic_main_app'] = st.sidebar.selectbox(
         "Preferred Topic for Events (Optional)",
         options=["None", "Sports", "Music", "Inventions", "Politics", "Science", "Arts"],
-        index=0
+        index=0,
+        key='main_app_topic_select' # Unique key for this widget
     )
-    # New: Preferred Decade for Events
-    preferred_decade = st.sidebar.selectbox(
+    st.session_state['preferred_decade_main_app'] = st.sidebar.selectbox(
         "Preferred Decade for Articles (Optional)",
         options=["None", "1800s", "1900s", "1910s", "1920s", "1930s", "1940s", "1950s", "1960s", "1970s", "1980s"],
-        index=0
+        index=0,
+        key='main_app_decade_select' # Unique key for this widget
     )
-    # trivia_difficulty = st.sidebar.select_slider("Trivia Difficulty", options=["Easy", "Medium", "Hard"])
 
     st.sidebar.markdown("---")
     # Conceptual Local History Integration
@@ -290,8 +306,8 @@ if st.session_state['is_authenticated']:
         log_event("logout", st.session_state['logged_in_username']) # Log logout event
         st.session_state['is_authenticated'] = False
         st.session_state['logged_in_username'] = ""
-        st.rerun()
-    
+        set_page('main_app') # Go back to the unauthenticated main page
+
     st.title("📅 This Day in History")
 
     # Apply dementia-friendly styling if enabled
@@ -310,16 +326,27 @@ if st.session_state['is_authenticated']:
 
 
     today = datetime.today()
-    day, month = today.day, today.month
+    day, month, year = today.day, today.month, today.year
     user_info = {
         'name': st.session_state['logged_in_username'],
         'jobs': '', 'hobbies': '', 'decade': '', 'life_experiences': '', 'college_chapter': ''
     }
 
-    # Pass customization options to the data fetching function
-    data = get_this_day_in_history_facts(day, month, user_info, client_ai, 
-                                        topic=preferred_topic if preferred_topic != "None" else None,
-                                        preferred_decade=preferred_decade if preferred_decade != "None" else None)
+    # Fetch daily data if not already fetched for the current day/user/preferences
+    # This key ensures data is re-fetched if date or preferences change
+    current_data_key = f"{day}-{month}-{year}-{st.session_state['logged_in_username']}-" \
+                       f"{st.session_state['preferred_topic_main_app']}-{st.session_state['preferred_decade_main_app']}"
+
+    if st.session_state['last_fetched_date'] != current_data_key or st.session_state['daily_data'] is None:
+        st.session_state['daily_data'] = get_this_day_in_history_facts(
+            day, month, user_info, client_ai, 
+            topic=st.session_state['preferred_topic_main_app'] if st.session_state['preferred_topic_main_app'] != "None" else None,
+            preferred_decade=st.session_state['preferred_decade_main_app'] if st.session_state['preferred_decade_main_app'] != "None" else None
+        )
+        st.session_state['last_fetched_date'] = current_data_key
+        st.session_state['trivia_question_states'] = {} # Reset trivia states for new day's data
+
+    data = st.session_state['daily_data']
 
     # Display content
     st.subheader(f"✨ A Look Back at {today.strftime('%B %d')}")
@@ -337,28 +364,11 @@ if st.session_state['is_authenticated']:
     st.write(data['fun_fact_section'])
 
     st.markdown("---")
-    st.subheader("🧠 Test Your Knowledge!")
-    if data['trivia_section']:
-        for i, trivia_item in enumerate(data['trivia_section']):
-            st.markdown(f"**Question {i+1}:** {trivia_item['question']}")
-            user_answer = st.text_input(f"Your Answer for Q{i+1}:", key=f"trivia_q_{i}")
-            
-            # Store user answer in session state
-            st.session_state['trivia_answers'][f"q_{i}"] = user_answer
-
-            # Add a button to check answer
-            if st.button(f"Check Answer for Q{i+1}", key=f"check_q_{i}"):
-                if user_answer.strip().lower() == trivia_item['answer'].strip().lower():
-                    st.success(f"Correct! The answer was: {trivia_item['answer']}")
-                elif user_answer.strip() == "":
-                    st.warning("Please enter an answer to check.")
-                else:
-                    st.error(f"Incorrect. The correct answer was: {trivia_item['answer']}")
-            st.markdown("---")
-    else:
-        st.write("No trivia questions available.")
+    st.subheader("🎮 Ready for a challenge?")
+    st.button("Play Trivia!", on_click=set_page, args=('trivia_page',), type="primary") # Button to go to trivia page
 
 
+    st.markdown("---")
     st.subheader("🌟 Did You Know?")
     for i, fact in enumerate(data['did_you_know_section']):
         st.write(f"- {fact}")
@@ -393,18 +403,76 @@ if st.session_state['is_authenticated']:
     st.sidebar.markdown("---")
     st.sidebar.subheader("Offline Access")
     st.sidebar.info("Offline access for the past 7 days is a planned feature. For now, you can download PDFs to save content.")
-    # Implement actual offline storage (e.g., SQLite, Streamlit's file_uploader for saving/loading)
-    # or browser-based storage (which is more complex with Streamlit server-side rendering).
-    # This often involves saving the generated `data` dictionary for each day.
-
+    
     # --- Sharing/Email Option (Conceptual - requires external email service) ---
     st.sidebar.subheader("Share Daily Page")
     st.sidebar.info("Daily/weekly sharing via email is a planned feature. This would integrate with an email service.")
-    # Implement email sending functionality using smtplib or a dedicated email API (e.g., SendGrid, Mailgun).
-    # This would likely involve storing user email preferences in Google Sheets.
 
 
-else: # Login/Registration UI
+def show_trivia_page():
+    st.title("🧠 Daily Trivia Challenge!")
+    st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',))
+
+    if st.session_state['daily_data'] and st.session_state['daily_data']['trivia_section']:
+        trivia_questions = st.session_state['daily_data']['trivia_section']
+
+        for i, trivia_item in enumerate(trivia_questions):
+            question_key_base = f"trivia_q_{i}" # Base key for state
+            
+            # Initialize state for this question if not already present
+            if question_key_base not in st.session_state['trivia_question_states']:
+                st.session_state['trivia_question_states'][question_key_base] = {
+                    'user_answer': '',
+                    'is_correct': False,
+                    'feedback': '',
+                }
+
+            q_state = st.session_state['trivia_question_states'][question_key_base]
+
+            st.markdown(f"---")
+            st.markdown(f"**Question {i+1}:** {trivia_item['question']}")
+
+            # Input field remains active and pre-filled until correct
+            user_input = st.text_input(
+                f"Your Answer for Q{i+1}:", 
+                value=q_state['user_answer'], 
+                key=f"input_{question_key_base}", 
+                disabled=q_state['is_correct']
+            )
+            
+            # Update session state on input change for persistence
+            q_state['user_answer'] = user_input
+
+            check_button_key = f"check_btn_{question_key_base}"
+
+            # Only show button if not yet correct
+            if not q_state['is_correct']:
+                if st.button("Check Answer", key=check_button_key, disabled=not user_input.strip()):
+                    if user_input.strip().lower() == trivia_item['answer'].strip().lower():
+                        q_state['is_correct'] = True
+                        q_state['feedback'] = "✅ Correct!"
+                        st.success(q_state['feedback'])
+                    else:
+                        q_state['is_correct'] = False # Ensure it's false
+                        q_state['feedback'] = "❌ Incorrect. Try again!"
+                        st.error(q_state['feedback'])
+                    st.rerun() # Rerun to update feedback/disable input immediately
+            
+            # Display feedback if the question has been attempted
+            if q_state['feedback'] and not q_state['is_correct']:
+                st.error(q_state['feedback'])
+            elif q_state['is_correct']:
+                st.success(f"✅ Correct! The answer was: **{trivia_item['answer']}**")
+            
+        st.markdown("---")
+        st.success("You've completed the trivia challenge for today!")
+        st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',))
+    else:
+        st.write("No trivia questions available for today. Please go back to the main page.")
+        st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',))
+
+
+def show_login_register_page():
     st.title("Login to Access")
     login_tab, register_tab = st.tabs(["Log In", "Register"])
     with login_tab:
@@ -418,7 +486,7 @@ else: # Login/Registration UI
                     st.session_state['logged_in_username'] = username
                     st.success(f"Welcome {username}!")
                     log_event("login", username)
-                    st.rerun()
+                    set_page('main_app') # Go to main app page
                 else:
                     st.error("Invalid credentials.")
 
@@ -439,7 +507,7 @@ else: # Login/Registration UI
                             st.session_state['logged_in_username'] = new_username
                             st.success("Account created!")
                             log_event("register", new_username)
-                            st.rerun()
+                            set_page('main_app') # Go to main app page
                         else:
                             st.error("Failed to register user. Please try again.")
                 else:
@@ -469,7 +537,6 @@ else: # Login/Registration UI
     if example_data['trivia_section']:
         for i, trivia_item in enumerate(example_data['trivia_section']):
             st.markdown(f"**Question {i+1}:** {trivia_item['question']}")
-            # For the example, we might just display the answer immediately or a placeholder
             st.info(f"Answer: {trivia_item['answer']}") # Display answer for example content
     else:
         st.write("No trivia questions available.")
@@ -501,3 +568,13 @@ else: # Login/Registration UI
         )
     with col2_example:
         st.markdown(pdf_viewer_link_example, unsafe_allow_html=True)
+
+
+# --- Main App Logic (Router) ---
+if st.session_state['is_authenticated']:
+    if st.session_state['current_page'] == 'main_app':
+        show_main_app_page()
+    elif st.session_state['current_page'] == 'trivia_page':
+        show_trivia_page()
+else: # Not authenticated, show login/register and January 1st example
+    show_login_register_page()
