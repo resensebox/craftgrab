@@ -16,8 +16,8 @@ if 'logged_in_username' not in st.session_state:
     st.session_state['logged_in_username'] = ""
 if 'dementia_mode' not in st.session_state:
     st.session_state['dementia_mode'] = False
-if 'dark_mode' not in st.session_state: # Initialize dark mode state
-    st.session_state['dark_mode'] = False
+# Removed: if 'dark_mode' not in st.session_state: # Initialize dark mode state
+# Removed:    st.session_state['dark_mode'] = False
 if 'current_page' not in st.session_state:
     st.session_state['current_page'] = 'main_app' # Default page for authenticated users
 if 'daily_data' not in st.session_state: # Store daily data to avoid re-fetching on page switch
@@ -38,7 +38,7 @@ if 'difficulty' not in st.session_state: # New session state for difficulty
     st.session_state['difficulty'] = 'Medium' # Default difficulty
 
 
-# --- Custom CSS for Sidebar Styling and Light/Dark Mode ---
+# --- Custom CSS for Sidebar Styling ---
 # Sidebar specific styling (branding colors)
 st.markdown(
     """
@@ -121,123 +121,57 @@ st.markdown(
         border-color: #A020F0;
     }
 
+    /* Default general app styling for main content area (light mode always) */
+    .stApp {
+        background-color: #FFFFFF; /* White background */
+        color: #333333; /* Dark text */
+    }
+    .stMarkdown, .stText { color: #333333; }
+    h1, h2, h3, h4, h5, h6 { color: #333333; }
+    .stAlert {
+        background-color: #f0f2f6; /* Default Streamlit info/light background */
+        color: #333333;
+        border-color: #e0e0e0;
+    }
+    .stTextInput > div > div > input {
+        background-color: #FFFFFF;
+        color: #333333;
+        border-color: #DDDDDD;
+    }
+    .stSelectbox > div > div > div { /* Target for selectbox background */
+        background-color: #FFFFFF;
+        color: #333333;
+    }
+    .stSelectbox > div > div > div > div > span { /* Target for selectbox text */
+        color: #333333 !important;
+    }
+    /* Ensure no lingering background issues from blocks */
+    div[data-testid="stVerticalBlock"] {
+        background-color: transparent !important;
+    }
+    div[data-testid="stHorizontalBlock"] {
+        background-color: transparent !important;
+    }
+    /* Adjust button colors for main content */
+    .stButton > button {
+        background-color: #e6e6e6; /* Light gray button for main content */
+        color: #333333;
+        border: none;
+        border-radius: 0.5rem;
+    }
+    .stButton > button:hover {
+        background-color: #cccccc;
+    }
+    /* Date input styling */
+    .stDateInput > div > div > input {
+        background-color: #FFFFFF;
+        color: #333333;
+        border-color: #DDDDDD;
+    }
     </style>
     """,
     unsafe_allow_html=True
 )
-
-# Dynamic CSS for Light/Dark Mode for the main content area
-if st.session_state['dark_mode']:
-    st.markdown(
-        """
-        <style>
-        /* General app styling for Dark Mode (main content area) */
-        .stApp {
-            background-color: #1A1A1A; /* Dark background */
-            color: #E0E0E0; /* Light text */
-        }
-        /* Specific elements */
-        .stMarkdown, .stText { color: #E0E0E0; }
-        h1, h2, h3, h4, h5, h6 { color: #E0E0E0; }
-        .stAlert {
-            background-color: #333333;
-            color: #E0E0E0;
-            border-color: #444444;
-        }
-        .stTextInput > div > div > input {
-            background-color: #333333;
-            color: #E0E0E0;
-            border-color: #444444;
-        }
-        .stSelectbox > div > div > div { /* Target for selectbox background */
-            background-color: #333333;
-            color: #E0E0E0;
-        }
-        .stSelectbox > div > div > div > div > span { /* Target for selectbox text */
-            color: #E0E0E0 !important;
-        }
-        /* Ensure no lingering background issues from blocks */
-        div[data-testid="stVerticalBlock"] {
-            background-color: transparent !important;
-        }
-        div[data-testid="stHorizontalBlock"] {
-            background-color: transparent !important;
-        }
-        /* Adjust button colors for main content */
-        .stButton > button {
-            background-color: #555555; /* Darker button for main content */
-            color: #E0E0E0;
-            border: none;
-            border-radius: 0.5rem;
-        }
-        .stButton > button:hover {
-            background-color: #777777;
-        }
-        /* Date input styling for dark mode */
-        .stDateInput > div > div > input {
-            background-color: #333333;
-            color: #E0E0E0;
-            border-color: #444444;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-else: # Light Mode
-    st.markdown(
-        """
-        <style>
-        /* General app styling for Light Mode (main content area) */
-        .stApp {
-            background-color: #FFFFFF; /* White background */
-            color: #333333; /* Dark text */
-        }
-        .stMarkdown, .stText { color: #333333; }
-        h1, h2, h3, h4, h5, h6 { color: #333333; }
-        .stAlert {
-            background-color: #f0f2f6; /* Default Streamlit info/light background */
-            color: #333333;
-            border-color: #e0e0e0;
-        }
-        .stTextInput > div > div > input {
-            background-color: #FFFFFF;
-            color: #333333;
-            border-color: #DDDDDD;
-        }
-        .stSelectbox > div > div > div { /* Target for selectbox background */
-            background-color: #FFFFFF;
-            color: #333333;
-        }
-        .stSelectbox > div > div > div > div > span { /* Target for selectbox text */
-            color: #333333 !important;
-        }
-        /* Ensure no lingering background issues from blocks */
-        div[data-testid="stVerticalBlock"] {
-            background-color: transparent !important;
-        }
-        div[data-testid="stHorizontalBlock"] {
-            background-color: transparent !important;
-        }
-        /* Adjust button colors for main content */
-        .stButton > button {
-            background-color: #e6e6e6; /* Light gray button for main content */
-            color: #333333;
-            border: none;
-            border-radius: 0.5rem;
-        }
-        .stButton > button:hover {
-            background-color: #cccccc;
-        }
-        /* Date input styling for light mode */
-        .stDateInput > div > div > input {
-            background-color: #FFFFFF;
-            color: #333333;
-            border-color: #DDDDDD;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
 
 
 # --- Google Sheets API Setup ---
@@ -1082,8 +1016,8 @@ if st.session_state['is_authenticated']:
                 These adjustments ensure that the content is presented in a way that is easier to read and comprehend, enhancing accessibility for individuals who may benefit from simplified visual and textual presentation.
                 """
             )
-    # Dark Mode Toggle
-    st.sidebar.checkbox("Dark Mode", value=st.session_state['dark_mode'], key="sidebar_dark_mode")
+    # Removed: Dark Mode Toggle
+    # Removed: st.sidebar.checkbox("Dark Mode", value=st.session_state['dark_mode'], key="sidebar_dark_mode")
 
     st.sidebar.subheader("Content Customization")
     # Difficulty selection is moved to trivia page, removed from sidebar here
