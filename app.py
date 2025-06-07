@@ -597,6 +597,11 @@ def generate_full_history_pdf(data, today_date_str, user_info): # Removed dement
     line_height_trivia_ans_hint = 4
     section_spacing_normal = 5
 
+    # Define page 2 margins at the beginning
+    left_margin_p2 = 25
+    right_margin_p2 = 25
+    content_width_p2 = page_width - left_margin_p2 - right_margin_p2
+
     # --- Masthead ---
     pdf.set_y(10) # Start from top
     pdf.set_x(left_margin)
@@ -761,6 +766,12 @@ def generate_full_history_pdf(data, today_date_str, user_info): # Removed dement
     # Ensure a new page if content from page 1 flows too much or if local history caused a new page
     if pdf.get_y() > pdf.h - 40: # If near bottom of current page
         pdf.add_page()
+
+    # Set new, better margins for page 2 content
+    # These definitions are moved to the top of the function to ensure they are always available.
+    # left_margin_p2 = 25
+    # right_margin_p2 = 25
+    # content_width_p2 = page_width - left_margin_p2 - right_margin_p2
 
     pdf.set_left_margin(left_margin_p2)
     pdf.set_right_margin(right_margin_p2)
