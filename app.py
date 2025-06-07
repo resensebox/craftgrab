@@ -542,16 +542,16 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     pdf.set_x(left_margin)
     pdf.set_font("Times", "B", 36) # Large, bold font for the title
     pdf.cell(0, 15, "The Daily Resense Register", align='C') # Changed title here
-    pdf.ln(10) # Line break after title
+    pdf.ln(15) # Increased line break after title for more space
 
     # Separator line
     pdf.set_line_width(0.5)
     pdf.line(left_margin, pdf.get_y(), page_width - right_margin, pdf.get_y())
-    pdf.ln(2) # Small space after line
+    pdf.ln(5) # Increased space after line
 
     pdf.set_font("Arial", "", 10)
     pdf.cell(0, 5, today_date_str.upper(), align='C') # Date below the title
-    pdf.ln(7) # Space before content
+    pdf.ln(10) # Increased space before content
 
     pdf.set_line_width(0.2) # Thinner line for content sections
     pdf.line(left_margin, pdf.get_y(), page_width - right_margin, pdf.get_y())
@@ -579,7 +579,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     # Get estimated height of the article content
     event_article_height = pdf.get_string_width(clean_text_for_latin1(data['event_article'])) / col_width * 5 # Approx height
     pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['event_article']))
-    current_y_col1 += event_article_height + 5 # Add content height + spacing
+    current_y_col1 += event_article_height + 8 # Increased spacing after section
     pdf.set_y(current_y_col1) # Update Y position
 
     # Fun Fact
@@ -589,7 +589,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     pdf.set_font("Arial", "", 10)
     fun_fact_height = pdf.get_string_width(clean_text_for_latin1(data['fun_fact_section'])) / col_width * 5
     pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['fun_fact_section']))
-    current_y_col1 += fun_fact_height + 5
+    current_y_col1 += fun_fact_height + 8 # Increased spacing after section
     pdf.set_y(current_y_col1)
 
     # Daily Trivia
@@ -602,7 +602,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
         trivia_line_height = pdf.get_string_width(trivia_line) / col_width * 5
         pdf.multi_cell(col_width, 5, trivia_line)
         current_y_col1 += trivia_line_height # Update Y after each trivia line
-    current_y_col1 += 5 # Add extra space after trivia section
+    current_y_col1 += 8 # Increased spacing after section
     pdf.set_y(current_y_col1)
 
     # Column 2 (Right Column)
@@ -620,7 +620,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     pdf.multi_cell(col_width, 5, quote_text, align='C')
     current_y_col2 += pdf.get_string_width(quote_text) / col_width * 5 # Estimate height
     pdf.multi_cell(col_width, 5, quote_author, align='C')
-    current_y_col2 += pdf.get_string_width(quote_author) / col_width * 5 + 5 # Add spacing
+    current_y_col2 += pdf.get_string_width(quote_author) / col_width * 5 + 8 # Increased spacing after section
     pdf.set_y(current_y_col2)
 
     # Happy Birthday!
@@ -630,7 +630,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     pdf.set_font("Arial", "", 10)
     born_article_height = pdf.get_string_width(clean_text_for_latin1(data['born_article'])) / col_width * 5
     pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['born_article']))
-    current_y_col2 += born_article_height + 5
+    current_y_col2 += born_article_height + 8 # Increased spacing after section
     pdf.set_y(current_y_col2)
 
     # Did You Know?
@@ -644,7 +644,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
             did_you_know_height = pdf.get_string_width(did_you_know_line) / col_width * 5
             pdf.multi_cell(col_width, 5, did_you_know_line)
             current_y_col2 += did_you_know_height # Update Y after each fact line
-        current_y_col2 += 5
+        current_y_col2 += 8 # Increased spacing after section
         pdf.set_y(current_y_col2)
 
     # Memory Prompt
@@ -655,26 +655,35 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
         pdf.set_font("Arial", "", 10)
         memory_prompt_height = pdf.get_string_width(clean_text_for_latin1(data['memory_prompt_section'])) / col_width * 5
         pdf.multi_cell(col_width, 5, clean_text_for_latin1(data['memory_prompt_section']))
-        current_y_col2 += memory_prompt_height + 5
+        current_y_col2 += memory_prompt_height + 8 # Increased spacing after section
         pdf.set_y(current_y_col2)
 
     # Reset margins for footer and determine where footer should start
     # Find the maximum Y position reached by either column
     max_y_content = max(current_y_col1, current_y_col2)
-    pdf.set_y(max_y_content)
+    
+    # Calculate remaining vertical space
+    # 297mm (A4 height) - 15mm (bottom margin) - max_y_content (where content ends)
+    remaining_space = pdf.h - right_margin - max_y_content
+
+    # Move to a position such that the contact info is always near the bottom
+    # If remaining_space is positive and large enough, move down
+    if remaining_space > 30: # If there's more than 30mm space, push footer down
+        pdf.set_y(pdf.h - right_margin - 30) # Position 30mm from bottom
+    else: # Otherwise, just give a small buffer
+        pdf.set_y(max_y_content + 10) # Add a buffer space if near end of page
+
     pdf.set_left_margin(left_margin)
     pdf.set_right_margin(right_margin)
     pdf.set_x(left_margin)
     
-    pdf.ln(10) # Add a buffer space before the footer
-
     # Enhanced Contact Information in PDF - Centered at the bottom
     pdf.set_font("Arial", "B", 8)
-    pdf.multi_cell(0, 4, "--- Activity Connection ---", align='C')
+    pdf.multi_cell(0, 4, "--- Mindful Libraries ---", align='C') # Changed name here
     pdf.set_font("Arial", "", 7)
     pdf.multi_cell(0, 4, "Email: thisdayinhistoryapp@gmail.com", align='C')
     pdf.multi_cell(0, 4, "Website: ThisDayInHistoryApp.com (Coming Soon!)", align='C')
-    pdf.multi_cell(0, 4, "Phone: (555) 123-4567 (For Support)", align='C')
+    pdf.multi_cell(0, 4, "Phone: 412-212-6701 (For Support)", align='C') # Changed phone number here
     pdf.ln(2)
 
     if not dementia_mode:
