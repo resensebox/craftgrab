@@ -10,6 +10,17 @@ import time # Import time for st.spinner delays
 st.set_option('client.showErrorDetails', True)
 st.set_page_config(page_title="This Day in History", layout="centered")
 
+# Initial dummy data structure for raw_fetched_data if no fetch has occurred or failed
+_INITIAL_EMPTY_DATA = {
+    'event_article': "No historical event data available. Please try again.",
+    'born_article': "No birth data available. Please try again.",
+    'fun_fact_section': "No fun fact available. Please try again.",
+    'trivia_section': [],
+    'did_you_know_section': ["No 'Did You Know?' facts available. Please try again."],
+    'memory_prompt_section': ["No memory prompts available.", "Consider your favorite childhood memory.", "What's a happy moment from your past week?"],
+    'local_history_section': "No local history data available. Please try again."
+}
+
 # --- Session State Initialization ---
 if 'is_authenticated' not in st.session_state:
     st.session_state['is_authenticated'] = False
@@ -20,7 +31,7 @@ if 'current_page' not in st.session_state:
 if 'daily_data' not in st.session_state: # Store daily data to avoid re-fetching on page switch
     st.session_state['daily_data'] = None
 if 'raw_fetched_data' not in st.session_state: # NEW: To store the raw, untranslated data
-    st.session_state['raw_fetched_data'] = None
+    st.session_state['raw_fetched_data'] = _INITIAL_EMPTY_DATA.copy() # Initialize with a default structure
 if 'last_fetched_date' not in st.session_state:
     st.session_state['last_fetched_date'] = None # To track when data was last fetched
 if 'trivia_question_states' not in st.session_state:
@@ -197,7 +208,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 # Corrected scope for Google Sheets API v4
-scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'] 
+scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 if "GOOGLE_SERVICE_JSON" not in st.secrets:
     st.error("❌ GOOGLE_SERVICE_JSON is missing from Streamlit secrets.")
     st.stop()
