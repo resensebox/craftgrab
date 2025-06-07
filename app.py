@@ -477,6 +477,10 @@ def parse_single_trivia_entry(entry_string):
 
     temp_string = entry_string.strip()
 
+    # Clean the string of any numbering/lettering at the very beginning (e.g., "a. - ", "1) ", "b- ")
+    # Made pattern more robust to handle '.', ')', or '-' as separators for numbering
+    temp_string = re.sub(r'^\s*([a-eA-E]|\d+)[.)-]?\s*', '', temp_string).strip()
+
     # 1. Extract Hint (looking for [Hint: ...])
     hint_match_bracket = re.search(r'\[(.*?)\]', temp_string, re.DOTALL)
     if hint_match_bracket:
@@ -510,9 +514,6 @@ def parse_single_trivia_entry(entry_string):
 
     # 3. Whatever remains is the question
     question = temp_string.strip()
-    
-    # Clean the question of any numbering/lettering (e.g., "a. - ") or leading hyphens
-    question = re.sub(r'^\s*([a-eA-E]|\d+)\.\s*-?\s*', '', question).strip()
     
     # Remove phrases that might indicate it's not a question (e.g., "Did you know?")
     if any(phrase.lower() in question.lower() for phrase in ["sabías que", "did you know", "disparadores de memoria", "memory prompts"]):
@@ -598,14 +599,17 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         if trivia_text_match:
             raw_trivia_block = trivia_text_match.group(1).strip()
             
-            # Split the block into individual trivia entries using a regex that assumes each entry starts with a letter/number and a dot.
-            trivia_entry_pattern = re.compile(r'^\s*([a-eA-E]|\d+)\.\s*(.*?)(?=(?:\n\s*(?:[a-eA-E]|\d+)\.|\Z))', re.MULTILINE | re.DOTALL)
-            
-            all_trivia_entries = trivia_entry_pattern.findall(raw_trivia_block)
+            # Split by newlines, assuming each line is a potential trivia question
+            # Filter out empty lines
+            potential_trivia_lines = [line.strip() for line in raw_trivia_block.split('\n') if line.strip()]
 
-            for index_prefix, full_entry_text_raw in all_trivia_entries:
-                parsed_item = parse_single_trivia_entry(full_entry_text_raw)
-                trivia_questions.append(parsed_item)
+            for line in potential_trivia_lines:
+                # Attempt to parse each line individually
+                parsed_item = parse_single_trivia_entry(line)
+                
+                # Add question only if it's not the default "No question found."
+                if parsed_item['question'] != "No question found.":
+                    trivia_questions.append(parsed_item)
                 
                 if len(trivia_questions) >= 5: # Limit to 5 questions explicitly
                     break
@@ -754,6 +758,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("On This Date", current_language, client_ai)))
     current_y_col1 += line_height_normal # Update Y after title
     # Use .get() with a default empty string to prevent TypeError if AI returns None for this field
+    pdf.set_font("Arial", "", article_text_font_size) # Ensure font is not bold for article text
     pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data.get('event_article', '')))
     current_y_col1 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
 
@@ -764,6 +769,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Fun Fact:", current_language, client_ai))) # Translated
     current_y_col1 += line_height_normal
     # Use .get() with a default empty string
+    pdf.set_font("Arial", "", article_text_font_size) # Ensure font is not bold for article text
     pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data.get('fun_fact_section', '')))
     current_y_col1 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
     pdf.set_y(current_y_col1)
@@ -773,7 +779,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
         pdf.set_font("Arial", "B", section_title_font_size)
         pdf.multi_cell(col_width, line_height_normal, "Daily Trivia") # NOT translated
         current_y_col1 += line_height_normal
-        pdf.set_font("Arial", "", trivia_q_font_size) # Reset font to regular for trivia text if needed
+        # Font for trivia questions is intentionally bolded, and answers/hints are not.
 
         # Loop through the first 4 trivia questions for the PDF
         for i, item in enumerate(data['trivia_section'][:4]): # Limit to 4 questions for PDF
@@ -818,6 +824,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Happy Birthday!", current_language, client_ai))) # Translated
     current_y_col2 += line_height_normal
     # Use .get() with a default empty string
+    pdf.set_font("Arial", "", article_text_font_size) # Ensure font is not bold for article text
     pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data.get('born_article', '')))
     current_y_col2 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
     pdf.set_y(current_y_col2)
