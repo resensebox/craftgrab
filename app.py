@@ -240,21 +240,16 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
     """
     current_date_str = f"{current_month:02d}-{current_day:02d}"
 
-    # Adjust parameters based on difficulty
-    event_word_count, born_word_count, trivia_complexity, language_tone = 200, 150, "", ""
+    # Adjust parameters based on difficulty for Trivia Questions ONLY
+    # Main articles word count and language tone do not change with difficulty
+    event_word_count, born_word_count = 200, 150 # Fixed for main articles
+    trivia_complexity = ""
     if difficulty == 'Easy':
-        event_word_count = 150
-        born_word_count = 100
         trivia_complexity = "very well-known facts, common knowledge"
-        language_tone = "simple, straightforward language"
     elif difficulty == 'Hard':
-        event_word_count = 250
-        born_word_count = 200
         trivia_complexity = "obscure facts, specific details, challenging"
-        language_tone = "advanced vocabulary, intricate details"
     else: # Medium
         trivia_complexity = "general historical facts, moderately challenging"
-        language_tone = "clear, informative language"
 
     # Build prompt for event and born date ranges
     event_year_range = "between the years 1800 and 1960"
@@ -271,8 +266,8 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
     You are an assistant generating 'This Day in History' facts for {current_date_str}.
     Please provide:
 
-    1. Event Article: Write a short article (around {event_word_count} words) about a famous historical event that happened on this day {event_year_range}{topic_clause}{decade_clause}. Use {language_tone}.
-    2. Born on this Day Article: Write a brief article (around {born_word_count} words) about a well-known person born on this day {born_year_range}{decade_clause}. Use {language_tone}.
+    1. Event Article: Write a short article (around {event_word_count} words) about a famous historical event that happened on this day {event_year_range}{topic_clause}{decade_clause}. Use clear, informative language.
+    2. Born on this Day Article: Write a brief article (around {born_word_count} words) about a well-known person born on this day {born_year_range}{decade_clause}. Use clear, informative language.
     3. Fun Fact: Provide one interesting and unusual fun fact that occurred on this day in history.
     4. Trivia Questions: Provide five concise, direct trivia questions based on today’s date. These should be actual questions that require a factual answer, and should not be "Did You Know?" statements or prompts for reflection. Topics can include history, famous birthdays, pop culture, or global events. The questions should be {trivia_complexity}. For each question, provide the correct answer in parentheses and a short, distinct hint in square brackets (e.g., "What year did the Berlin Wall fall? (1989) [Hint: Cold War era]").
     5. Did You Know?: Provide three "Did You Know?" facts related to nostalgic content (e.g., old prices, inventions, fashion facts) from past decades (e.g., 1930s-1970s).
@@ -360,7 +355,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
 
 def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=False):
     """
-    Generates a PDF of 'This Day in History' facts, with an optional dementia-friendly mode.
+    Generates a PDF of 'This Day in History' facts, with an an optional dementia-friendly mode.
     """
     pdf = FPDF()
     pdf.add_page()
@@ -476,17 +471,18 @@ def show_main_app_page():
 
     # Fetch daily data if not already fetched for the current day/user/preferences
     # This key ensures data is re-fetched if date or preferences change
+    # IMPORTANT: 'difficulty' is no longer part of the key for main page content, as it's now controlled on trivia page
     current_data_key = f"{selected_date.strftime('%Y-%m-%d')}-{st.session_state['logged_in_username']}-" \
                        f"{st.session_state.get('preferred_topic_main_app', 'None')}-" \
                        f"{st.session_state.get('preferred_decade_main_app', 'None')}-" \
-                       f"{st.session_state.get('difficulty', 'Medium')}" # Include difficulty in key
+                       f"trivia_difficulty_{st.session_state['difficulty']}" # Still include trivia difficulty so data regenerates if it changes
 
     if st.session_state['last_fetched_date'] != current_data_key or st.session_state['daily_data'] is None:
         st.session_state['daily_data'] = get_this_day_in_history_facts(
             day, month, user_info, client_ai, 
             topic=st.session_state.get('preferred_topic_main_app') if st.session_state.get('preferred_topic_main_app') != "None" else None,
             preferred_decade=st.session_state.get('preferred_decade_main_app') if st.session_state.get('preferred_decade_main_app') != "None" else None,
-            difficulty=st.session_state['difficulty'] # Pass the selected difficulty
+            difficulty=st.session_state['difficulty'] # Pass the selected difficulty to generate trivia
         )
         st.session_state['last_fetched_date'] = current_data_key
         st.session_state['trivia_question_states'] = {} # Reset trivia states for new day's data
@@ -556,6 +552,43 @@ def show_main_app_page():
 def show_trivia_page():
     st.title("🧠 Daily Trivia Challenge!")
     st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_top")
+
+    st.markdown("---")
+    st.subheader("Trivia Settings")
+    # Moved: Difficulty selection is now on the trivia page
+    st.session_state['difficulty'] = st.selectbox(
+        "Trivia Difficulty",
+        options=["Easy", "Medium", "Hard"],
+        index=["Easy", "Medium", "Hard"].index(st.session_state['difficulty']), # Set initial value from session state
+        key='trivia_difficulty_select',
+        help="Adjusts the complexity of the trivia questions."
+    )
+    st.markdown("---")
+
+    # If difficulty changes, we need to re-fetch the main content (which includes trivia)
+    # This simulates re-generating the daily content with the new trivia difficulty
+    current_selected_date = datetime.today().date() # Assume trivia is for today's date
+    data_key_for_trivia_regen = f"{current_selected_date.strftime('%Y-%m-%d')}-{st.session_state['logged_in_username']}-" \
+                               f"{st.session_state.get('preferred_topic_main_app', 'None')}-" \
+                               f"{st.session_state.get('preferred_decade_main_app', 'None')}-" \
+                               f"trivia_difficulty_{st.session_state['difficulty']}"
+
+    # Only re-fetch if the selected difficulty or date has changed
+    if st.session_state['last_fetched_date'] != data_key_for_trivia_regen:
+        st.session_state['daily_data'] = get_this_day_in_history_facts(
+            current_selected_date.day, current_selected_date.month, 
+            {'name': st.session_state['logged_in_username']}, client_ai, 
+            topic=st.session_state.get('preferred_topic_main_app') if st.session_state.get('preferred_topic_main_app') != "None" else None,
+            preferred_decade=st.session_state.get('preferred_decade_main_app') if st.session_state.get('preferred_decade_main_app') != "None" else None,
+            difficulty=st.session_state['difficulty']
+        )
+        st.session_state['last_fetched_date'] = data_key_for_trivia_regen # Update fetched key
+        st.session_state['trivia_question_states'] = {} # Reset trivia states for new difficulty's data
+        st.session_state['hints_remaining'] = 3
+        st.session_state['current_trivia_score'] = 0
+        st.session_state['total_possible_daily_trivia_score'] = 0
+        st.session_state['score_logged_today'] = False
+        st.rerun() # Rerun to apply new content
 
     if st.session_state['daily_data'] and st.session_state['daily_data']['trivia_section']:
         trivia_questions = st.session_state['daily_data']['trivia_section']
@@ -761,7 +794,8 @@ def show_login_register_page():
     # Display content based off of January 1st for the example content on the login page
     january_1st_example_date = date(datetime.today().year, 1, 1) # Use current year's Jan 1st for the example
     example_user_info = {'name': 'Example User', 'jobs': '', 'hobbies': '', 'decade': '', 'life_experiences': '', 'college_chapter': ''}
-    example_data = get_this_day_in_history_facts(january_1st_example_date.day, january_1st_example_date.month, example_user_info, client_ai)
+    # For the example, use a default difficulty (e.g., 'Medium') as it's not user-selectable here
+    example_data = get_this_day_in_history_facts(january_1st_example_date.day, january_1st_example_date.month, example_user_info, client_ai, difficulty='Medium')
 
     st.markdown(f"### ✨ A Look Back at {january_1st_example_date.strftime('%B %d')}")
     st.markdown("### 🗓️ Significant Event")
@@ -829,13 +863,7 @@ if st.session_state['is_authenticated']:
     st.session_state['dementia_mode'] = st.sidebar.checkbox("Dementia-Friendly Mode", value=st.session_state['dementia_mode'], key="sidebar_dementia_mode")
 
     st.sidebar.subheader("Content Customization")
-    # New: Difficulty selection
-    st.session_state['difficulty'] = st.sidebar.selectbox(
-        "Content Difficulty",
-        options=["Easy", "Medium", "Hard"],
-        index=["Easy", "Medium", "Hard"].index(st.session_state['difficulty']), # Set initial value from session state
-        key='sidebar_difficulty_select'
-    )
+    # Difficulty selection is moved to trivia page, removed from sidebar here
     st.session_state['preferred_topic_main_app'] = st.sidebar.selectbox(
         "Preferred Topic for Events (Optional)",
         options=["None", "Sports", "Music", "Inventions", "Politics", "Science", "Arts"],
