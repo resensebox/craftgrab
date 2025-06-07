@@ -25,14 +25,22 @@ def log_event(event_type, username):
     """Logs an event (e.g., login, registration) to the 'LoginLogs' worksheet."""
     try:
         sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
-        ws = sheet.worksheet("LoginLogs")
+        try:
+            ws = sheet.worksheet("LoginLogs")
+        except gspread.exceptions.WorksheetNotFound:
+            # Create the worksheet if it doesn't exist and add headers
+            ws = sheet.add_worksheet(title="LoginLogs", rows="100", cols="3")
+            ws.append_row(["Timestamp", "EventType", "Username"])
+        
         ws.append_row([
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             event_type,
             username
         ])
+        print(f"Event '{event_type}' logged for user '{username}'") # For debugging in console
     except Exception as e:
         st.warning(f"⚠️ Could not log event '{event_type}' for '{username}': {e}")
+        print(f"Error logging event: {e}") # For debugging in console
 
 def save_new_user_to_sheet(username, password, email):
     """Saves new user credentials to the 'Users' worksheet."""
@@ -41,8 +49,9 @@ def save_new_user_to_sheet(username, password, email):
         try:
             ws = sheet.worksheet("Users")
         except gspread.exceptions.WorksheetNotFound:
+            # Create the worksheet if it doesn't exist and add headers
             ws = sheet.add_worksheet(title="Users", rows="100", cols="3")
-            ws.append_row(["Username", "Password", "Email"]) # Add headers if new sheet
+            ws.append_row(["Username", "Password", "Email"])
         ws.append_row([username, password, email])
         return True
     except Exception as e:
@@ -79,9 +88,6 @@ if 'logged_in_username' not in st.session_state:
     st.session_state['logged_in_username'] = ""
 if 'dementia_mode' not in st.session_state:
     st.session_state['dementia_mode'] = False
-# Removed 'audio_enabled' from session state and related audio functions
-# if 'audio_enabled' not in st.session_state:
-#     st.session_state['audio_enabled'] = False
 
 # --- This Day in History Logic ---
 def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_client, preferred_decade=None, topic=None):
@@ -132,7 +138,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         fun_fact_section = fun_fact_match.group(1).strip() if fun_fact_match else "No fun fact found."
         trivia_lines = [q.strip() for q in trivia_match.group(1).strip().split('\n') if q.strip()] if trivia_match else []
         did_you_know_lines = [f.strip() for f in did_you_know_match.group(1).strip().split('\n') if f.strip()] if did_you_know_match else []
-        memory_prompt_section = memory_prompt_match.group(1).strip() if memory_prompt_match else "No memory prompt found."
+        memory_prompt_section = memory_prompt_match.group(1).strip() if memory_prompt_match else "No memory prompt available."
 
         return {
             'event_article': event_article,
@@ -232,8 +238,6 @@ if st.session_state['is_authenticated']:
     st.sidebar.header("Settings")
     # Dementia-friendly mode toggle
     st.session_state['dementia_mode'] = st.sidebar.checkbox("Dementia-Friendly Mode", value=st.session_state['dementia_mode'])
-    # Removed text-to-speech toggle
-    # st.session_state['audio_enabled'] = st.sidebar.checkbox("Enable Audio (Text-to-Speech)", value=st.session_state['audio_enabled'])
 
     # Customization Options
     st.sidebar.subheader("Content Customization")
@@ -283,67 +287,32 @@ if st.session_state['is_authenticated']:
 
     # Display content
     st.subheader(f"✨ A Look Back at {today.strftime('%B %d')}")
-    # Removed audio playback for this section
-    # if st.session_state['audio_enabled']:
-    #     audio_bytes = text_to_speech(f"A look back at {today.strftime('%B %d')}")
-    #     if audio_bytes:
-    #         st.audio(audio_bytes, format='audio/mp3')
 
     st.markdown("---")
     st.subheader("🗓️ Significant Event")
     st.write(data['event_article'])
-    # Removed audio playback for this section
-    # if st.session_state['audio_enabled']:
-    #     audio_bytes = text_to_speech(data['event_article'])
-    #     if audio_bytes:
-    #         st.audio(audio_bytes, format='audio/mp3')
 
     st.markdown("---")
     st.subheader("🎂 Born on this Day")
     st.write(data['born_article'])
-    # Removed audio playback for this section
-    # if st.session_state['audio_enabled']:
-    #     audio_bytes = text_to_speech(data['born_article'])
-    #     if audio_bytes:
-    #         st.audio(audio_bytes, format='audio/mp3')
 
     st.markdown("---")
     st.subheader("💡 Fun Fact")
     st.write(data['fun_fact_section'])
-    # Removed audio playback for this section
-    # if st.session_state['audio_enabled']:
-    #     audio_bytes = text_to_speech(data['fun_fact_section'])
-    #     if audio_bytes:
-    #         st.audio(audio_bytes, format='audio/mp3')
 
     st.markdown("---")
     st.subheader("🧠 Test Your Knowledge!")
     for i, q in enumerate(data['trivia_section']):
         st.write(f"{q}")
-        # Removed audio playback for this section
-        # if st.session_state['audio_enabled']:
-        #     audio_bytes = text_to_speech(q)
-        #     if audio_bytes:
-        #         st.audio(audio_bytes, format='audio/mp3', key=f"trivia_audio_{i}")
 
     st.markdown("---")
     st.subheader("🌟 Did You Know?")
     for i, fact in enumerate(data['did_you_know_section']):
         st.write(f"- {fact}")
-        # Removed audio playback for this section
-        # if st.session_state['audio_enabled']:
-        #     audio_bytes = text_to_speech(fact)
-        #     if audio_bytes:
-        #         st.audio(audio_bytes, format='audio/mp3', key=f"dyk_audio_{i}")
 
     st.markdown("---")
     st.subheader("💬 Memory Lane Prompt")
     st.write(data['memory_prompt_section'])
-    # Removed audio playback for this section
-    # if st.session_state['audio_enabled']:
-    #     audio_bytes = text_to_speech(data['memory_prompt_section'])
-    #     if audio_bytes:
-    #         st.audio(audio_bytes, format='audio/mp3')
 
     st.markdown("---")
     if st.button("📄 Download Daily Page PDF"):
