@@ -27,7 +27,7 @@ try:
     if "OPENAI_API_KEY" not in st.secrets:
         st.error("❌ OPENAI_API_KEY is missing from secrets. Please add it to your Streamlit secrets.")
         st.stop()
-    client_ai = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    client_ai = OpenAI(api_key=st.secrets["open_ai_key"])
 except Exception as e:
     st.error(f"Failed to initialize OpenAI. Error: {e}")
     st.stop()
