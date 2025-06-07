@@ -530,36 +530,107 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         # Updated regex for Memory Prompt to capture multiple lines, allowing for paragraph form
         memory_prompt_match = re.search(r"6\. Memory Prompts:\s*(.*?)(?=\n7\. Local History Fact:|\Z|$)", content, re.DOTALL)
 
-        # Special handling for Trivia Questions to extract questions, answers, and hints
+        # Special handling for Trivia Questions to extract questions, answers, and hints more robustly
         trivia_questions = []
         trivia_text_match = re.search(r"4\. Trivia Questions:\s*(.*?)(?=\n5\. Did You Know?:|\Z)", content, re.DOTALL)
         if trivia_text_match:
-            raw_trivia = trivia_text_match.group(1).strip()
+            raw_trivia_block = trivia_text_match.group(1).strip()
             
-            # Use a more specific regex to find lines that look like trivia questions
-            # This regex looks for:
-            # - Starts with optional number (e.g., "1.", "a.")
-            # - Captures the question text
-            # - Captures the answer in parentheses
-            # - Captures the hint in square brackets
-            # It also handles variations where there might be extra spaces.
-            trivia_line_pattern = re.compile(r'^\s*\d*\.?\s*(.*?)\s*\((.*?)\)\s*\[(.*?)\]\s*$')
-
-            for line in raw_trivia.split('\n'):
-                line = line.strip()
-                if not line:
-                    continue # Skip empty lines
-
-                match = trivia_line_pattern.match(line)
-                if match:
-                    question_text = match.group(1).strip()
-                    answer = match.group(2).strip()
-                    hint = match.group(3).strip()
-                    
-                    trivia_questions.append({'question': question_text, 'answer': answer, 'hint': hint})
+            # Regex to find each trivia entry: starts with a letter/number and '.', captures content until next entry or end.
+            # This is designed to capture the entire block of text associated with a question,
+            # even if the answer/hint are on separate lines or malformed.
+            # It looks for a numbered/lettered prefix, then captures non-greedily everything until the next prefix or end of string.
+            trivia_entry_pattern = re.compile(r'^\s*([a-eA-E]|\d+)\.\s*(.*?)(?=\n\s*[a-eA-E]\.|\n\s*\d+\.|\Z)', re.MULTILINE | re.DOTALL)
+            
+            for match in trivia_entry_pattern.finditer(raw_trivia_block):
+                full_entry_text = match.group(2).strip() # This is the content after "a. " or "1. " for a single trivia item.
                 
-                # IMPORTANT: Limit to 5 questions explicitly after successful parsing
-                if len(trivia_questions) >= 5:
+                question = ""
+                answer = ""
+                hint = ""
+                
+                # First, try to extract the question itself. Assume the first line of the entry is the question.
+                entry_lines = full_entry_text.split('\n')
+                if entry_lines:
+                    question = entry_lines[0].strip() # Take the first line as the primary question candidate
+                    remaining_text = "\n".join(entry_lines[1:]) # Rest of the lines for answer/hint search
+                else:
+                    remaining_text = "" # No remaining text if only one line
+                
+                # Try to extract Answer (can be in parentheses or preceded by "Answer:"/"Reponse:")
+                ans_found = False
+                ans_match_paren = re.search(r'\(([^)]*?)\)', question) # Non-greedy inside parentheses
+                if ans_match_paren:
+                    answer = ans_match_paren.group(1).strip()
+                    question = question.replace(ans_match_paren.group(0), '').strip() # Remove answer from question
+                    ans_found = True
+                
+                if not ans_found: # If not found in parentheses, look for prefix in the full entry text
+                    # Look for "Answer:" or "Reponse:" followed by text until a newline or hint bracket/prefix
+                    # Using [^\n\[]*? for non-greedy capture and stopping at newline or '['
+                    ans_match_prefix = re.search(r'^(?:Reponse|Answer):\s*([^\n\[]*?)(?=\n|\[|Hint:|Indice:|\Z)', full_entry_text, re.IGNORECASE | re.MULTILINE)
+                    if ans_match_prefix:
+                        answer = ans_match_prefix.group(1).strip()
+                        # Remove the matched answer text from full_entry_text to avoid re-matching for hint
+                        full_entry_text = full_entry_text.replace(ans_match_prefix.group(0), '', 1).strip()
+                        ans_found = True
+                
+                # Try to extract Hint (can be in square brackets or preceded by "Hint:"/"Indice:")
+                hint_found = False
+                hint_match_bracket = re.search(r'\[([^\]]*?)\]', full_entry_text) # Non-greedy inside brackets
+                if hint_match_bracket:
+                    hint = hint_match_bracket.group(1).strip()
+                    full_entry_text = full_entry_text.replace(hint_match_bracket.group(0), '', 1).strip()
+                    hint_found = True
+                
+                if not hint_found:
+                    # Look for "Hint:" or "Indice:" followed by text until a newline or end of string
+                    # Using [^\n]*? for non-greedy capture stopping at newline
+                    hint_match_prefix = re.search(r'^(?:Hint|Indice):\s*([^\n]*?)(?=\n|\Z)', full_entry_text, re.IGNORECASE | re.MULTILINE)
+                    if hint_match_prefix:
+                        hint = hint_match_prefix.group(1).strip()
+                        full_entry_text = full_entry_text.replace(hint_match_prefix.group(0), '', 1).strip()
+                        hint_found = True
+                
+                # After extraction, if the answer or hint still contain newlines, it's likely an article.
+                # Restrict answer/hint to a single line or very short text.
+                if '\n' in answer:
+                    answer = answer.split('\n')[0].strip() # Take only the first line
+                if len(answer) > 50: # Further truncate if still too long after newline split
+                    answer = answer[:50].strip() + "..." if len(answer) > 50 else answer
+                
+                if '\n' in hint:
+                    hint = hint.split('\n')[0].strip() # Take only the first line
+                if len(hint) > 100: # Further truncate if still too long
+                    hint = hint[:100].strip() + "..." if len(hint) > 100 else hint
+
+                # Final cleaning of the question to remove any residual answer/hint parts
+                question = re.sub(r'\s*\((.*?)\)', '', question).strip() # Remove any remaining parentheses content
+                question = re.sub(r'\s*\[.*?\]', '', question).strip() # Remove any remaining bracket content
+                # Also remove leading hyphens if AI added them
+                question = re.sub(r'^-?\s*', '', question).strip()
+
+                # Take the first line of the question as the definitive question.
+                # This handles cases where AI might put more text after the initial question statement
+                # if there were no (Answer) [Hint] to delimit it.
+                question_lines = question.split('\n')
+                question = question_lines[0].strip()
+
+                # If the question is still prefixed by "a.", "b.", etc., remove it (already handled by outer regex `([a-eA-E]|\d+)\.\s*`) but double check.
+                question = re.sub(r'^\s*([a-eA-E]|\d+)\.\s*', '', question).strip()
+
+                # If after all parsing, question, answer, or hint are empty, fill with placeholder
+                if not question: question = "No question found."
+                if not answer: answer = "No answer found."
+                if not hint: hint = "No hint found."
+
+                trivia_questions.append({
+                    'question': question.strip(),
+                    'answer': answer.strip(),
+                    'hint': hint.strip()
+                })
+                
+                if len(trivia_questions) >= 5: # Limit to 5 questions explicitly
                     break
 
         # Special handling for Did You Know? to make parsing more robust
@@ -729,7 +800,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     # Loop through the first 4 trivia questions for the PDF
     for i, item in enumerate(data['trivia_section'][:4]): # Limit to 4 questions for PDF
         # Ensure question marks are preserved by not replacing them in clean_text_for_latin1
-        question_text_clean = clean_text_for_latin1(f"{chr(97+i)}. {item['question']}")
+        question_text_clean = clean_text_for_latin1(f"{chr(97+i)}. - {item['question']}") # Added hyphen
         answer_text_prefix = translate_text_with_ai("Answer:", current_language, client_ai) # Translated prefix
         answer_text_clean = clean_text_for_latin1(f"{answer_text_prefix} {item['answer']}")
         hint_text_prefix = translate_text_with_ai("Hint:", current_language, client_ai) # Translated prefix
