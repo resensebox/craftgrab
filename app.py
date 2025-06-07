@@ -7,7 +7,7 @@ import os
 import logging
 import sqlite3
 import gspread
-from oauth22client.service_account import ServiceAccountCredentials
+from oauth2client.service_account import ServiceAccountCredentials
 import smtplib
 from email.mime.text import MIMEText
 
