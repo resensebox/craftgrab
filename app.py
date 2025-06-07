@@ -696,6 +696,13 @@ def show_main_app_page():
     st.sidebar.subheader("Share Daily Page")
     st.sidebar.info("Daily/weekly sharing via email is a planned feature. This would integrate with an email service.")
 
+    # Feedback section
+    st.markdown("---")
+    st.subheader("📧 Send us feedback")
+    st.markdown("We'd love to hear from you! If you have any suggestions, questions, or just want to say hello, feel free to reach out to us at:")
+    st.markdown("### `thisdayinhistoryapp@gmail.com`")
+    st.markdown("---")
+
 
 def show_trivia_page():
     st.title("🧠 Daily Trivia Challenge!")
@@ -703,6 +710,9 @@ def show_trivia_page():
 
     st.markdown("---")
     st.subheader("Trivia Settings")
+    # Add the note about inputting a response
+    st.info("💡 To check your answer, please input your response into the text box and then click the 'Check Answer' button.")
+    
     # Moved: Difficulty selection is now on the trivia page
     st.session_state['difficulty'] = st.selectbox(
         "Trivia Difficulty",
@@ -886,6 +896,14 @@ def show_trivia_page():
             st.info("No scores logged yet for the leaderboard. Be the first!")
 
         st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_bottom")
+
+    # Feedback section
+    st.markdown("---")
+    st.subheader("📧 Send us feedback")
+    st.markdown("We'd love to hear from you! If you have any suggestions, questions, or just want to say hello, feel free to reach out to us at:")
+    st.markdown("### `thisdayinhistoryapp@gmail.com`")
+    st.markdown("---")
+    
     else:
         st.write("No trivia questions available for today. Please go back to the main page.")
         st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_no_questions")
@@ -914,6 +932,15 @@ def show_login_register_page():
         with st.form("register_form"):
             new_username = st.text_input("New Username", key="register_username_input")
             new_email = st.text_input("Email", key="register_email_input")
+            # Added email usage note
+            st.markdown(
+                """
+                <p style='font-size:0.8em; color:#AAAAAA; margin-top:-1em;'>
+                *No spam or marketing emails. Used only for account support like lost passwords.*
+                </p>
+                """,
+                unsafe_allow_html=True
+            )
             new_password = st.text_input("New Password", type="password", key="register_password_input")
             confirm_password = st.text_input("Confirm Password", type="password", key="register_confirm_password_input")
             # Removed the 'key' argument from st.form_submit_button
@@ -994,6 +1021,13 @@ def show_login_register_page():
     with col2_example:
         st.markdown(pdf_viewer_link_example, unsafe_allow_html=True)
 
+    # Feedback section
+    st.markdown("---")
+    st.subheader("📧 Send us feedback")
+    st.markdown("We'd love to hear from you! If you have any suggestions, questions, or just want to say hello, feel free to reach out to us at:")
+    st.markdown("### `thisdayinhistoryapp@gmail.com`")
+    st.markdown("---")
+
 
 # --- Main App Logic (Router) ---
 if st.session_state['is_authenticated']:
@@ -1064,3 +1098,4 @@ if st.session_state['is_authenticated']:
 
 else: # Not authenticated, show login/register and January 1st example
     show_login_register_page()
+
