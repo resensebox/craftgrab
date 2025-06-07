@@ -882,7 +882,12 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
 def generate_audio_bytes(text, lang='en'):
     """Generates audio bytes for a given text using gTTS."""
     try:
-        tts = gTTS(text=text, lang=lang, slow=False)
+        # Ensure text is a string before passing to gTTS
+        text_str = str(text) if text is not None else ""
+        if not text_str.strip(): # If text is empty or just whitespace
+            return None # No audio to generate
+
+        tts = gTTS(text=text_str, lang=lang, slow=False)
         audio_bytes_io = BytesIO()
         tts.write_to_fp(audio_bytes_io)
         audio_bytes_io.seek(0)
@@ -1446,6 +1451,8 @@ Word of mouth goes a long way—if you enjoy using This Day In History, please s
     )
     
     # Generate PDF bytes once
+    # DEBUG PRINT: Confirming the masthead text used for PDF generation
+    print(f"DEBUG: Generating PDF with masthead: '{st.session_state['custom_masthead_text']}' for date {selected_date.strftime('%Y-%m-%d')}")
     with st.spinner(translate_text_with_ai("Preparing your PDF worksheet...", st.session_state['preferred_language'], client_ai)):
         pdf_bytes_main = generate_full_history_pdf(
             raw_data_for_pdf, 
@@ -1460,6 +1467,11 @@ Word of mouth goes a long way—if you enjoy using This Day In History, please s
     # Create Base64 encoded link
     lang_suffix = f"_{st.session_state['preferred_language']}" if st.session_state['preferred_language'] != 'English' else ''
     pdf_file_name = f"This_Day_in_History_{selected_date.strftime('%Y%m%d')}{lang_suffix}.pdf"
+
+    # Make download button key dynamic to ensure fresh content on re-renders
+    # Using a hash of custom_masthead_text and date to ensure unique key when content changes
+    download_button_key = f"download_daily_pdf_{selected_date.strftime('%Y%m%d')}_{st.session_state['preferred_language']}_masthead_{hash(st.session_state['custom_masthead_text'])}"
+
 
     b64_pdf_main = base64.b64encode(pdf_bytes_main).decode('latin-1')
     pdf_viewer_link_main = f'<a href="data:application/pdf;base64,{b64_pdf_main}" target="_blank">{translate_text_with_ai("View PDF in Browser", st.session_state["preferred_language"], client_ai)}</a>'
@@ -1481,7 +1493,8 @@ Word of mouth goes a long way—if you enjoy using This Day In History, please s
             file_name=pdf_file_name,
             mime="application/pdf",
             on_click=handle_pdf_download_click, # Use the new handler
-            args=(st.session_state['logged_in_username'], pdf_file_name, selected_date) # Pass arguments
+            args=(st.session_state['logged_in_username'], pdf_file_name, selected_date), # Pass arguments
+            key=download_button_key # Use the dynamic key
         )
     with col2:
         st.markdown(pdf_viewer_link_main, unsafe_allow_html=True)
@@ -1522,7 +1535,7 @@ def show_weekly_planner_page():
                 fetched_raw_data = get_this_day_in_history_facts(
                     current_day.day, current_day.month, user_info, client_ai,
                     topic=st.session_state.get('preferred_topic_main_app') if st.session_state.get('preferred_topic_main_app') != "None" else None,
-                    preferred_decade=st.session_state.get('preferred_decade_main_app') if st.session_state.get('preferred_decade_main_app') != "None" else None,
+                    preferred_decade=st.session_state.get('preferred_decade_main_app') if st.session_state.get('preferred_decade_main_app') != "None' else None,
                     difficulty=st.session_state['difficulty'],
                     local_city=st.session_state['local_city'] if st.session_state['local_city'].strip() else None,
                     local_state_country=st.session_state['local_state_country'] if st.session_state['local_state_country'].strip() else None
@@ -1555,7 +1568,8 @@ def show_weekly_planner_page():
                 label=translate_text_with_ai("Download Weekly PDF Pack (ZIP)", st.session_state['preferred_language'], client_ai),
                 data=zip_buffer,
                 file_name=zip_file_name,
-                mime="application/zip"
+                mime="application/zip",
+                key=f"download_weekly_zip_{start_of_week.strftime('%Y%m%d')}_{st.session_state['preferred_language']}_masthead_{hash(st.session_state['custom_masthead_text'])}" # Dynamic key
             )
             st.success(translate_text_with_ai("Weekly PDF pack generated and ready for download!", st.session_state['preferred_language'], client_ai))
     
@@ -1721,7 +1735,7 @@ def show_memory_journal_page():
                 data=pdf_bytes,
                 file_name=journal_filename,
                 mime="application/pdf",
-                key='final_journal_download_btn'
+                key=f'final_journal_download_btn_{date.today().strftime("%Y%m%d")}' # Dynamic key
             )
         else:
             st.info(translate_text_with_ai("No memory entries to download yet.", st.session_state['preferred_language'], client_ai))
@@ -1782,7 +1796,8 @@ def show_offline_pack_page():
                 label=translate_text_with_ai("Download Offline Pack (ZIP)", st.session_state['preferred_language'], client_ai),
                 data=zip_buffer,
                 file_name=zip_file_name,
-                mime="application/zip"
+                mime="application/zip",
+                key=f"download_offline_zip_{current_date.strftime('%Y%m%d')}_{st.session_state['preferred_language']}_masthead_{hash(st.session_state['custom_masthead_text'])}" # Dynamic key
             )
             st.success(translate_text_with_ai("Offline PDF pack generated and ready for download!", st.session_state['preferred_language'], client_ai))
     
@@ -2264,7 +2279,8 @@ def show_login_register_page():
             translate_text_with_ai("Download Example PDF", st.session_state['preferred_language'], client_ai),
             pdf_bytes_example,
             file_name=pdf_file_name_example,
-            mime="application/pdf"
+            mime="application/pdf",
+            key=f"download_example_pdf_{january_1st_example_date.strftime('%Y%m%d')}_{st.session_state['preferred_language']}_masthead_example" # Dynamic key for example
         )
     with col2_example:
         st.markdown(pdf_viewer_link_example, unsafe_allow_html=True)
@@ -2281,22 +2297,36 @@ if st.session_state['is_authenticated']:
     if st.sidebar.button(translate_text_with_ai("🎮 Play Trivia!", st.session_state['preferred_language'], client_ai), key="sidebar_trivia_btn"):
         set_page('trivia_page')
     
-    # NEW: Navigation for new features
+    st.sidebar.markdown("---") # Separator before feature toggles explanation
+    st.sidebar.info(translate_text_with_ai("💡 Check the boxes below to enable new features, then use the navigation buttons above!", st.session_state['preferred_language'], client_ai))
+    
+    st.sidebar.subheader(translate_text_with_ai("✨ New Feature Toggles", st.session_state['preferred_language'], client_ai))
+    st.session_state['toggle_weekly_planner'] = st.sidebar.checkbox(translate_text_with_ai("📊 Enable Weekly Planner", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_weekly_planner'], key='toggle_weekly_planner')
+    st.session_state['toggle_group_mode'] = st.sidebar.checkbox(translate_text_with_ai("👥 Enable Group Mode (Trivia)", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_group_mode'], key='toggle_group_mode')
+    st.session_state['toggle_audio_qr'] = st.sidebar.checkbox(translate_text_with_ai("🎧 Enable Audio QR Codes (PDF)", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_audio_qr'], key='toggle_audio_qr')
+    st.session_state['toggle_companion_activities'] = st.sidebar.checkbox(translate_text_with_ai("🎨 Enable Companion Activities", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_companion_activities'], key='toggle_companion_activities')
+    st.session_state['toggle_memory_journal'] = st.sidebar.checkbox(translate_text_with_ai("✍️ Enable Memory Journal Tool", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_memory_journal'], key='toggle_memory_journal')
+    st.session_state['toggle_large_print_pdf'] = st.sidebar.checkbox(translate_text_with_ai("🖨️ Enable Large Print PDF", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_large_print_pdf'], key='toggle_large_print_pdf')
+    st.session_state['toggle_offline_pack'] = st.sidebar.checkbox(translate_text_with_ai("📦 Enable Offline Pack", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_offline_pack'], key='toggle_offline_pack')
+    st.session_state['toggle_autopilot_email'] = st.sidebar.checkbox(translate_text_with_ai("📧 Enable Autopilot Email", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_autopilot_email'], key='toggle_autopilot_email')
+
+    # NEW: Navigation for new features (moved below toggles but still in general navigation section)
+    # These buttons will now appear only if the corresponding toggle is checked.
     if st.session_state['toggle_weekly_planner']:
-        if st.sidebar.button(translate_text_with_ai("📊 Weekly Planner", st.session_state['preferred_language'], client_ai), key="sidebar_weekly_planner_btn"):
+        if st.sidebar.button(translate_text_with_ai("📊 Weekly Planner", st.session_state['preferred_language'], client_ai), key="sidebar_weekly_planner_btn_nav"): # Changed key to avoid conflict if any
             set_page('weekly_planner_page')
     if st.session_state['toggle_memory_journal']:
-        if st.sidebar.button(translate_text_with_ai("✍️ Memory Journal", st.session_state['preferred_language'], client_ai), key="sidebar_memory_journal_btn"):
+        if st.sidebar.button(translate_text_with_ai("✍️ Memory Journal", st.session_state['preferred_language'], client_ai), key="sidebar_memory_journal_btn_nav"): # Changed key
             set_page('memory_journal_page')
     if st.session_state['toggle_offline_pack']:
-        if st.sidebar.button(translate_text_with_ai("📦 Offline Pack", st.session_state['preferred_language'], client_ai), key="sidebar_offline_pack_btn"):
+        if st.sidebar.button(translate_text_with_ai("📦 Offline Pack", st.session_state['preferred_language'], client_ai), key="sidebar_offline_pack_btn_nav"): # Changed key
             set_page('offline_pack_page')
     if st.session_state['toggle_autopilot_email']:
-        if st.sidebar.button(translate_text_with_ai("📧 Autopilot Email", st.session_state['preferred_language'], client_ai), key="sidebar_autopilot_email_btn"):
+        if st.sidebar.button(translate_text_with_ai("📧 Autopilot Email", st.session_state['preferred_language'], client_ai), key="sidebar_autopilot_email_btn_nav"): # Changed key
             set_page('autopilot_email_page')
 
     st.sidebar.markdown("---")
-    st.sidebar.header(translate_text_with_ai("Settings", st.session_state['preferred_language'], client_ai))
+    st.sidebar.header(translate_text_with_ai("Content Settings", st.session_state['preferred_language'], client_ai))
     
     st.sidebar.subheader(translate_text_with_ai("Content Customization", st.session_state['preferred_language'], client_ai))
     st.session_state['preferred_topic_main_app'] = st.sidebar.selectbox(
@@ -2337,17 +2367,6 @@ if st.session_state['is_authenticated']:
     )
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader(translate_text_with_ai("✨ New Feature Toggles", st.session_state['preferred_language'], client_ai))
-    st.session_state['toggle_weekly_planner'] = st.sidebar.checkbox(translate_text_with_ai("📊 Enable Weekly Planner", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_weekly_planner'], key='toggle_weekly_planner')
-    st.session_state['toggle_group_mode'] = st.sidebar.checkbox(translate_text_with_ai("👥 Enable Group Mode (Trivia)", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_group_mode'], key='toggle_group_mode')
-    st.session_state['toggle_audio_qr'] = st.sidebar.checkbox(translate_text_with_ai("🎧 Enable Audio QR Codes (PDF)", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_audio_qr'], key='toggle_audio_qr')
-    st.session_state['toggle_companion_activities'] = st.sidebar.checkbox(translate_text_with_ai("🎨 Enable Companion Activities", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_companion_activities'], key='toggle_companion_activities')
-    st.session_state['toggle_memory_journal'] = st.sidebar.checkbox(translate_text_with_ai("✍️ Enable Memory Journal Tool", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_memory_journal'], key='toggle_memory_journal')
-    st.session_state['toggle_large_print_pdf'] = st.sidebar.checkbox(translate_text_with_ai("🖨️ Enable Large Print PDF", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_large_print_pdf'], key='toggle_large_print_pdf')
-    st.session_state['toggle_offline_pack'] = st.sidebar.checkbox(translate_text_with_ai("📦 Enable Offline Pack", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_offline_pack'], key='toggle_offline_pack')
-    st.session_state['toggle_autopilot_email'] = st.sidebar.checkbox(translate_text_with_ai("📧 Enable Autopilot Email", st.session_state['preferred_language'], client_ai), value=st.session_state['toggle_autopilot_email'], key='toggle_autopilot_email')
-
-    st.sidebar.markdown("---")
     if st.sidebar.button(translate_text_with_ai("🚪 Log Out", st.session_state['preferred_language'], client_ai), key="sidebar_logout_btn"):
         log_event("logout", st.session_state['logged_in_username'])
         st.session_state['is_authenticated'] = False
@@ -2374,4 +2393,3 @@ if st.session_state['is_authenticated']:
         show_main_app_page()
 else: # Not authenticated, show login/register and January 1st example
     show_login_register_page()
-
