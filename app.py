@@ -253,7 +253,12 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         event_article = event_article_match.group(1).strip() if event_article_match else "No event article found."
         born_article = born_article_match.group(1).strip() if born_article_match else "No birth article found."
         fun_fact_section = fun_fact_match.group(1).strip() if fun_fact_match else "No fun fact found."
+        
         did_you_know_lines = [f.strip() for f in did_you_know_match.group(1).strip().split('\n') if f.strip()] if did_you_know_match else []
+        # Ensure 'Did You Know?' always has at least one item, even if AI fails to generate
+        if not did_you_know_lines:
+            did_you_know_lines = ["No 'Did You Know?' facts available for today. Please try again or adjust preferences."]
+
         memory_prompt_section = memory_prompt_match.group(1).strip() if memory_prompt_match else "No memory prompt available."
 
         return {
@@ -271,7 +276,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
             'born_article': "Could not fetch birth history.",
             'fun_fact_section': "Could not fetch fun fact.",
             'trivia_section': [], # Empty list if error
-            'did_you_know_section': ["No 'Did You Know?' facts available."],
+            'did_you_know_section': ["No 'Did You Know?' facts available for today. Please try again or adjust preferences."], # Ensure default content
             'memory_prompt_section': "No memory prompt available."
         }
 
@@ -340,7 +345,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
         pdf.multi_cell(0, line_height, "Memory Prompt:")
         if not dementia_mode: pdf.set_font("Arial", "", 12)
         pdf.multi_cell(0, line_height, data['memory_prompt_section'])
-        pdf.ln(spacing)
+    pdf.ln(spacing) # Add a line space at the end of content section
 
     if not dementia_mode:
         pdf.set_font("Arial", "I", 10)
@@ -604,7 +609,7 @@ def show_trivia_page():
         st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_bottom")
     else:
         st.write("No trivia questions available for today. Please go back to the main page.")
-        st.button("⬅️ Back to Main Page", on_on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_no_questions")
+        st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_no_questions")
 
 
 def show_login_register_page():
