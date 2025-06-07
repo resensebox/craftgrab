@@ -611,20 +611,18 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     for i, item in enumerate(data['trivia_section']):
         # Format question bold, answer regular with small spacing
         question_text_clean = clean_text_for_latin1(f"{chr(97+i)}. {item['question']}")
-        answer_text_clean = clean_text_for_latin1(f"(Answer: {item['answer']})")
+        answer_text_clean = clean_text_for_latin1(f"Answer: {item['answer']}") # Removed parentheses for cleaner display in PDF
+        hint_text_clean = clean_text_for_latin1(f"Hint: {item['hint']}")
 
         pdf.set_font("Arial", "B", 10) # Bold for question
         pdf.multi_cell(col_width, 5, question_text_clean)
-        # No direct Y update here for multi_cell; FPDF handles it.
-        # current_y_col1 += pdf.get_string_width(question_text_clean) / col_width * 5 # Approximation, can be inaccurate
-
+        
         pdf.set_font("Arial", "", 9) # Smaller, regular for answer
         pdf.multi_cell(col_width, 4, answer_text_clean)
-        # current_y_col1 += pdf.get_string_width(answer_text_clean) / col_width * 4 # Approximation
+        
+        pdf.multi_cell(col_width, 4, hint_text_clean) # Display hint
+        pdf.ln(5) # Increased space after each trivia question
 
-        pdf.ln(3) # Small space after each trivia question
-        # For simplicity in Y tracking within a column, we can approximate total height added per trivia item
-        # A more precise way would be to get_y() before and after each multi_cell
         current_y_col1 = pdf.get_y() # Get current Y to accurately track position
 
     current_y_col1 += 12 # Increased spacing after the entire trivia section (from 8 to 12)
@@ -687,22 +685,39 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     # Find the maximum Y position reached by either column
     max_y_content = max(current_y_col1, current_y_col2)
     
-    # Calculate remaining vertical space
-    # 297mm (A4 height) - 15mm (bottom margin) - max_y_content (where content ends)
-    remaining_space = pdf.h - right_margin - max_y_content
+    # Calculate required footer height (approximate)
+    footer_height_estimate = 4 * 4 + 10 # 4 lines of text + some line breaks + logo height (approx 10mm) + spacing
 
-    # Move to a position such that the contact info is always near the bottom
-    # If remaining_space is positive and large enough, move down
-    if remaining_space > 30: # If there's more than 30mm space, push footer down
-        pdf.set_y(pdf.h - right_margin - 30) # Position 30mm from bottom
-    else: # Otherwise, just give a small buffer
-        pdf.set_y(max_y_content + 10) # Add a buffer space if near end of page
+    # Determine desired Y position for the footer
+    # Try to place it at the very bottom, respecting margins, but pull it up if content pushes it
+    desired_y_footer = pdf.h - right_margin - footer_height_estimate
+    
+    # Ensure footer starts at least 15mm below the main content, but not too high
+    # And ensure it's not below the desired bottom position
+    final_y_footer = max(max_y_content + 15, desired_y_footer) # Ensures it's always below content but also near bottom
+
+    pdf.set_y(final_y_footer)
 
     pdf.set_left_margin(left_margin)
     pdf.set_right_margin(right_margin)
     pdf.set_x(left_margin)
     
     # Enhanced Contact Information in PDF - Centered at the bottom
+    # Place logo and text side-by-side (using columns conceptually)
+    
+    # Logo dimensions
+    logo_width = 25 # mm
+    logo_height = 25 # mm, assuming square or proportional
+
+    # Calculate X position for centered logo
+    # This will center the logo relative to the entire page width, not just the left column
+    logo_x = (page_width - logo_width) / 2
+    
+    # Need to save current Y before adding image and then move back if adding text next to it.
+    # For now, let's stack logo above centered text.
+    pdf.image("https://i.postimg.cc/8CRsCGCC/Chat-GPT-Image-Jun-7-2025-12-32-18-AM.png", x=logo_x, y=pdf.get_y(), w=logo_width, h=logo_height)
+    pdf.ln(logo_height + 2) # Move cursor down after logo, with a small buffer
+
     pdf.set_font("Arial", "B", 8)
     pdf.multi_cell(0, 4, "--- Mindful Libraries ---", align='C') # Changed name here
     pdf.set_font("Arial", "", 7)
