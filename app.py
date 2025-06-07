@@ -54,6 +54,8 @@ if 'preferred_language' not in st.session_state:
     st.session_state['preferred_language'] = 'English' # Default language
 if 'custom_masthead_text' not in st.session_state: # NEW: Custom masthead text for PDF
     st.session_state['custom_masthead_text'] = ""
+if 'last_download_status' not in st.session_state: # NEW: To track PDF download logging status for user feedback
+    st.session_state['last_download_status'] = None
 
 
 # --- Custom CSS for Sidebar Styling and Default App Theme (Black) ---
@@ -358,10 +360,11 @@ def log_pdf_download(username, filename, download_date):
             filename,
             download_date.strftime("%Y-%m-%d") if isinstance(download_date, date) else str(download_date)
         ])
-        st.success(f"PDF download logged for {username}.")
+        # Removed st.success here to manage feedback more centrally with session state
         return True
     except Exception as e:
-        st.warning(f"⚠️ Could not log PDF download for '{username}': {e}")
+        # Removed st.warning here to manage feedback more centrally with session state
+        print(f"ERROR: Could not log PDF download for '{username}': {e}") # Log to console for debugging
         return False
 
 
@@ -1047,6 +1050,17 @@ def show_feedback_form():
                 st.warning(translate_text_with_ai("Please enter some feedback before submitting.", st.session_state['preferred_language'], client_ai))
     st.markdown("---")
 
+# New wrapper function for PDF download button
+def handle_pdf_download_click(username, filename, selected_date):
+    """
+    Handles the PDF download button click event, logging the download
+    and setting a session state flag for persistent feedback.
+    """
+    success = log_pdf_download(username, filename, selected_date)
+    if success:
+        st.session_state['last_download_status'] = 'success'
+    else:
+        st.session_state['last_download_status'] = 'failure'
 
 # --- UI Functions for Pages ---
 def show_main_app_page():
@@ -1196,6 +1210,15 @@ Word of mouth goes a long way—if you enjoy using This Day In History, please s
     b64_pdf_main = base64.b64encode(pdf_bytes_main).decode('latin-1')
     pdf_viewer_link_main = f'<a href="data:application/pdf;base64,{b64_pdf_main}" target="_blank">{translate_text_with_ai("View PDF in Browser", st.session_state["preferred_language"], client_ai)}</a>'
 
+    # Display status message if any
+    if st.session_state['last_download_status'] == 'success':
+        st.success(translate_text_with_ai("PDF download successfully logged to Google Sheet!", st.session_state['preferred_language'], client_ai))
+        st.session_state['last_download_status'] = None # Clear the message after display
+    elif st.session_state['last_download_status'] == 'failure':
+        st.error(translate_text_with_ai("Failed to log PDF download to Google Sheet. Please check permissions or try again.", st.session_state['preferred_language'], client_ai))
+        st.session_state['last_download_status'] = None # Clear the message after display
+
+
     col1, col2 = st.columns([1, 1])
     with col1:
         st.download_button(
@@ -1203,7 +1226,7 @@ Word of mouth goes a long way—if you enjoy using This Day In History, please s
             pdf_bytes_main, 
             file_name=pdf_file_name,
             mime="application/pdf",
-            on_click=log_pdf_download, # Add on_click event
+            on_click=handle_pdf_download_click, # Use the new handler
             args=(st.session_state['logged_in_username'], pdf_file_name, selected_date) # Pass arguments
         )
     with col2:
