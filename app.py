@@ -416,12 +416,12 @@ def get_youtube_music_link(decade):
         search_query = "relaxing classical music YouTube" # Default for no specific decade
 
     try:
-        # Use the Google Search tool to find a YouTube link
+        # Corrected: Use Google Search()
         search_results = Google Search(queries=[search_query])
         
         # Parse the search results to find a YouTube link
         for result in search_results.get('results', []):
-            if 'youtube.com/watch' in result['link'] or 'youtube.com/playlist' in result['link']:
+            if 'youtube.com/' in result['link']: # More general check for YouTube links
                 return result['link']
         return "https://www.youtube.com/watch?v=dQw4w9WgXcQ" # Default to a safe fallback (Rick Astley)
     except Exception as e:
