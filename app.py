@@ -175,7 +175,7 @@ if st.session_state['is_authenticated']:
         st.session_state['logged_in_username'] = ""
         st.rerun()
 
-    st.title("📅 This Day in History")
+st.title("📅 This Day in History")
     today = datetime.today()
     day, month = today.day, today.month
     user_info = {
@@ -245,11 +245,11 @@ if st.button("📄 Download Demo PDF"):
 
     with register_tab:
         with st.form("register_form"):
-            new_username = st.text_input("New Username")
-            new_email = st.text_input("Email")
-            new_password = st.text_input("New Password", type="password")
-            confirm_password = st.text_input("Confirm Password", type="password")
-            if st.form_submit_button("Register"):
+    new_username = st.text_input("New Username")
+    new_email = st.text_input("Email")
+    new_password = st.text_input("New Password", type="password")
+    confirm_password = st.text_input("Confirm Password", type="password")
+    st.form_submit_button("Register"):
                 if new_password == confirm_password:
                     save_new_user(new_username, new_password)
                     st.session_state['is_authenticated'] = True
