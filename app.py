@@ -753,8 +753,8 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     pdf.set_font("Arial", "B", section_title_font_size)
     pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("On This Date", current_language, client_ai)))
     current_y_col1 += line_height_normal # Update Y after title
-    pdf.set_font("Arial", "", article_text_font_size)
-    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['event_article']))
+    # Use .get() with a default empty string to prevent TypeError if AI returns None for this field
+    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data.get('event_article', '')))
     current_y_col1 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
 
     pdf.set_y(current_y_col1) # Ensure position is updated
@@ -763,13 +763,13 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     pdf.set_font("Arial", "B", section_title_font_size)
     pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Fun Fact:", current_language, client_ai))) # Translated
     current_y_col1 += line_height_normal
-    pdf.set_font("Arial", "", article_text_font_size)
-    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['fun_fact_section']))
+    # Use .get() with a default empty string
+    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data.get('fun_fact_section', '')))
     current_y_col1 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
     pdf.set_y(current_y_col1)
 
     # Daily Trivia
-    if data['trivia_section']: # Only display if there are trivia questions
+    if data.get('trivia_section'): # Use .get() to check if 'trivia_section' key exists and is not empty/None
         pdf.set_font("Arial", "B", section_title_font_size)
         pdf.multi_cell(col_width, line_height_normal, "Daily Trivia") # NOT translated
         current_y_col1 += line_height_normal
@@ -777,9 +777,10 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
 
         # Loop through the first 4 trivia questions for the PDF
         for i, item in enumerate(data['trivia_section'][:4]): # Limit to 4 questions for PDF
-            question_text_clean = clean_text_for_latin1(f"{chr(97+i)}. - {item['question']}") # Added hyphen
-            answer_text_clean = clean_text_for_latin1(f"Answer: {item['answer']}") # NOT translated
-            hint_text_clean = clean_text_for_latin1(f"Hint: {item['hint']}") # NOT translated
+            # Use .get() with default empty string for question, answer, hint
+            question_text_clean = clean_text_for_latin1(f"{chr(97+i)}. - {item.get('question', '')}") # Added hyphen
+            answer_text_clean = clean_text_for_latin1(f"Answer: {item.get('answer', '')}") # NOT translated
+            hint_text_clean = clean_text_for_latin1(f"Hint: {item.get('hint', '')}") # NOT translated
 
             pdf.set_font("Arial", "B", trivia_q_font_size) # Bold for question
             pdf.multi_cell(col_width, line_height_trivia_ans_hint, question_text_clean)
@@ -816,34 +817,35 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
     pdf.set_font("Arial", "B", section_title_font_size)
     pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Happy Birthday!", current_language, client_ai))) # Translated
     current_y_col2 += line_height_normal
-    pdf.set_font("Arial", "", article_text_font_size)
-    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['born_article']))
+    # Use .get() with a default empty string
+    pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data.get('born_article', '')))
     current_y_col2 = pdf.get_y() + section_spacing_normal # Update Y and add spacing
     pdf.set_y(current_y_col2)
 
     # Did You Know? - Title now ends with '?'
-    if data['did_you_know_section']:
+    if data.get('did_you_know_section'): # Use .get() to check if 'did_you_know_section' key exists and is not empty/None
         pdf.set_font("Arial", "B", section_title_font_size)
         pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Did You Know?", current_language, client_ai))) # Translated
         current_y_col2 += line_height_normal
         pdf.set_font("Arial", "", article_text_font_size)
         for item in data['did_you_know_section']:
-            did_you_know_line = clean_text_for_latin1(f"- {item}")
+            # Ensure item is treated as string for clean_text_for_latin1
+            did_you_know_line = clean_text_for_latin1(f"- {item if item is not None else ''}")
             pdf.multi_cell(col_width, line_height_normal, did_you_know_line)
             current_y_col2 = pdf.get_y() # Update Y after each fact line
         current_y_col2 += section_spacing_normal # Spacing after section
         pdf.set_y(current_y_col2)
 
     # Memory Prompt? - Title now ends with '?'
-    if data['memory_prompt_section']:
+    if data.get('memory_prompt_section'): # Use .get() to check if key exists and is not empty/None
         pdf.set_font("Arial", "B", section_title_font_size)
         pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Memory Prompt?", current_language, client_ai))) # Translated
         current_y_col2 += line_height_normal
         pdf.set_font("Arial", "", article_text_font_size)
         # Iterate and display up to the first 3 memory prompts for PDF
         for prompt_text in data['memory_prompt_section'][:3]: # Limit to first 3 prompts
-            # Display without a leading hyphen to appear more like a paragraph
-            pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(prompt_text))
+            # Ensure prompt_text is treated as string for clean_text_for_latin1
+            pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(prompt_text if prompt_text is not None else ''))
             pdf.ln(2) # Small line break between prompts
             current_y_col2 = pdf.get_y() # Update Y after each prompt line
         current_y_col2 += section_spacing_normal # Spacing after section
@@ -851,8 +853,9 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
 
     # Local History (if available) - This section will now rely on auto_page_break
     # It will only be displayed if it's not one of the "not found" messages.
-    if data['local_history_section'] and \
-       not data['local_history_section'].startswith("Could not generate local history fact."): # Simplified check
+    local_history_content = data.get('local_history_section', '')
+    if local_history_content and \
+       not local_history_content.startswith("Could not generate local history fact."): # Simplified check
         pdf.set_font("Arial", "B", section_title_font_size)
         
         # Calculate available space in each column.
@@ -873,7 +876,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, current_language=
 
         pdf.multi_cell(content_width, line_height_normal, clean_text_for_latin1(translate_text_with_ai("Local History:", current_language, client_ai))) # Translated
         pdf.set_font("Arial", "", article_text_font_size)
-        pdf.multi_cell(content_width, line_height_normal, clean_text_for_latin1(data['local_history_section']))
+        pdf.multi_cell(content_width, line_height_normal, clean_text_for_latin1(local_history_content))
         
         # Restore original margins for subsequent content (Page 2)
         pdf.set_left_margin(original_left_margin)
@@ -1062,22 +1065,23 @@ def show_main_app_page():
 
     st.markdown("---")
     st.subheader(translate_text_with_ai("🗓️ Significant Event", st.session_state['preferred_language'], client_ai))
-    st.write(data['event_article'])
+    st.write(data.get('event_article', "No event article found."))
 
     st.markdown("---")
     st.subheader(translate_text_with_ai("🎂 Born on this Day", st.session_state['preferred_language'], client_ai))
-    st.write(data['born_article'])
+    st.write(data.get('born_article', "No birth article found."))
 
     st.markdown("---")
     st.subheader(translate_text_with_ai("💡 Fun Fact", st.session_state['preferred_language'], client_ai))
-    st.write(data['fun_fact_section'])
+    st.write(data.get('fun_fact_section', "No fun fact found."))
 
     # Display Local History if available and not the "not found" messages
-    if data['local_history_section'] and \
-       not data['local_history_section'].startswith("Could not generate local history fact."): # Simplified check
+    local_history_display_content = data.get('local_history_section', '')
+    if local_history_display_content and \
+       not local_history_display_content.startswith("Could not generate local history fact."): # Simplified check
         st.markdown("---")
         st.subheader(translate_text_with_ai("📍 Local History", st.session_state['preferred_language'], client_ai))
-        st.write(data['local_history_section'])
+        st.write(local_history_display_content)
     else: # This covers cases where local_city/state are not set, or AI failed to generate
         st.markdown("---")
         st.subheader(translate_text_with_ai("📍 Local History", st.session_state['preferred_language'], client_ai))
@@ -1086,14 +1090,16 @@ def show_main_app_page():
 
     st.markdown("---")
     st.subheader(translate_text_with_ai("🌟 Did You Know?", st.session_state['preferred_language'], client_ai)) # Changed to '?'
-    for i, fact in enumerate(data['did_you_know_section']):
+    # Use .get() with an empty list as default for iteration
+    for i, fact in enumerate(data.get('did_you_know_section', [])):
         st.write(f"- {fact}")
 
     st.markdown("---")
     st.subheader(translate_text_with_ai("💬 Memory Lane Prompt?", st.session_state['preferred_language'], client_ai)) # Changed to '?'
-    # Iterate and display each memory prompt without hyphens
-    if data['memory_prompt_section']:
-        for prompt_text in data['memory_prompt_section']:
+    # Iterate and display each memory prompt without hyphens, using .get() with an empty list as default
+    memory_prompts_display_list = data.get('memory_prompt_section', [])
+    if memory_prompts_display_list:
+        for prompt_text in memory_prompts_display_list:
             st.write(f"{prompt_text}") # Display as paragraph, no leading hyphen
     else:
         st.write(translate_text_with_ai("No memory prompts available.", st.session_state['preferred_language'], client_ai))
@@ -1235,10 +1241,10 @@ def show_trivia_page():
             st.markdown(f"**{translate_text_with_ai('Question', st.session_state['preferred_language'], client_ai)} {i+1} {translate_text_with_ai('of', st.session_state['preferred_language'], client_ai)} {len(trivia_questions)}:**")
             
             # Display question, hint, and answer without translation for the trivia page
-            st.markdown(f"{trivia_item['question']}") # Display question
-            st.info(f"Answer: {trivia_item['answer']}") # Display answer explicitly
+            st.markdown(f"{trivia_item.get('question', 'No question available.')}") # Display question
+            st.info(f"Answer: {trivia_item.get('answer', 'No answer available.')}") # Display answer explicitly
             if trivia_item.get('hint'):
-                st.info(f"Hint: {trivia_item['hint']}") # Display hint
+                st.info(f"Hint: {trivia_item.get('hint', 'No hint available.')}") # Display hint
 
             col_input, col_check, col_hint = st.columns([0.6, 0.2, 0.2])
 
@@ -1256,7 +1262,7 @@ def show_trivia_page():
                 if not q_state['is_correct'] and not q_state.get('out_of_chances', False):
                     if st.button(translate_text_with_ai("Check Answer", st.session_state['preferred_language'], client_ai), key=f"check_btn_{question_key_base}", disabled=not user_input.strip()):
                         user_answer_cleaned = user_input.strip().lower()
-                        correct_answer_original = trivia_item['answer'].strip() # Keep original for comparison
+                        correct_answer_original = trivia_item.get('answer', '').strip() # Use .get() here too
                         correct_answer_cleaned = correct_answer_original.lower()
 
                         is_exact_match = (user_answer_cleaned == correct_answer_cleaned)
@@ -1289,7 +1295,7 @@ def show_trivia_page():
                             q_state['attempts'] += 1 # Increment attempts on incorrect answer
                             if q_state['attempts'] >= 3:
                                 q_state['out_of_chances'] = True
-                                translated_correct_answer = translate_text_with_ai(trivia_item['answer'], st.session_state['preferred_language'], client_ai)
+                                translated_correct_answer = translate_text_with_ai(trivia_item.get('answer', ''), st.session_state['preferred_language'], client_ai) # Use .get() here too
                                 q_state['feedback'] = translate_text_with_ai(f"❌ You've used all {q_state['attempts']} attempts. The correct answer was: **{translated_correct_answer}**. You earned 0 points for this question.", st.session_state['preferred_language'], client_ai)
                                 # Ensure points_earned is 0 if out of chances and not previously correct
                                 if q_state['points_earned'] == 0:
@@ -1307,10 +1313,10 @@ def show_trivia_page():
                         # No st.rerun() needed here; button click triggers rerun automatically
                 # Always display hint if it was revealed for this question AND hint content exists
                 elif q_state['hint_revealed'] and trivia_item.get('hint'):
-                    st.info(f"{translate_text_with_ai('Hint', st.session_state['preferred_language'], client_ai)}: {trivia_item['hint']}")
+                    st.info(f"{translate_text_with_ai('Hint', st.session_state['preferred_language'], client_ai)}: {trivia_item.get('hint', '')}")
                 # If question is correct or out of chances, display the hint if it exists (for learning)
                 elif (q_state['is_correct'] or q_state.get('out_of_chances', False)) and trivia_item.get('hint'):
-                    st.info(f"{translate_text_with_ai('Hint', st.session_state['preferred_language'], client_ai)}: {trivia_item['hint']}")
+                    st.info(f"{translate_text_with_ai('Hint', st.session_state['preferred_language'], client_ai)}: {trivia_item.get('hint', '')}")
 
             # Display feedback based on the state
             if q_state['feedback']:
@@ -1327,7 +1333,7 @@ def show_trivia_page():
                     if q_state['related_article_content'] is None:
                         # Generate article in English first
                         generated_article_en = generate_related_trivia_article(
-                            trivia_item['question'], trivia_item['answer'], client_ai
+                            trivia_item.get('question', ''), trivia_item.get('answer', ''), client_ai # Use .get() here too
                         )
                         # Translate to preferred language for display
                         translated_article = translate_text_with_ai(generated_article_en, st.session_state['preferred_language'], client_ai)
@@ -1361,7 +1367,8 @@ def show_trivia_page():
             st.info(translate_text_with_ai("No scores logged yet for the leaderboard. Be the first!", st.session_state['preferred_language'], client_ai))
 
         st.button(translate_text_with_ai("⬅️ Back to Main Page", st.session_state['preferred_language'], client_ai), on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_bottom")
-    # Removed the else block here, so if trivia_section is empty, nothing will be displayed for trivia questions on the page.
+    else: # Added an else block here to explicitly state if no trivia is loaded
+        st.info(translate_text_with_ai("No trivia questions are available for today. Please check your content preferences or try again later.", st.session_state['preferred_language'], client_ai))
 
 
 def show_login_register_page():
@@ -1464,20 +1471,21 @@ def show_login_register_page():
 
     st.markdown(translate_text_with_ai(f"### ✨ A Look Back at {january_1st_example_date.strftime('%B %d')}", st.session_state['preferred_language'], client_ai))
     st.markdown(translate_text_with_ai("### 🗓️ Significant Event", st.session_state['preferred_language'], client_ai))
-    st.write(example_data['event_article'])
+    st.write(example_data.get('event_article', "No event article found."))
 
     st.markdown(translate_text_with_ai("### 🎂 Born on this Day", st.session_state['preferred_language'], client_ai))
-    st.write(example_data['born_article'])
+    st.write(example_data.get('born_article', "No birth article found."))
 
     st.markdown(translate_text_with_ai("### 💡 Fun Fact", st.session_state['preferred_language'], client_ai))
-    st.write(example_data['fun_fact_section'])
+    st.write(example_data.get('fun_fact_section', "No fun fact found."))
 
     # Display Local History if available and not the "not found" messages
-    if example_data['local_history_section'] and \
-       not example_data['local_history_section'].startswith("Could not generate local history fact."):
+    local_history_example_content = example_data.get('local_history_section', '')
+    if local_history_example_content and \
+       not local_history_example_content.startswith("Could not generate local history fact."):
         st.markdown("---")
         st.subheader(translate_text_with_ai("📍 Local History", st.session_state['preferred_language'], client_ai))
-        st.write(example_data['local_history_section'])
+        st.write(local_history_example_content)
     else:
         st.markdown("---")
         st.subheader(translate_text_with_ai("📍 Local History", st.session_state['preferred_language'], client_ai))
@@ -1486,24 +1494,28 @@ def show_login_register_page():
 
     st.markdown(translate_text_with_ai("### 🧠 Test Your Knowledge!", st.session_state['preferred_language'], client_ai))
     # Loop through the first 4 trivia questions for the example PDF
-    if fetched_raw_example_data['trivia_section']: # Use fetched_raw_example_data for trivia section
-        for i, trivia_item in enumerate(fetched_raw_example_data['trivia_section'][:4]): # Limit to 4 for example PDF
-            st.markdown(f"**Question {i+1}:** {trivia_item['question']}")
-            st.info(f"Answer: {trivia_item['answer']}") # Display answer for example content
+    trivia_example_questions = fetched_raw_example_data.get('trivia_section', [])
+    if trivia_example_questions: # Use fetched_raw_example_data for trivia section
+        for i, trivia_item in enumerate(trivia_example_questions[:4]): # Limit to 4 for example PDF
+            st.markdown(f"**Question {i+1}:** {trivia_item.get('question', 'No question available.')}")
+            st.info(f"Answer: {trivia_item.get('answer', 'No answer available.')}") # Display answer for example content
             # Safely display hint for example content
             if trivia_item.get('hint'): # Use .get() here too
-                st.info(f"Hint: {trivia_item['hint']}")
-    # Removed the else block here, so if trivia_section is empty, nothing will be displayed for trivia questions.
+                st.info(f"Hint: {trivia_item.get('hint', 'No hint available.')}")
+    else: # Added an else block here to explicitly state if no trivia is loaded
+        st.info(translate_text_with_ai("No example trivia questions are available. Please try again later.", st.session_state['preferred_language'], client_ai))
 
 
     st.markdown(translate_text_with_ai("### 🌟 Did You Know?", st.session_state['preferred_language'], client_ai))
-    for fact in example_data['did_you_know_section']:
+    # Use .get() with an empty list as default for iteration
+    for fact in example_data.get('did_you_know_section', []):
         st.markdown(f"- {fact}")
 
     st.markdown(translate_text_with_ai("### 💬 Memory Lane Prompt?", st.session_state['preferred_language'], client_ai))
-    # Iterate and display each memory prompt for example data without hyphens
-    if example_data['memory_prompt_section']:
-        for prompt_text in example_data['memory_prompt_section']:
+    # Iterate and display each memory prompt for example data without hyphens, using .get() with an empty list as default
+    memory_prompts_example_list = example_data.get('memory_prompt_section', [])
+    if memory_prompts_example_list:
+        for prompt_text in memory_prompts_example_list:
             st.write(f"{prompt_text}") # Display as paragraph, no leading hyphen
     else:
         st.write(translate_text_with_ai("No memory prompts available.", st.session_state['preferred_language'], client_ai))
