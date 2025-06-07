@@ -597,6 +597,7 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
 
 # --- Page Navigation Function ---
 def set_page(page_name):
+    """Sets the current page in session state."""
     st.session_state['current_page'] = page_name
     # Reset trivia states if navigating away from trivia page to ensure fresh start if new day
     if page_name == 'main_app':
@@ -605,7 +606,9 @@ def set_page(page_name):
         st.session_state['current_trivia_score'] = 0 # Reset score for a new day
         st.session_state['total_possible_daily_trivia_score'] = 0 # Reset total possible for a new day
         st.session_state['score_logged_today'] = False # Reset logging flag
-    st.rerun() # Rerun to switch page immediately
+    # Streamlit will automatically rerun the app when session_state is modified.
+    # No st.rerun() is needed here to avoid "no-op" warnings.
+
 
 def show_feedback_form():
     """Displays a feedback form and logs submissions to Google Sheets."""
@@ -637,9 +640,6 @@ def show_feedback_form():
 # --- UI Functions for Pages ---
 def show_main_app_page():
     st.title("📅 This Day in History")
-
-    # Feedback section at the top
-    show_feedback_form()
 
     # Apply dementia-friendly styling if enabled
     if st.session_state['dementia_mode']:
@@ -751,8 +751,10 @@ def show_trivia_page():
     st.title("🧠 Daily Trivia Challenge!")
     st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_top")
 
-    # Feedback section at the top
-    show_feedback_form()
+    # Feedback email note at the top
+    st.markdown("---")
+    st.markdown("📧 You can send us feedback at: `thisdayinhistoryapp@gmail.com`")
+    st.markdown("---")
 
     st.subheader("Trivia Settings")
     # Add the note about inputting a response
@@ -945,15 +947,14 @@ def show_trivia_page():
         st.write("No trivia questions available for today. Please go back to the main page.")
         st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_no_questions")
 
-    # Feedback section at the bottom
-    show_feedback_form()
-
 
 def show_login_register_page():
     st.title("Login to Access")
 
-    # Feedback section at the top
-    show_feedback_form()
+    # Feedback email note at the top
+    st.markdown("---")
+    st.markdown("📧 You can send us feedback at: `thisdayinhistoryapp@gmail.com`")
+    st.markdown("---")
 
     login_tab, register_tab = st.tabs(["Log In", "Register"])
     with login_tab:
@@ -1064,9 +1065,6 @@ def show_login_register_page():
         )
     with col2_example:
         st.markdown(pdf_viewer_link_example, unsafe_allow_html=True)
-
-    # Feedback section at the bottom
-    show_feedback_form()
 
 
 # --- Main App Logic (Router) ---
