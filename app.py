@@ -54,6 +54,8 @@ if 'preferred_language' not in st.session_state:
     st.session_state['preferred_language'] = 'English' # Default language
 if 'custom_masthead_text' not in st.session_state: # NEW: Custom masthead text for PDF
     st.session_state['custom_masthead_text'] = ""
+if 'last_download_status' not in st.session_state: # NEW: To track PDF download logging status for user feedback
+    st.session_state['last_download_status'] = None
 
 
 # --- Custom CSS for Sidebar Styling and Default App Theme (Black) ---
@@ -254,18 +256,25 @@ def save_new_user_to_sheet(username, password, email):
 
 def get_users_from_sheet():
     """Retrieves all users from the 'Users' worksheet as a dictionary."""
+    print("Attempting to get users from sheet...") # Debugging print
     try:
         sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
-        ws = sheet.worksheet("Users")
-        # Get all records as a list of dictionaries. head=1 makes the first row headers.
+        try:
+            ws = sheet.worksheet("Users")
+            print("Found 'Users' worksheet.") # Debugging print
+        except gspread.exceptions.WorksheetNotFound:
+            print("❌ 'Users' worksheet not found. Creating it now.") # Debugging print
+            st.warning("⚠️ The 'Users' database was not found. Creating it now. Please retry your registration if this is your first time.")
+            ws = sheet.add_worksheet(title="Users", rows="100", cols="3")
+            ws.append_row(["Username", "Password", "Email"])  # Add headers if new sheet
+            return {} # Return empty dict as no users existed before this operation
+        
         users_data = ws.get_all_records(head=1)
-        # Convert to a dictionary for easy lookup: {username: password}
         users_dict = {row['Username']: row['Password'] for row in users_data if 'Username' in row and 'Password' in row}
+        print(f"Retrieved users: {list(users_dict.keys())}") # Debugging print
         return users_dict
-    except gspread.exceptions.WorksheetNotFound:
-        st.warning("⚠️ 'Users' worksheet not found. No registered users.")
-        return {}
     except Exception as e:
+        print(f"ERROR: Error retrieving users from Google Sheet: {e}") # Debugging print
         st.error(f"❌ Error retrieving users from Google Sheet: {e}")
         return {}
 
@@ -340,6 +349,29 @@ def log_feedback(username, feedback_message):
         return True
     except Exception as e:
         st.warning(f"⚠️ Could not log feedback: {e}")
+        return False
+
+def log_pdf_download(username, filename, download_date):
+    """Logs a PDF download event to the 'PDFLogs' worksheet."""
+    try:
+        sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
+        try:
+            ws = sheet.worksheet("PDFLogs")
+        except gspread.exceptions.WorksheetNotFound:
+            ws = sheet.add_worksheet(title="PDFLogs", rows="100", cols="4")
+            ws.append_row(["Timestamp", "Username", "Filename", "DownloadDate"]) # Add headers if new sheet
+        
+        ws.append_row([
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            username,
+            filename,
+            download_date.strftime("%Y-%m-%d") if isinstance(download_date, date) else str(download_date)
+        ])
+        # Removed st.success here to manage feedback more centrally with session state
+        return True
+    except Exception as e:
+        # Removed st.warning here to manage feedback more centrally with session state
+        print(f"ERROR: Could not log PDF download for '{username}': {e}") # Log to console for debugging
         return False
 
 
@@ -1025,6 +1057,17 @@ def show_feedback_form():
                 st.warning(translate_text_with_ai("Please enter some feedback before submitting.", st.session_state['preferred_language'], client_ai))
     st.markdown("---")
 
+# New wrapper function for PDF download button
+def handle_pdf_download_click(username, filename, selected_date):
+    """
+    Handles the PDF download button click event, logging the download
+    and setting a session state flag for persistent feedback.
+    """
+    success = log_pdf_download(username, filename, selected_date)
+    if success:
+        st.session_state['last_download_status'] = 'success'
+    else:
+        st.session_state['last_download_status'] = 'failure'
 
 # --- UI Functions for Pages ---
 def show_main_app_page():
@@ -1087,7 +1130,24 @@ def show_main_app_page():
     st.subheader(translate_text_with_ai(f"✨ A Look Back at {selected_date.strftime('%B %d')}", st.session_state['preferred_language'], client_ai))
 
     # New note for scrolling down to download/print at the top of the main page
-    st.info(translate_text_with_ai("💡 Scroll down to download and print your 'This Day In History' worksheet!", st.session_state['preferred_language'], client_ai))
+    st.info(
+        translate_text_with_ai(
+            """💡 Scroll down to download and print your This Day In History worksheet! 
+You can download each day's content as a printable PDF—perfect for sharing with your residents or using in group activities!
+Want to make it your own? You can even customize the masthead to match your community—try something fun like Arbor Courts Gazette or The Morning Maple 🍁.
+
+🌍 Need another language? Use the left-hand menu to translate the entire page and your downloadable PDF.
+
+This is a free platform. 
+💬 We'd Love Your Support!
+Word of mouth goes a long way—if you enjoy using This Day In History, please share it with your friends, coworkers, or anyone who might benefit. Your support means the world to us!
+
+""",
+            st.session_state['preferred_language'],
+            client_ai
+        )
+    )
+
 
     st.markdown("---")
     st.subheader(translate_text_with_ai("🗓️ Significant Event", st.session_state['preferred_language'], client_ai))
@@ -1157,13 +1217,24 @@ def show_main_app_page():
     b64_pdf_main = base64.b64encode(pdf_bytes_main).decode('latin-1')
     pdf_viewer_link_main = f'<a href="data:application/pdf;base64,{b64_pdf_main}" target="_blank">{translate_text_with_ai("View PDF in Browser", st.session_state["preferred_language"], client_ai)}</a>'
 
+    # Display status message if any
+    if st.session_state['last_download_status'] == 'success':
+        st.success(translate_text_with_ai("PDF download successfully logged to Google Sheet!", st.session_state['preferred_language'], client_ai))
+        st.session_state['last_download_status'] = None # Clear the message after display
+    elif st.session_state['last_download_status'] == 'failure':
+        st.error(translate_text_with_ai("Failed to log PDF download to Google Sheet. Please check permissions or try again.", st.session_state['preferred_language'], client_ai))
+        st.session_state['last_download_status'] = None # Clear the message after display
+
+
     col1, col2 = st.columns([1, 1])
     with col1:
         st.download_button(
             translate_text_with_ai("Download Daily Page PDF", st.session_state['preferred_language'], client_ai),
             pdf_bytes_main, 
             file_name=pdf_file_name,
-            mime="application/pdf"
+            mime="application/pdf",
+            on_click=handle_pdf_download_click, # Use the new handler
+            args=(st.session_state['logged_in_username'], pdf_file_name, selected_date) # Pass arguments
         )
     with col2:
         st.markdown(pdf_viewer_link_main, unsafe_allow_html=True)
@@ -1438,7 +1509,9 @@ def show_login_register_page():
             username = st.text_input(translate_text_with_ai("Username", st.session_state['preferred_language'], client_ai), key="login_username_input")
             password = st.text_input(translate_text_with_ai("Password", st.session_state['preferred_language'], client_ai), type="password", key="login_password_input")
             if st.form_submit_button(translate_text_with_ai("Log In", st.session_state['preferred_language'], client_ai)):
+                print(f"Login attempt for username: '{username}'") # Debugging print
                 USERS = get_users_from_sheet() # Get users from Google Sheet
+                print(f"Users retrieved for login: {USERS}") # Debugging print
                 if username in USERS and USERS[username] == password:
                     st.session_state['is_authenticated'] = True
                     st.session_state['logged_in_username'] = username
@@ -1464,14 +1537,17 @@ def show_login_register_page():
             confirm_password = st.text_input(translate_text_with_ai("Confirm Password", st.session_state['preferred_language'], client_ai), type="password", key="register_confirm_password_input")
             if st.form_submit_button(translate_text_with_ai("Register", st.session_state['preferred_language'], client_ai)):
                 if new_password == confirm_password:
-                    USERS_EXISTING = get_users_from_sheet()
+                    USERS_EXISTING = get_users_from_sheet() # Get users from Google Sheet right before check
+                    print(f"Register attempt for username: '{new_username}'") # Debugging print
+                    print(f"Existing users during registration: {USERS_EXISTING}") # Debugging print
+                    
                     if new_username in USERS_EXISTING:
                         st.error(translate_text_with_ai("Username already exists. Please choose a different username.", st.session_state['preferred_language'], client_ai))
                     else:
                         if save_new_user_to_sheet(new_username, new_password, new_email):
                             st.session_state['is_authenticated'] = True
                             st.session_state['logged_in_username'] = new_username
-                            st.success(translate_text_with_ai("Account created!", st.session_state['preferred_language'], client_ai))
+                            st.success(translate_text_with_ai(f"Account created successfully! You are now logged in as {new_username}.", st.session_state['preferred_language'], client_ai)) # Updated success message
                             log_event("register", new_username)
                             set_page('main_app') # Go to main app page (this handles the rerun)
                         else:
