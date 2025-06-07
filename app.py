@@ -576,7 +576,7 @@ def generate_full_history_pdf(data, today_date_str, user_info): # Removed dement
     Page 2: About Us, Logo, and Contact Information.
     """
     pdf = FPDF(unit="mm", format="A4") # Use mm for better control
-    pdf.add_page()
+    pdf.add_page() # Start with the first page
     pdf.set_auto_page_break(True, margin=15) # Enable auto page break with a margin
 
     # Define dimensions for A4 and columns (in mm)
@@ -602,7 +602,7 @@ def generate_full_history_pdf(data, today_date_str, user_info): # Removed dement
     right_margin_p2 = 25
     content_width_p2 = page_width - left_margin_p2 - right_margin_p2
 
-    # --- Masthead ---
+    # --- Masthead (Page 1) ---
     pdf.set_y(10) # Start from top
     pdf.set_x(left_margin)
     pdf.set_font("Times", "B", title_font_size) # Large, bold font for the title
@@ -736,44 +736,46 @@ def generate_full_history_pdf(data, today_date_str, user_info): # Removed dement
         current_y_col2 += section_spacing_normal # Spacing after section
         pdf.set_y(current_y_col2)
 
-    # Local History (if available)
+    # Local History (if available) - This section will now rely on auto_page_break
     if data['local_history_section'] and data['local_history_section'] != "No local history fact found.":
         pdf.set_font("Arial", "B", section_title_font_size)
-        # Determine which column has more space and use that one, or add a new page if needed.
-        # Let's prioritize adding it to the column that currently has less content,
-        # or add a new page if both are getting full.
+        # Determine which column has more space and use that one.
+        # We will now rely on auto_page_break if it doesn't fit in either column.
         
-        # Calculate available space in each column
-        space_col1 = pdf.h - pdf.b_margin - current_y_col1
-        space_col2 = pdf.h - pdf.b_margin - current_y_col2
+        # Calculate available space in each column.
+        # Use the current Y position of the PDF object, not the tracked column Y,
+        # as content may have flowed or manual line breaks occurred.
+        current_y_after_main_content = pdf.get_y() 
 
-        # Estimate height of local history section (approx. 3 lines)
-        estimated_height_local_history = 3 * line_height_normal + section_spacing_normal
+        # Temporarily save current margins and x to restore after local history section
+        original_left_margin = pdf.l_margin
+        original_right_margin = pdf.r_margin
+        original_x = pdf.x
 
-        if space_col2 >= estimated_height_local_history: # Try column 2 first
-            pdf.set_xy(page_width / 2 + 5, current_y_col2)
-            pdf.multi_cell(col_width, line_height_normal, "Local History:")
-            pdf.set_font("Arial", "", article_text_font_size)
-            pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['local_history_section']))
-        elif space_col1 >= estimated_height_local_history: # If not enough space in column 2, try column 1
-            pdf.set_xy(left_margin, current_y_col1)
-            pdf.multi_cell(col_width, line_height_normal, "Local History:")
-            pdf.set_font("Arial", "", article_text_font_size)
-            pdf.multi_cell(col_width, line_height_normal, clean_text_for_latin1(data['local_history_section']))
-        else: # Otherwise, add a new page for it
-            pdf.add_page()
-            pdf.set_left_margin(left_margin)
-            pdf.set_right_margin(right_margin)
-            pdf.set_x(left_margin)
-            pdf.set_y(20) # Start further down on the new page
-            pdf.set_font("Arial", "B", section_title_font_size)
-            pdf.multi_cell(content_width, line_height_normal, "Local History:")
-            pdf.set_font("Arial", "", article_text_font_size)
-            pdf.multi_cell(content_width, line_height_normal, clean_text_for_latin1(data['local_history_section']))
+        # If current Y is too close to bottom of page (arbitrary threshold, e.g., 20mm from bottom margin)
+        # and we know the local history content might be long, we could manually add_page here.
+        # However, for now, let's rely on auto_page_break for simplicity and avoid extra blank pages.
+        
+        # Set margins for the local history section (single column, full width)
+        pdf.set_left_margin(left_margin)
+        pdf.set_right_margin(right_margin)
+        pdf.set_x(left_margin) # Reset X to left margin
+
+        # Print the Local History content. auto_page_break will handle new pages if content overflows.
+        pdf.set_y(current_y_after_main_content + section_spacing_normal) # Place after existing content with some spacing
+        pdf.multi_cell(content_width, line_height_normal, "Local History:")
+        pdf.set_font("Arial", "", article_text_font_size)
+        pdf.multi_cell(content_width, line_height_normal, clean_text_for_latin1(data['local_history_section']))
+        
+        # Restore original margins for subsequent content (Page 2)
+        pdf.set_left_margin(original_left_margin)
+        pdf.set_right_margin(original_right_margin)
+        pdf.set_x(original_x)
 
 
     # --- Page 2 Content ---
-    # ALWAYS add a new page before starting the "About Us" section to ensure it's on page 2.
+    # ALWAYS add a new page before starting the "About Us" section to ensure it's on page 2
+    # and is distinctly separate from any main content that may have flowed across pages.
     pdf.add_page()
 
     # Set margins and starting Y for the new page (Page 2)
