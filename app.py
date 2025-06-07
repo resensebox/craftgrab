@@ -92,7 +92,7 @@ if 'daily_data' not in st.session_state: # Store daily data to avoid re-fetching
 if 'last_fetched_date' not in st.session_state:
     st.session_state['last_fetched_date'] = None # To track when data was last fetched
 if 'trivia_question_states' not in st.session_state:
-    st.session_state['trivia_question_states'] = {} # Stores per-question state: {'q_index': {'user_answer': '', 'is_correct': False, 'feedback': '', 'hint_revealed': False}}
+    st.session_state['trivia_question_states'] = {} # Stores per-question state: {'q_index': {'user_answer': '', 'is_correct': False, 'feedback': '', 'hint_revealed': False, 'attempts': 0, 'out_of_chances': False}}
 if 'hints_remaining' not in st.session_state:
     st.session_state['hints_remaining'] = 3 # Total hints allowed per day
 
@@ -240,7 +240,9 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     pdf.multi_cell(0, line_height, "Trivia:")
     if not dementia_mode: pdf.set_font("Arial", "", 12)
     for item in data['trivia_section']:
-        pdf.multi_cell(0, line_height, f"{item['question']} (Answer: {item['answer']})") # Include answer in PDF
+        # Use .get() to safely access 'hint' key
+        hint_text = f" (Hint: {item['hint']})" if item.get('hint') else ""
+        pdf.multi_cell(0, line_height, f"{item['question']} (Answer: {item['answer']}){hint_text}")
     pdf.ln(spacing)
 
     # Did You Know?
@@ -392,7 +394,9 @@ def show_trivia_page():
                     'user_answer': '',
                     'is_correct': False,
                     'feedback': '',
-                    'hint_revealed': False, # New: track if hint has been revealed for this question
+                    'hint_revealed': False,
+                    'attempts': 0, # NEW: Track attempts for this question
+                    'out_of_chances': False # NEW: Track if user is out of chances for this question
                 }
 
             q_state = st.session_state['trivia_question_states'][question_key_base]
@@ -407,46 +411,57 @@ def show_trivia_page():
                     f"Your Answer for Q{i+1}:", 
                     value=q_state['user_answer'], 
                     key=f"input_{question_key_base}", 
-                    disabled=q_state['is_correct']
+                    disabled=q_state['is_correct'] or q_state['out_of_chances'] # Disable if correct or out of chances
                 )
                 q_state['user_answer'] = user_input # Update state on input change for persistence
 
             with col_check:
-                if not q_state['is_correct']: # Only show check button if not yet correct
+                # Disable check button if correct, no input, or out of chances
+                if not q_state['is_correct'] and not q_state['out_of_chances']:
                     if st.button("Check", key=f"check_btn_{question_key_base}", disabled=not user_input.strip()):
                         if user_input.strip().lower() == trivia_item['answer'].strip().lower():
                             q_state['is_correct'] = True
                             q_state['feedback'] = "✅ Correct!"
-                            st.success(q_state['feedback'])
                         else:
-                            q_state['is_correct'] = False # Ensure it's false
-                            q_state['feedback'] = "❌ Incorrect. Try again!"
-                            st.error(q_state['feedback'])
+                            q_state['attempts'] += 1 # Increment attempts on incorrect answer
+                            if q_state['attempts'] >= 3:
+                                q_state['out_of_chances'] = True
+                                q_state['feedback'] = f"❌ You've used all {q_state['attempts']} attempts. The correct answer was: **{trivia_item['answer']}**"
+                            else:
+                                q_state['feedback'] = f"❌ Incorrect. Try again! (Attempts: {q_state['attempts']}/3)"
                         st.rerun() # Rerun to update feedback/disable input immediately
 
             with col_hint:
-                # Show hint button only if not correct and hints are remaining and hint not already revealed for this question
-                if not q_state['is_correct'] and st.session_state['hints_remaining'] > 0 and not q_state['hint_revealed']:
+                # Show hint button only if not correct, not out of chances, hints remaining, not already revealed, and hint content exists
+                if not q_state['is_correct'] and not q_state['out_of_chances'] and st.session_state['hints_remaining'] > 0 and not q_state['hint_revealed'] and trivia_item.get('hint'):
                     if st.button(f"Hint ({st.session_state['hints_remaining']})", key=f"hint_btn_{question_key_base}"):
                         st.session_state['hints_remaining'] -= 1
                         q_state['hint_revealed'] = True
-                        st.info(f"Hint: {trivia_item['hint']}")
+                        # st.info(f"Hint: {trivia_item['hint']}") # This will be handled by the feedback section below
                         st.rerun() # Rerun to update hint count and hide button
-                elif q_state['hint_revealed']:
-                    st.info(f"Hint: {trivia_item['hint']}") # Always display hint if it was revealed
+                # Always display hint if it was revealed for this question AND hint content exists
+                elif q_state['hint_revealed'] and trivia_item.get('hint'):
+                    st.info(f"Hint: {trivia_item['hint']}")
+                # If question is correct or out of chances, display the hint if it exists (for learning)
+                elif (q_state['is_correct'] or q_state['out_of_chances']) and trivia_item.get('hint'):
+                    st.info(f"Hint: {trivia_item['hint']}")
 
-            # Display general feedback if not correct
-            if q_state['feedback'] and not q_state['is_correct']:
-                st.error(q_state['feedback'])
-            
-            # Display final correct message
-            elif q_state['is_correct']:
-                st.success(f"✅ Correct! The answer was: **{trivia_item['answer']}**")
+            # Display feedback based on the state
+            if q_state['feedback']:
+                if q_state['is_correct']:
+                    st.success(q_state['feedback'])
+                elif q_state['out_of_chances']:
+                    st.error(q_state['feedback'])
+                else: # Incorrect but still has chances
+                    st.error(q_state['feedback'])
             
         st.markdown("---")
-        # Check if all questions are answered correctly
-        all_correct = all(st.session_state['trivia_question_states'][f"trivia_q_{i}"]['is_correct'] for i in range(len(trivia_questions)))
-        if all_correct:
+        # Check if all questions are answered correctly or out of chances
+        all_completed = all(st.session_state['trivia_question_states'][f"trivia_q_{i}"]['is_correct'] or \
+                            st.session_state['trivia_question_states'][f"trivia_q_{i}"]['out_of_chances'] \
+                            for i in range(len(trivia_questions)))
+        
+        if all_completed:
             st.success("You've completed the trivia challenge for today!")
         else:
             st.info(f"You have {st.session_state['hints_remaining']} hints remaining.")
@@ -523,7 +538,8 @@ def show_login_register_page():
         for i, trivia_item in enumerate(example_data['trivia_section']):
             st.markdown(f"**Question {i+1}:** {trivia_item['question']}")
             st.info(f"Answer: {trivia_item['answer']}") # Display answer for example content
-            if trivia_item['hint']:
+            # Safely display hint for example content
+            if trivia_item.get('hint'): # Use .get() here too
                 st.info(f"Hint: {trivia_item['hint']}")
     else:
         st.write("No trivia questions available.")
