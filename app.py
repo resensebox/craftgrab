@@ -5,7 +5,6 @@ import json
 from fpdf import FPDF
 from datetime import datetime, date
 from openai import OpenAI
-from duckduckgo_search import ddg_images
 
 st.set_option('client.showErrorDetails', True)
 st.set_page_config(page_title="This Day in History", layout="centered")
@@ -32,14 +31,6 @@ try:
 except Exception as e:
     st.error(f"Failed to initialize OpenAI. Error: {e}")
     st.stop()
-
-# --- Image helper ---
-def get_person_image_url(name):
-    try:
-        results = ddg_images(name, max_results=1)
-        return results[0]['image'] if results else None
-    except:
-        return None
 
 # --- PDF helpers ---
 def generate_article_pdf(title, content):
@@ -157,9 +148,7 @@ if name:
     st.markdown("---")
     st.subheader("Famous Person Born Today:")
     name_guess = parsed['born_section'].split('\n')[0] if '\n' in parsed['born_section'] else parsed['born_section']
-    image_url = get_person_image_url(name_guess)
-    if image_url:
-        st.image(image_url, width=150)
+    st.image(f"https://placehold.co/150x150?text={name_guess}", width=150)
     st.markdown(parsed['born_section'])
 
     st.markdown("---")
@@ -177,3 +166,4 @@ if name:
     st.download_button("Download Full PDF", full_pdf, file_name=f"This_Day_{today.strftime('%Y_%m_%d')}.pdf")
 else:
     st.info("Enter a Pair's Name to begin")
+
