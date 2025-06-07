@@ -8,9 +8,11 @@ import logging
 import sqlite3
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+import smtplib
+from email.mime.text import MIMEText
 
 # --- Logging Setup ---
-logging.basicConfig(filename='app_activity.log', level=logging.INFO,
+logging.basicConfig(filename='app_activity.log', level=logging.DEBUG,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 st.set_option('client.showErrorDetails', True)
@@ -26,7 +28,7 @@ body, .stApp {
     padding: 1rem;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1, h2, h3, h4, h5, h6, label {
     color: #000000 !important;
     text-align: center;
     font-weight: 700;
@@ -83,7 +85,46 @@ h1, h2, h3, h4, h5, h6 {
 </style>
 """, unsafe_allow_html=True)
 
-# --- Initialization ---
+# --- Google Sheets Debugging ---
+def get_gsheet_client():
+    try:
+        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        creds_dict = st.secrets["GOOGLE_SERVICE_JSON"]
+        logging.debug(f"Loaded credentials: {creds_dict.get('client_email', 'no email found')}")
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        client = gspread.authorize(creds)
+        logging.debug("Google Sheets client successfully authorized.")
+        return client
+    except Exception as e:
+        logging.error(f"Google Sheets auth failed: {e}")
+        st.error(f"Google Sheets error: {e}")
+        return None
+
+# --- Daily Email Export (placeholder) ---
+def send_daily_email(subject, body, to_email):
+    try:
+        smtp_server = os.getenv("SMTP_SERVER")
+        smtp_user = os.getenv("SMTP_USER")
+        smtp_pass = os.getenv("SMTP_PASS")
+
+        msg = MIMEText(body)
+        msg['Subject'] = subject
+        msg['From'] = smtp_user
+        msg['To'] = to_email
+
+        with smtplib.SMTP_SSL(smtp_server, 465) as server:
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(smtp_user, [to_email], msg.as_string())
+        logging.info("Daily email sent successfully.")
+    except Exception as e:
+        logging.error(f"Failed to send email: {e}")
+        st.warning(f"Email send failed: {e}")
+
+# --- Multi-date Comparison (placeholder setup) ---
+if 'history_cache' not in st.session_state:
+    st.session_state['history_cache'] = {}
+
+# --- Initialize App Content ---
 api_key = os.environ.get("OPENAI_API_KEY")
 if not api_key and "OPENAI_API_KEY" in st.secrets:
     api_key = st.secrets["OPENAI_API_KEY"]
@@ -101,16 +142,6 @@ def init_db():
     conn.close()
 init_db()
 
-# --- Google Sheets ---
-def get_gsheet_client():
-    try:
-        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        creds_dict = st.secrets["GOOGLE_SERVICE_JSON"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-        return gspread.authorize(creds)
-    except:
-        return None
-
 def add_user(username, password):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
@@ -119,8 +150,12 @@ def add_user(username, password):
         conn.commit()
         client = get_gsheet_client()
         if client:
-            sheet = client.open("This Day in History").worksheet("Users")
-            sheet.append_row([username, str(datetime.now())])
+            try:
+                sheet = client.open("This Day in History").worksheet("Users")
+                sheet.append_row([username, str(datetime.now())])
+                logging.info(f"User {username} logged in and recorded in Google Sheets.")
+            except Exception as sheet_error:
+                logging.error(f"Failed to write to Google Sheet: {sheet_error}")
         return True
     except sqlite3.IntegrityError:
         return False
@@ -135,7 +170,7 @@ def verify_user(username, password):
     conn.close()
     return result and result[0] == password
 
-# --- PDF Helpers ---
+# --- PDF Helper ---
 def generate_article_pdf(title, content):
     pdf = FPDF()
     pdf.add_page()
@@ -146,7 +181,7 @@ def generate_article_pdf(title, content):
     pdf.multi_cell(0, 8, content.encode('latin-1', 'replace').decode('latin-1'))
     return pdf.output(dest='S').encode('latin-1')
 
-# --- Auth Forms ---
+# --- Auth ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'show_login' not in st.session_state:
@@ -187,7 +222,7 @@ if not st.session_state.logged_in:
             st.rerun()
     st.stop()
 
-# --- Main App ---
+# --- Main App Logic ---
 st.header("🗓️ This Day in History!")
 st.sidebar.success(f"Logged in as {st.session_state['username']}")
 if st.sidebar.button("Log Out"):
