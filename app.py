@@ -300,6 +300,27 @@ def get_leaderboard_data():
         st.error(f"❌ Error retrieving leaderboard data: {e}")
         return {}
 
+def log_feedback(username, feedback_message):
+    """Logs user feedback to the 'Feedback' worksheet."""
+    try:
+        sheet = gs_client.open_by_key("15LXglm49XBJBzeavaHvhgQn3SakqLGeRV80PxPHQfZ4")
+        try:
+            ws = sheet.worksheet("Feedback")
+        except gspread.exceptions.WorksheetNotFound:
+            ws = sheet.add_worksheet(title="Feedback", rows="100", cols="3")
+            ws.append_row(["Timestamp", "Username/Contact", "Feedback"]) # Add headers if new sheet
+        
+        ws.append_row([
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            username,
+            feedback_message
+        ])
+        return True
+    except Exception as e:
+        st.warning(f"⚠️ Could not log feedback: {e}")
+        return False
+
+
 def check_partial_correctness_with_ai(user_answer, correct_answer, _ai_client):
     """
     Uses AI to determine if a user's answer is partially correct compared to the actual answer.
@@ -586,10 +607,39 @@ def set_page(page_name):
         st.session_state['score_logged_today'] = False # Reset logging flag
     st.rerun() # Rerun to switch page immediately
 
+def show_feedback_form():
+    """Displays a feedback form and logs submissions to Google Sheets."""
+    st.markdown("---")
+    st.subheader("📧 Send us feedback")
+    st.markdown("We'd love to hear from you! Please share your thoughts below.")
+
+    with st.form("feedback_form", clear_on_submit=True):
+        feedback_text = st.text_area("Your Feedback", help="Tell us what you think!", key="feedback_text_area")
+        contact_info = st.text_input("Your Name or Email (Optional)", help="So we can follow up, if needed.", key="feedback_contact_info")
+        
+        submitted = st.form_submit_button("Submit Feedback")
+        if submitted:
+            if feedback_text.strip():
+                # Use logged-in username if available, otherwise use provided contact info
+                username_for_feedback = st.session_state.get('logged_in_username', 'Guest')
+                if contact_info.strip():
+                    username_for_feedback = contact_info.strip() # Override if user provides specific contact info
+                
+                if log_feedback(username_for_feedback, feedback_text.strip()):
+                    st.success("Thank you for your feedback! We appreciate it.")
+                else:
+                    st.error("Failed to submit feedback. Please try again later.")
+            else:
+                st.warning("Please enter some feedback before submitting.")
+    st.markdown("---")
+
 
 # --- UI Functions for Pages ---
 def show_main_app_page():
     st.title("📅 This Day in History")
+
+    # Feedback section at the top
+    show_feedback_form()
 
     # Apply dementia-friendly styling if enabled
     if st.session_state['dementia_mode']:
@@ -696,19 +746,14 @@ def show_main_app_page():
     st.sidebar.subheader("Share Daily Page")
     st.sidebar.info("Daily/weekly sharing via email is a planned feature. This would integrate with an email service.")
 
-    # Feedback section
-    st.markdown("---")
-    st.subheader("📧 Send us feedback")
-    st.markdown("We'd love to hear from you! If you have any suggestions, questions, or just want to say hello, feel free to reach out to us at:")
-    st.markdown("### `thisdayinhistoryapp@gmail.com`")
-    st.markdown("---")
-
 
 def show_trivia_page():
     st.title("🧠 Daily Trivia Challenge!")
     st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_top")
 
-    st.markdown("---")
+    # Feedback section at the top
+    show_feedback_form()
+
     st.subheader("Trivia Settings")
     # Add the note about inputting a response
     st.info("💡 To check your answer, please input your response into the text box and then click the 'Check Answer' button.")
@@ -900,16 +945,16 @@ def show_trivia_page():
         st.write("No trivia questions available for today. Please go back to the main page.")
         st.button("⬅️ Back to Main Page", on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_no_questions")
 
-    # Feedback section should always be visible, outside the if/else for trivia content
-    st.markdown("---")
-    st.subheader("📧 Send us feedback")
-    st.markdown("We'd love to hear from you! If you have any suggestions, questions, or just want to say hello, feel free to reach out to us at:")
-    st.markdown("### `thisdayinhistoryapp@gmail.com`")
-    st.markdown("---")
+    # Feedback section at the bottom
+    show_feedback_form()
 
 
 def show_login_register_page():
     st.title("Login to Access")
+
+    # Feedback section at the top
+    show_feedback_form()
+
     login_tab, register_tab = st.tabs(["Log In", "Register"])
     with login_tab:
         with st.form("login_form"):
@@ -1020,12 +1065,8 @@ def show_login_register_page():
     with col2_example:
         st.markdown(pdf_viewer_link_example, unsafe_allow_html=True)
 
-    # Feedback section
-    st.markdown("---")
-    st.subheader("📧 Send us feedback")
-    st.markdown("We'd love to hear from you! If you have any suggestions, questions, or just want to say hello, feel free to reach out to us at:")
-    st.markdown("### `thisdayinhistoryapp@gmail.com`")
-    st.markdown("---")
+    # Feedback section at the bottom
+    show_feedback_form()
 
 
 # --- Main App Logic (Router) ---
