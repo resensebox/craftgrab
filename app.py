@@ -431,9 +431,9 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
 
     local_history_clause = ""
     if local_city and local_state_country:
-        # Modified prompt for local history
+        # Modified prompt for local history: always provide a general fact with its date/year, unless nothing is found at all
         local_history_clause = f"""
-    7. Local History Fact: Provide one significant historical fact that occurred on this day in {local_city}, {local_state_country}. If no specific event is available for this *exact date*, then provide a general historical fact about {local_city}, {local_state_country} (e.g., related to its founding, a major historical event, or a significant person). In all cases, *always include the specific date or year* of the fact within the fact itself. If no relevant historical fact can be found *at all* for the location, then state: "No relevant historical fact found for {local_city}, {local_state_country}."
+    7. Local History Fact: Provide one general historical fact about {local_city}, {local_state_country} (e.g., related to its founding, a major historical event, or a significant person). Always include the specific date (month, day, year) or year of the fact within the fact itself, but do NOT refer to "this day in history" or the current selected date. If no relevant historical fact can be found *at all* for the location, then state: "No relevant historical fact found for {local_city}, {local_state_country}."
     """
 
     prompt = f"""
