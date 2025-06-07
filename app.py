@@ -90,6 +90,8 @@ if 'logged_in_username' not in st.session_state:
     st.session_state['logged_in_username'] = ""
 if 'dementia_mode' not in st.session_state:
     st.session_state['dementia_mode'] = False
+if 'trivia_answers' not in st.session_state:
+    st.session_state['trivia_answers'] = {} # To store user answers for trivia
 
 # --- This Day in History Logic ---
 def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_client, preferred_decade=None, topic=None):
@@ -105,13 +107,17 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
 
     # Add topic customization to prompt if selected
     topic_clause = f" focusing on {topic}" if topic else ""
+    
+    # Add decade customization to prompt if selected (AI may need more fine-tuning to adhere perfectly)
+    decade_clause = f" specifically from the {preferred_decade}" if preferred_decade and preferred_decade != "None" else ""
+
 
     prompt = f"""
     You are an assistant generating 'This Day in History' facts for {current_date_str}.
     Please provide:
 
-    1. Event Article: Write a short article (around 200 words) about a famous historical event that happened on this day {event_year_range}{topic_clause}.
-    2. Born on this Day Article: Write a brief article (around 150-200 words) about a well-known person born on this day {born_year_range}.
+    1. Event Article: Write a short article (around 200 words) about a famous historical event that happened on this day {event_year_range}{topic_clause}{decade_clause}.
+    2. Born on this Day Article: Write a brief article (around 150-200 words) about a well-known person born on this day {born_year_range}{decade_clause}.
     3. Fun Fact: Provide one interesting and unusual fun fact that occurred on this day in history.
     4. Trivia Questions: Provide five trivia questions based on today’s date, spanning topics like history, famous birthdays, pop culture, or global events. For each question, provide the answer in parentheses.
     5. Did You Know?: Provide three "Did You Know?" facts related to nostalgic content (e.g., old prices, inventions, fashion facts) from past decades (e.g., 1930s-1970s).
@@ -130,15 +136,32 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
         event_article_match = re.search(r"1\. Event Article:\s*(.*?)(?=\n2\. Born on this Day Article:|\Z)", content, re.DOTALL)
         born_article_match = re.search(r"2\. Born on this Day Article:\s*(.*?)(?=\n3\. Fun Fact:|\Z)", content, re.DOTALL)
         fun_fact_match = re.search(r"3\. Fun Fact:\s*(.*?)(?=\n4\. Trivia Questions:|\Z)", content, re.DOTALL)
-        trivia_match = re.search(r"4\. Trivia Questions:\s*(.*?)(?=\n5\. Did You Know?:|\Z)", content, re.DOTALL)
         did_you_know_match = re.search(r"5\. Did You Know:\?\s*(.*?)(?=\n6\. Memory Prompt:|\Z)", content, re.DOTALL)
         memory_prompt_match = re.search(r"6\. Memory Prompt:\s*(.*)", content, re.DOTALL)
+        
+        # Special handling for Trivia Questions to extract questions and answers
+        trivia_questions = []
+        trivia_text_match = re.search(r"4\. Trivia Questions:\s*(.*?)(?=\n5\. Did You Know?:|\Z)", content, re.DOTALL)
+        if trivia_text_match:
+            raw_trivia = trivia_text_match.group(1).strip()
+            # Split by new line and process each question
+            for line in raw_trivia.split('\n'):
+                line = line.strip()
+                if line:
+                    # Look for content within parentheses for the answer
+                    answer_match = re.search(r'\((.*?)\)', line)
+                    if answer_match:
+                        question = line.replace(answer_match.group(0), '').strip()
+                        answer = answer_match.group(1).strip()
+                        trivia_questions.append({'question': question, 'answer': answer})
+                    else:
+                        # If no answer in parentheses, assume the whole line is the question for now
+                        trivia_questions.append({'question': line, 'answer': ''})
 
         # Extract content, providing defaults if not found
         event_article = event_article_match.group(1).strip() if event_article_match else "No event article found."
         born_article = born_article_match.group(1).strip() if born_article_match else "No birth article found."
         fun_fact_section = fun_fact_match.group(1).strip() if fun_fact_match else "No fun fact found."
-        trivia_lines = [q.strip() for q in trivia_match.group(1).strip().split('\n') if q.strip()] if trivia_match else []
         did_you_know_lines = [f.strip() for f in did_you_know_match.group(1).strip().split('\n') if f.strip()] if did_you_know_match else []
         memory_prompt_section = memory_prompt_match.group(1).strip() if memory_prompt_match else "No memory prompt available."
 
@@ -146,7 +169,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
             'event_article': event_article,
             'born_article': born_article,
             'fun_fact_section': fun_fact_section,
-            'trivia_section': trivia_lines,
+            'trivia_section': trivia_questions, # Now a list of dicts {question, answer}
             'did_you_know_section': did_you_know_lines,
             'memory_prompt_section': memory_prompt_section
         }
@@ -156,7 +179,7 @@ def get_this_day_in_history_facts(current_day, current_month, user_info, _ai_cli
             'event_article': "Could not fetch event history.",
             'born_article': "Could not fetch birth history.",
             'fun_fact_section': "Could not fetch fun fact.",
-            'trivia_section': ["No trivia available."],
+            'trivia_section': [], # Empty list if error
             'did_you_know_section': ["No 'Did You Know?' facts available."],
             'memory_prompt_section': "No memory prompt available."
         }
@@ -201,12 +224,12 @@ def generate_full_history_pdf(data, today_date_str, user_info, dementia_mode=Fal
     pdf.multi_cell(0, line_height, data['fun_fact_section'])
     pdf.ln(spacing)
 
-    # Trivia
+    # Trivia - Now includes answers in PDF (for reference)
     if not dementia_mode: pdf.set_font("Arial", "B", 14)
     pdf.multi_cell(0, line_height, "Trivia:")
     if not dementia_mode: pdf.set_font("Arial", "", 12)
     for item in data['trivia_section']:
-        pdf.multi_cell(0, line_height, item)
+        pdf.multi_cell(0, line_height, f"{item['question']} (Answer: {item['answer']})") # Include answer in PDF
     pdf.ln(spacing)
 
     # Did You Know?
@@ -248,10 +271,19 @@ if st.session_state['is_authenticated']:
         options=["None", "Sports", "Music", "Inventions", "Politics", "Science", "Arts"],
         index=0
     )
-    # The prompt doesn't currently use preferred_decade or difficulty for trivia
-    # You would need to further refine the prompt and potentially add more complex logic
-    # preferred_decade = st.sidebar.selectbox("Preferred Decade for Events (Optional)", options=["None", "1800s", "1900s", "1910s", "1920s", "1930s", "1940s", "1950s", "1960s"], index=0)
+    # New: Preferred Decade for Events
+    preferred_decade = st.sidebar.selectbox(
+        "Preferred Decade for Articles (Optional)",
+        options=["None", "1800s", "1900s", "1910s", "1920s", "1930s", "1940s", "1950s", "1960s", "1970s", "1980s"],
+        index=0
+    )
     # trivia_difficulty = st.sidebar.select_slider("Trivia Difficulty", options=["Easy", "Medium", "Hard"])
+
+    st.sidebar.markdown("---")
+    # Conceptual Local History Integration
+    st.sidebar.subheader("Local History (Planned)")
+    st.sidebar.info("Integrating local historical facts specific to your area is a planned feature. This would require a separate local history database.")
+
 
     st.sidebar.markdown("---")
     if st.sidebar.button("🚪 Log Out"):
@@ -285,7 +317,9 @@ if st.session_state['is_authenticated']:
     }
 
     # Pass customization options to the data fetching function
-    data = get_this_day_in_history_facts(day, month, user_info, client_ai, topic=preferred_topic if preferred_topic != "None" else None)
+    data = get_this_day_in_history_facts(day, month, user_info, client_ai, 
+                                        topic=preferred_topic if preferred_topic != "None" else None,
+                                        preferred_decade=preferred_decade if preferred_decade != "None" else None)
 
     # Display content
     st.subheader(f"✨ A Look Back at {today.strftime('%B %d')}")
@@ -304,10 +338,27 @@ if st.session_state['is_authenticated']:
 
     st.markdown("---")
     st.subheader("🧠 Test Your Knowledge!")
-    for i, q in enumerate(data['trivia_section']):
-        st.write(f"{q}")
+    if data['trivia_section']:
+        for i, trivia_item in enumerate(data['trivia_section']):
+            st.markdown(f"**Question {i+1}:** {trivia_item['question']}")
+            user_answer = st.text_input(f"Your Answer for Q{i+1}:", key=f"trivia_q_{i}")
+            
+            # Store user answer in session state
+            st.session_state['trivia_answers'][f"q_{i}"] = user_answer
 
-    st.markdown("---")
+            # Add a button to check answer
+            if st.button(f"Check Answer for Q{i+1}", key=f"check_q_{i}"):
+                if user_answer.strip().lower() == trivia_item['answer'].strip().lower():
+                    st.success(f"Correct! The answer was: {trivia_item['answer']}")
+                elif user_answer.strip() == "":
+                    st.warning("Please enter an answer to check.")
+                else:
+                    st.error(f"Incorrect. The correct answer was: {trivia_item['answer']}")
+            st.markdown("---")
+    else:
+        st.write("No trivia questions available.")
+
+
     st.subheader("🌟 Did You Know?")
     for i, fact in enumerate(data['did_you_know_section']):
         st.write(f"- {fact}")
@@ -415,8 +466,14 @@ else: # Login/Registration UI
     st.write(example_data['fun_fact_section'])
 
     st.markdown("### 🧠 Test Your Knowledge!")
-    for q in example_data['trivia_section']:
-        st.markdown(f"- {q}")
+    if example_data['trivia_section']:
+        for i, trivia_item in enumerate(example_data['trivia_section']):
+            st.markdown(f"**Question {i+1}:** {trivia_item['question']}")
+            # For the example, we might just display the answer immediately or a placeholder
+            st.info(f"Answer: {trivia_item['answer']}") # Display answer for example content
+    else:
+        st.write("No trivia questions available.")
+
 
     st.markdown("### 🌟 Did You Know?")
     for fact in example_data['did_you_know_section']:
