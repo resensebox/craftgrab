@@ -6,7 +6,7 @@ from openai import OpenAI
 import os
 import logging
 import sqlite3 # Import for SQLite database
-import bcrypt # Import for password hashing
+# import bcrypt # Removed bcrypt
 
 # --- Logging Setup ---
 logging.basicConfig(filename='app_activity.log', level=logging.INFO,
@@ -21,11 +21,13 @@ DB_NAME = 'users.db'
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
+    # CRITICAL SECURITY WARNING: Storing password as plain text (password_plain) is HIGHLY INSECURE.
+    # This is for demonstration without bcrypt ONLY. NEVER use in production.
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL
+            password_plain TEXT NOT NULL
         )
     ''')
     conn.commit()
@@ -35,11 +37,12 @@ def init_db():
 def add_user(username, password):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    # CRITICAL SECURITY WARNING: Storing password as plain text is HIGHLY INSECURE.
+    # This is for demonstration without bcrypt ONLY. NEVER use in production.
     try:
-        c.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, hashed_password))
+        c.execute("INSERT INTO users (username, password_plain) VALUES (?, ?)", (username, password))
         conn.commit()
-        logging.info(f"User '{username}' registered successfully.")
+        logging.info(f"User '{username}' registered successfully (INSECURELY STORED PASSWORD).")
         return True
     except sqlite3.IntegrityError:
         logging.warning(f"Registration failed: Username '{username}' already exists.")
@@ -50,12 +53,14 @@ def add_user(username, password):
 def verify_user(username, password):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute("SELECT password_hash FROM users WHERE username = ?", (username,))
+    # CRITICAL SECURITY WARNING: Comparing plain text password is HIGHLY INSECURE.
+    # This is for demonstration without bcrypt ONLY. NEVER use in production.
+    c.execute("SELECT password_plain FROM users WHERE username = ?", (username,))
     result = c.fetchone()
     conn.close()
     if result:
-        password_hash = result[0].encode('utf-8')
-        if bcrypt.checkpw(password.encode('utf-8'), password_hash):
+        stored_password = result[0]
+        if password == stored_password: # Direct comparison of plain text passwords
             return True
     return False
 
@@ -195,7 +200,8 @@ def register_form():
             else:
                 if add_user(new_username, new_password):
                     st.success("Account created successfully! Please log in.")
-                    logging.info(f"User '{new_username}' registered successfully.")
+                    # Log with security warning
+                    logging.info(f"User '{new_username}' registered successfully (password stored insecurely).")
                     st.session_state['show_login'] = True # Switch to login after successful registration
                 else:
                     st.error("Username already exists. Please choose a different one.")
