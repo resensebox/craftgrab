@@ -24,9 +24,16 @@ h1 { text-align: center; color: #333333; margin: 2rem auto 1.5rem; font-size: 2.
 """, unsafe_allow_html=True)
 
 # --- OpenAI Init ---
+st.write("🔍 Debug: Checking for API key...")
+
 api_key = os.environ.get("OPENAI_API_KEY")
+st.write("✅ os.environ result:", bool(api_key))
+
 if not api_key and "OPENAI_API_KEY" in st.secrets:
     api_key = st.secrets["OPENAI_API_KEY"]
+    st.write("✅ Found key in st.secrets")
+else:
+    st.write("⚠️ OPENAI_API_KEY not found in st.secrets")
 
 if not api_key:
     st.error("❌ OPENAI_API_KEY is missing from environment or secrets.")
@@ -37,6 +44,7 @@ try:
 except Exception as e:
     st.error(f"Failed to initialize OpenAI. Error: {e}")
     st.stop()
+
 
 # --- PDF helpers ---
 def generate_article_pdf(title, content):
