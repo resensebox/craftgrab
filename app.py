@@ -1195,6 +1195,8 @@ def show_trivia_page():
             st.rerun() # Rerun to apply new content
 
     data = st.session_state['daily_data']
+    
+    # Only proceed to display trivia questions if they exist
     if data and data['trivia_section']:
         trivia_questions = data['trivia_section']
 
@@ -1348,9 +1350,7 @@ def show_trivia_page():
             st.info(translate_text_with_ai("No scores logged yet for the leaderboard. Be the first!", st.session_state['preferred_language'], client_ai))
 
         st.button(translate_text_with_ai("⬅️ Back to Main Page", st.session_state['preferred_language'], client_ai), on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_bottom")
-    else: # This else now correctly corresponds to the 'if' above it for trivia questions
-        st.write(translate_text_with_ai("No trivia questions available for today. Please go back to the main page.", st.session_state['preferred_language'], client_ai))
-        st.button(translate_text_with_ai("⬅️ Back to Main Page", st.session_state['preferred_language'], client_ai), on_click=set_page, args=('main_app',), key="back_to_main_from_trivia_no_questions")
+    # Removed the else block here, so if trivia_section is empty, no "No trivia questions available" message will be displayed.
 
 
 def show_login_register_page():
