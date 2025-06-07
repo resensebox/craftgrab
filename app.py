@@ -21,62 +21,59 @@ st.set_page_config(page_title="This Day in History", layout="centered")
 # --- Theme Styling ---
 st.markdown("""
 <style>
-/* Reset and base colors */
+/* Core reset */
 body, .stApp {
-    background-color: #f4f1f8 !important;  /* Light lavender */
-    color: #222 !important;  /* Dark text */
+    background-color: #f4f1f8 !important;
+    color: #222 !important;
     font-family: 'Inter', sans-serif;
 }
 
 /* Headings */
 h1, h2, h3, h4, h5, h6, label {
-    color: #3b2f5e !important;  /* Deep purple */
+    color: #3b2f5e !important;
     font-weight: bold;
     text-align: center;
 }
 
 /* Buttons */
 .stButton > button {
-    background-color: #f49d37 !important;  /* Orange */
+    background-color: #f49d37 !important;
     color: white !important;
     font-weight: 600;
     border: none;
     border-radius: 8px;
     padding: 0.7em 1.5em;
-    box-shadow: 1px 1px 5px rgba(0,0,0,0.1);
-    transition: background 0.2s ease-in-out;
+    font-size: 1em;
 }
 .stButton > button:hover {
     background-color: #d87f1f !important;
-    transform: translateY(-1px);
 }
 
-/* Input Fields */
+/* Inputs */
 input, textarea {
     background-color: white !important;
     color: #222 !important;
-    border: 1px solid #ccc !important;
     border-radius: 8px !important;
+    border: 1px solid #ccc !important;
     padding: 10px !important;
-    box-shadow: none !important;
-}
-input:focus, textarea:focus {
-    border-color: #9e7ac2 !important;
-    outline: none !important;
 }
 
-/* Sidebar */
-section[data-testid="stSidebar"] {
-    background-color: #e8ddf0 !important;
-    color: #2d2d2d !important;
+/* Fix for Streamlit Tabs */
+.css-1h7ebrz, .css-1d391kg {
+    color: #3b2f5e !important;  /* Force all tab text to be visible */
 }
-section[data-testid="stSidebar"] h1,
-section[data-testid="stSidebar"] h2,
-section[data-testid="stSidebar"] label {
+.css-1v0mbdj > div {
+    background-color: #f0e9fc !important;
+    border-radius: 8px;
+    color: #3b2f5e !important;
+    font-weight: 600;
+}
+.css-1v0mbdj > div[aria-selected="true"] {
+    background-color: white !important;
     color: #3b2f5e !important;
 }
 
-/* Alert Boxes (info, success, warning, error) */
+/* Alert Boxes */
 div[data-testid="stAlertInfo"] {
     background-color: #e0ecff !important;
     color: #1a3c66 !important;
@@ -98,27 +95,10 @@ div[data-testid="stAlertError"] {
     border-left: 6px solid #f56565;
 }
 
-/* Tabs */
-.css-1v0mbdj > div {
-    background-color: #ffffff !important;
-    border-radius: 8px;
-    padding: 0.75em;
-    color: #3b2f5e !important;
-    font-weight: bold;
-    border: 1px solid #d1c4e9;
-}
-.css-1v0mbdj > div[aria-selected="true"] {
-    background-color: #f4e8ff !important;
-    border-color: #9e7ac2;
-}
-
-/* Containers */
-.card {
-    background: #fff;
-    border: 1px solid #e0e0e0;
-    border-radius: 12px;
-    padding: 20px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+/* Sidebar fix */
+section[data-testid="stSidebar"] {
+    background-color: #e8ddf0 !important;
+    color: #222 !important;
 }
 </style>
 """, unsafe_allow_html=True)
