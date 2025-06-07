@@ -9,7 +9,37 @@ import base64 # Import base64 for encoding PDF content
 st.set_option('client.showErrorDetails', True)
 st.set_page_config(page_title="This Day in History", layout="centered")
 
-# --- Custom CSS for Sidebar Styling ---
+# --- Session State Initialization (Ensure dark_mode is initialized early) ---
+if 'is_authenticated' not in st.session_state:
+    st.session_state['is_authenticated'] = False
+if 'logged_in_username' not in st.session_state:
+    st.session_state['logged_in_username'] = ""
+if 'dementia_mode' not in st.session_state:
+    st.session_state['dementia_mode'] = False
+if 'dark_mode' not in st.session_state: # Initialize dark mode state
+    st.session_state['dark_mode'] = False
+if 'current_page' not in st.session_state:
+    st.session_state['current_page'] = 'main_app' # Default page for authenticated users
+if 'daily_data' not in st.session_state: # Store daily data to avoid re-fetching on page switch
+    st.session_state['daily_data'] = None
+if 'last_fetched_date' not in st.session_state:
+    st.session_state['last_fetched_date'] = None # To track when data was last fetched
+if 'trivia_question_states' not in st.session_state:
+    st.session_state['trivia_question_states'] = {} # Stores per-question state: {'q_index': {'user_answer': '', 'is_correct': False, 'feedback': '', 'hint_revealed': False, 'attempts': 0, 'out_of_chances': False, 'points_earned': 0, 'related_article_content': None}}
+if 'hints_remaining' not in st.session_state:
+    st.session_state['hints_remaining'] = 3 # Total hints allowed per day
+if 'current_trivia_score' not in st.session_state:
+    st.session_state['current_trivia_score'] = 0
+if 'total_possible_daily_trivia_score' not in st.session_state:
+    st.session_state['total_possible_daily_trivia_score'] = 0
+if 'score_logged_today' not in st.session_state:
+    st.session_state['score_logged_today'] = False
+if 'difficulty' not in st.session_state: # New session state for difficulty
+    st.session_state['difficulty'] = 'Medium' # Default difficulty
+
+
+# --- Custom CSS for Sidebar Styling and Light/Dark Mode ---
+# Sidebar specific styling (branding colors)
 st.markdown(
     """
     <style>
@@ -95,6 +125,120 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
+# Dynamic CSS for Light/Dark Mode for the main content area
+if st.session_state['dark_mode']:
+    st.markdown(
+        """
+        <style>
+        /* General app styling for Dark Mode (main content area) */
+        .stApp {
+            background-color: #1A1A1A; /* Dark background */
+            color: #E0E0E0; /* Light text */
+        }
+        /* Specific elements */
+        .stMarkdown, .stText { color: #E0E0E0; }
+        h1, h2, h3, h4, h5, h6 { color: #E0E0E0; }
+        .stAlert {
+            background-color: #333333;
+            color: #E0E0E0;
+            border-color: #444444;
+        }
+        .stTextInput > div > div > input {
+            background-color: #333333;
+            color: #E0E0E0;
+            border-color: #444444;
+        }
+        .stSelectbox > div > div > div { /* Target for selectbox background */
+            background-color: #333333;
+            color: #E0E0E0;
+        }
+        .stSelectbox > div > div > div > div > span { /* Target for selectbox text */
+            color: #E0E0E0 !important;
+        }
+        /* Ensure no lingering background issues from blocks */
+        div[data-testid="stVerticalBlock"] {
+            background-color: transparent !important;
+        }
+        div[data-testid="stHorizontalBlock"] {
+            background-color: transparent !important;
+        }
+        /* Adjust button colors for main content */
+        .stButton > button {
+            background-color: #555555; /* Darker button for main content */
+            color: #E0E0E0;
+            border: none;
+            border-radius: 0.5rem;
+        }
+        .stButton > button:hover {
+            background-color: #777777;
+        }
+        /* Date input styling for dark mode */
+        .stDateInput > div > div > input {
+            background-color: #333333;
+            color: #E0E0E0;
+            border-color: #444444;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+else: # Light Mode
+    st.markdown(
+        """
+        <style>
+        /* General app styling for Light Mode (main content area) */
+        .stApp {
+            background-color: #FFFFFF; /* White background */
+            color: #333333; /* Dark text */
+        }
+        .stMarkdown, .stText { color: #333333; }
+        h1, h2, h3, h4, h5, h6 { color: #333333; }
+        .stAlert {
+            background-color: #f0f2f6; /* Default Streamlit info/light background */
+            color: #333333;
+            border-color: #e0e0e0;
+        }
+        .stTextInput > div > div > input {
+            background-color: #FFFFFF;
+            color: #333333;
+            border-color: #DDDDDD;
+        }
+        .stSelectbox > div > div > div { /* Target for selectbox background */
+            background-color: #FFFFFF;
+            color: #333333;
+        }
+        .stSelectbox > div > div > div > div > span { /* Target for selectbox text */
+            color: #333333 !important;
+        }
+        /* Ensure no lingering background issues from blocks */
+        div[data-testid="stVerticalBlock"] {
+            background-color: transparent !important;
+        }
+        div[data-testid="stHorizontalBlock"] {
+            background-color: transparent !important;
+        }
+        /* Adjust button colors for main content */
+        .stButton > button {
+            background-color: #e6e6e6; /* Light gray button for main content */
+            color: #333333;
+            border: none;
+            border-radius: 0.5rem;
+        }
+        .stButton > button:hover {
+            background-color: #cccccc;
+        }
+        /* Date input styling for light mode */
+        .stDateInput > div > div > input {
+            background-color: #FFFFFF;
+            color: #333333;
+            border-color: #DDDDDD;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
 
 # --- Google Sheets API Setup ---
 import gspread
@@ -240,32 +384,6 @@ if "OPENAI_API_KEY" not in st.secrets:
     st.error("❌ OPENAI_API_KEY is missing from Streamlit secrets.")
     st.stop()
 client_ai = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
-# --- Session State Initialization ---
-if 'is_authenticated' not in st.session_state:
-    st.session_state['is_authenticated'] = False
-if 'logged_in_username' not in st.session_state:
-    st.session_state['logged_in_username'] = ""
-if 'dementia_mode' not in st.session_state:
-    st.session_state['dementia_mode'] = False
-if 'current_page' not in st.session_state:
-    st.session_state['current_page'] = 'main_app' # Default page for authenticated users
-if 'daily_data' not in st.session_state: # Store daily data to avoid re-fetching on page switch
-    st.session_state['daily_data'] = None
-if 'last_fetched_date' not in st.session_state:
-    st.session_state['last_fetched_date'] = None # To track when data was last fetched
-if 'trivia_question_states' not in st.session_state:
-    st.session_state['trivia_question_states'] = {} # Stores per-question state: {'q_index': {'user_answer': '', 'is_correct': False, 'feedback': '', 'hint_revealed': False, 'attempts': 0, 'out_of_chances': False, 'points_earned': 0, 'related_article_content': None}}
-if 'hints_remaining' not in st.session_state:
-    st.session_state['hints_remaining'] = 3 # Total hints allowed per day
-if 'current_trivia_score' not in st.session_state:
-    st.session_state['current_trivia_score'] = 0
-if 'total_possible_daily_trivia_score' not in st.session_state:
-    st.session_state['total_possible_daily_trivia_score'] = 0
-if 'score_logged_today' not in st.session_state:
-    st.session_state['score_logged_today'] = False
-if 'difficulty' not in st.session_state: # New session state for difficulty
-    st.session_state['difficulty'] = 'Medium' # Default difficulty
 
 
 # --- Helper function to clean text for Latin-1 compatibility ---
@@ -935,8 +1053,7 @@ def show_login_register_page():
 # --- Main App Logic (Router) ---
 if st.session_state['is_authenticated']:
     # --- Sidebar content (always visible when authenticated) ---
-    st.sidebar.title("This Day in History")
-    # Add the logo here
+    # Removed st.sidebar.title("This Day in History") as the logo serves as the title
     st.sidebar.image("https://i.postimg.cc/8CRsCGCC/Chat-GPT-Image-Jun-7-2025-12-32-18-AM.png", use_container_width=True) # Changed to use_container_width
     st.sidebar.markdown("---")
     st.sidebar.header("Navigation")
@@ -965,6 +1082,8 @@ if st.session_state['is_authenticated']:
                 These adjustments ensure that the content is presented in a way that is easier to read and comprehend, enhancing accessibility for individuals who may benefit from simplified visual and textual presentation.
                 """
             )
+    # Dark Mode Toggle
+    st.sidebar.checkbox("Dark Mode", value=st.session_state['dark_mode'], key="sidebar_dark_mode")
 
     st.sidebar.subheader("Content Customization")
     # Difficulty selection is moved to trivia page, removed from sidebar here
